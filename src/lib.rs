@@ -156,7 +156,6 @@ extern crate alloc;
 #[cfg(any(test, feature = "std"))]
 extern crate std;
 
-
 use crate::blocks::{Block, Blocks, ScopedRestore};
 use alloc::alloc::{AllocError, Allocator, Global, Layout};
 use core::{
