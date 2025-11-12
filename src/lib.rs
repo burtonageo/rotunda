@@ -151,7 +151,6 @@
 //! [`Handle`]: ./struct.Handle.html
 //! [`handle`]:
 
-
 extern crate alloc;
 #[cfg(any(test, feature = "std"))]
 extern crate std;
