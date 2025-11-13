@@ -9,7 +9,7 @@ use core::{
     iter::FusedIterator,
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, Index, IndexMut},
     ptr,
     slice::{self, SliceIndex},
 };
@@ -514,6 +514,21 @@ impl<'a, T> DerefMut for Buffer<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.as_mut_slice()
+    }
+}
+
+impl<'a, T, I: SliceIndex<[T]>> Index<I> for Buffer<'a, T> {
+    type Output = <[T] as Index<I>>::Output;
+    #[inline]
+    fn index(&self, index: I) -> &Self::Output {
+        self.as_slice().index(index)
+    }
+}
+
+impl<'a, T, I: SliceIndex<[T]>> IndexMut<I> for Buffer<'a, T> {
+    #[inline]
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        self.as_mut_slice().index_mut(index)   
     }
 }
 
