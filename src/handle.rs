@@ -1,7 +1,4 @@
-use crate::{
-    Arena, buffer::Buffer, rc_handle::RcHandle, string_buffer::StringBuffer,
-    buf,
-};
+use crate::{Arena, buf, buffer::Buffer, rc_handle::RcHandle, string_buffer::StringBuffer};
 use alloc::alloc::{Allocator, Layout};
 use core::{
     any::Any,
@@ -79,11 +76,10 @@ impl<'a, T> Handle<'a, T> {
     #[must_use]
     #[inline]
     pub const fn into_slice(this: Self) -> Handle<'a, [T]> {
-        let slice = NonNull::slice_from_raw_parts(this.ptr, 1);
-        let _this = ManuallyDrop::new(this);
-        Handle {
-            ptr: slice,
-            _boo: PhantomData,
+        let ptr = Handle::into_raw(this);
+        unsafe {
+            let slice_ptr = ptr::from_raw_parts_mut(ptr, 1);
+            Handle::from_raw(slice_ptr)
         }
     }
 }
