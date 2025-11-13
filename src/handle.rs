@@ -1,4 +1,7 @@
-use crate::{Arena, buffer::Buffer, rc_handle::RcHandle, string_buffer::StringBuffer};
+use crate::{
+    Arena, buffer::Buffer, rc_handle::RcHandle, string_buffer::StringBuffer,
+    buf,
+};
 use alloc::alloc::{Allocator, Layout};
 use core::{
     any::Any,
@@ -13,7 +16,7 @@ use core::{
     ops::{Deref, DerefMut},
     pin::Pin,
     ptr::{self, NonNull, Pointee, Thin},
-    slice, str,
+    str,
 };
 #[cfg(feature = "std")]
 use std::io::{self, BufRead, Read, Write};
@@ -49,7 +52,7 @@ impl<'a, T> Handle<'a, T> {
     /// # Example
     ///
     /// ```
-    /// # use rotunda::{{Arena, Handle}};
+    /// # use rotunda::{Arena, handle::Handle};
     /// let arena = Arena::new();
     /// let handle = Handle::new_in(&arena, 156);
     /// # let _ = handle;
@@ -67,7 +70,7 @@ impl<'a, T> Handle<'a, T> {
     /// # Examples
     ///
     /// ```
-    /// # use rotunda::{{Arena, Handle}};
+    /// # use rotunda::{Arena, handle::Handle};
     /// let arena = Arena::new();
     /// let handle = Handle::new_in(&arena, 'c');
     /// let slice_handle = Handle::into_slice(handle);
@@ -91,7 +94,7 @@ impl<'a, T: Default> Handle<'a, T> {
     /// # Example
     ///
     /// ```
-    /// # use rotunda::{{Arena, Handle}};
+    /// # use rotunda::{Arena, handle::Handle};
     /// let arena = Arena::new();
     /// let handle = Handle::<Vec<i32>>::new_default_in(&arena);
     /// assert_eq!(&*handle, &<Vec<i32>>::default());
@@ -169,9 +172,8 @@ impl<'a, T, const N: usize> Handle<'a, [T; N]> {
         arena: &'a Arena<A>,
         f: F,
     ) -> Self {
-        let mut handle = Handle::new_array_uninit_in(arena);
-        write_into_array_with_fn(&mut *handle, f);
-        unsafe { Handle::assume_init_array(handle) }
+        let buffer = Buffer::from_fn_in(arena, N, f);
+        unsafe { Handle::into_array_unchecked::<N>(buffer.into_slice_handle()) }
     }
 }
 
@@ -180,15 +182,8 @@ impl<'a, T: Copy, const N: usize> Handle<'a, [T; N]> {
     #[must_use]
     #[inline]
     pub fn new_array_splat_in<A: Allocator>(arena: &'a Arena<A>, value: T) -> Self {
-        let handle = Handle::new_uninit_in(arena);
-        let mut handle = Handle::transpose_inner_uninit(handle);
-
-        for i in 0..N {
-            let slot = unsafe { handle.get_unchecked_mut(i) };
-            slot.write(value);
-        }
-
-        unsafe { Handle::assume_init_array(handle) }
+        let buffer = buf!([value; N] in arena);
+        unsafe { Handle::into_array_unchecked::<N>(buffer.into_slice_handle()) }
     }
 }
 
@@ -271,7 +266,9 @@ impl<'a, T: Unpin> Handle<'a, T> {
 
     #[inline]
     pub const fn replace(this: &mut Self, mut value: T) -> T {
-        unsafe { mem::swap(this.ptr.as_mut(), &mut value); }
+        unsafe {
+            mem::swap(this.ptr.as_mut(), &mut value);
+        }
         value
     }
 }
@@ -339,7 +336,10 @@ impl<'a> Handle<'a, dyn Any + Send + Sync> {
 impl<'a, T: ?Sized + Pointee> Handle<'a, T> {
     #[must_use]
     #[inline]
-    pub const unsafe fn from_raw_parts(ptr: *mut impl Thin, metadata: <T as Pointee>::Metadata) -> Self {
+    pub const unsafe fn from_raw_parts(
+        ptr: *mut impl Thin,
+        metadata: <T as Pointee>::Metadata,
+    ) -> Self {
         let ptr = ptr::from_raw_parts_mut(ptr, metadata);
         unsafe { Handle::from_raw(ptr) }
     }
@@ -452,11 +452,16 @@ impl<'a, T> Handle<'a, [T]> {
     #[inline]
     pub(crate) const unsafe fn set_len(this: &mut Self, new_len: usize) {
         let ptr = this.ptr.as_ptr() as *mut T;
-        let ptr = unsafe {
-            NonNull::new_unchecked(ptr::from_raw_parts_mut(ptr, new_len))
-        };
+        let ptr = unsafe { NonNull::new_unchecked(ptr::from_raw_parts_mut(ptr, new_len)) };
 
         this.ptr = ptr;
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) unsafe fn into_array_unchecked<const N: usize>(this: Self) -> Handle<'a, [T; N]> {
+        let ptr = Self::into_raw(this) as *mut [T; N];
+        unsafe { Handle::from_raw(ptr) }
     }
 }
 
@@ -464,7 +469,11 @@ impl<'a, T: Copy> Handle<'a, [T]> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_slice_splat_in<A: Allocator>(arena: &'a Arena<A>, slice_len: usize, value: T) -> Self {
+    pub fn new_slice_splat_in<A: Allocator>(
+        arena: &'a Arena<A>,
+        slice_len: usize,
+        value: T,
+    ) -> Self {
         let mut buf = Buffer::with_capacity_in(arena, slice_len);
         for _ in 0..slice_len {
             unsafe {
@@ -775,44 +784,4 @@ impl<'a, W: ?Sized + Write> Write for Handle<'a, W> {
     fn flush(&mut self) -> io::Result<()> {
         self.as_mut().flush()
     }
-}
-
-struct ArrayDropGuard<'a, T> {
-    data: &'a mut [MaybeUninit<T>],
-    initted: usize,
-}
-
-impl<'a, T> ArrayDropGuard<'a, T> {
-    #[inline]
-    pub fn defuse(&mut self) {
-        self.initted = 0;
-        self.data = unsafe { slice::from_raw_parts_mut(ptr::dangling_mut(), 0) };
-    }
-}
-
-impl<'a, T> Drop for ArrayDropGuard<'a, T> {
-    #[inline]
-    fn drop(&mut self) {
-        unsafe {
-            let slice = slice::from_raw_parts_mut(self.data.as_mut_ptr().cast::<T>(), self.initted);
-            ptr::drop_in_place(slice);
-        }
-    }
-}
-
-#[inline]
-fn write_into_array_with_fn<T, F: FnMut(usize) -> T>(array: &mut [MaybeUninit<T>], mut func: F) {
-    let slice_len = array.len();
-    let mut guard = ArrayDropGuard {
-        data: array,
-        initted: 0,
-    };
-
-    for i in 0..slice_len {
-        let slot = unsafe { guard.data.get_unchecked_mut(i) };
-        slot.write(func(i));
-        guard.initted += 1;
-    }
-
-    guard.defuse();
 }
