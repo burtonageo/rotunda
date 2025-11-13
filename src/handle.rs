@@ -32,7 +32,7 @@ use std::io::{self, BufRead, Read, Write};
 #[repr(transparent)]
 #[derive(CoercePointee)]
 pub struct Handle<'a, T: ?Sized> {
-    pub(crate) ptr: NonNull<T>,
+    ptr: NonNull<T>,
     _boo: PhantomData<(&'a Arena, T)>,
 }
 
@@ -244,6 +244,12 @@ impl<'a, T: ?Sized> Handle<'a, T> {
     #[must_use]
     pub const fn into_pin(this: Self) -> Pin<Self> {
         unsafe { Pin::new_unchecked(this) }
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) const fn as_nonnull(this: &Self) -> NonNull<T> {
+        this.ptr
     }
 }
 

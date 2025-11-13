@@ -110,17 +110,15 @@ impl<'a, T> Buffer<'a, T> {
     #[must_use]
     #[inline]
     pub const fn as_slice(&self) -> &[T] {
-        let slice = unsafe { self.handle.ptr.as_ref() };
-        let (ptr, len) = (slice.as_ptr(), self.len);
-        unsafe { slice::from_raw_parts(ptr as *const T, len) }
+        let ptr = Handle::as_ptr(&self.handle);
+        unsafe { slice::from_raw_parts(ptr as *const T, self.len) }
     }
 
     #[must_use]
     #[inline]
     pub const fn as_mut_slice(&mut self) -> &mut [T] {
-        let slice = unsafe { self.handle.ptr.as_mut() };
-        let (ptr, len) = (slice.as_mut_ptr(), self.len);
-        unsafe { slice::from_raw_parts_mut(ptr as *mut T, len) }
+        let ptr = Handle::as_mut_ptr(&mut self.handle);
+        unsafe { slice::from_raw_parts_mut(ptr as *mut T, self.len) }
     }
 
     #[track_caller]
@@ -175,8 +173,7 @@ impl<'a, T> Buffer<'a, T> {
         }
 
         unsafe {
-            self.handle
-                .ptr
+            Handle::as_nonnull(&self.handle)
                 .as_mut()
                 .get_unchecked_mut(self.len)
                 .write(value);
@@ -193,9 +190,7 @@ impl<'a, T> Buffer<'a, T> {
 
         unsafe {
             self.set_len(self.len - 1);
-            let value = self
-                .handle
-                .ptr
+            let value = Handle::as_nonnull(&self.handle)
                 .as_ref()
                 .get_unchecked(self.len)
                 .assume_init_read();
@@ -253,7 +248,7 @@ impl<'a, T> Buffer<'a, T> {
     #[must_use]
     #[inline]
     pub const fn into_slice_handle(mut self) -> Handle<'a, [T]> {
-        let ptr = unsafe { self.handle.ptr.as_mut().as_mut_ptr() };
+        let ptr = Handle::as_mut_ptr(&mut self.handle);
         let ptr = ptr::slice_from_raw_parts_mut(ptr as *const T as *mut T, self.len);
         let _this = ManuallyDrop::new(self);
 
@@ -263,10 +258,10 @@ impl<'a, T> Buffer<'a, T> {
     #[must_use]
     #[inline]
     pub const fn from_slice_handle(mut handle: Handle<'a, [T]>) -> Self {
-        let len = handle.ptr.len();
+        let ptr = Handle::as_mut_ptr(&mut handle);
+        let len = ptr.len();
         let new_handle = unsafe {
-            let ptr = handle.ptr.as_mut().as_mut_ptr() as *mut MaybeUninit<T>;
-            let ptr = ptr::slice_from_raw_parts_mut(ptr, len);
+            let ptr = ptr::slice_from_raw_parts_mut(ptr as *mut MaybeUninit<T>, len);
             Handle::from_raw(ptr)
         };
 
@@ -309,7 +304,7 @@ impl<'a, T> Buffer<'a, T> {
     #[inline]
     #[must_use]
     pub const fn capacity(&self) -> usize {
-        self.handle.ptr.len()
+        Handle::as_ptr(&self.handle).len()
     }
 
     #[inline]
@@ -422,7 +417,7 @@ impl<'a, T: Copy> Buffer<'a, T> {
         unsafe {
             ptr::copy_nonoverlapping(
                 slice.as_ptr(),
-                self.handle.ptr.as_ptr().cast::<T>().add(self.len),
+                Handle::as_mut_ptr(&mut self.handle).cast::<T>().add(self.len),
                 count,
             );
             self.set_len(self.len + count);
@@ -651,7 +646,7 @@ impl<'a, T> IntoIter<'a, T> {
     #[must_use]
     #[inline]
     pub const fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { slice::from_raw_parts_mut(self.data_start().cast_mut(), self.len_const()) }
+        unsafe { slice::from_raw_parts_mut(self.data_start_mut(), self.len_const()) }
     }
 
     #[must_use]
@@ -667,7 +662,7 @@ impl<'a, T> IntoIter<'a, T> {
             Buffer::from_raw_parts(handle, cap)
         };
 
-        let ptr = buf.handle.ptr.as_ptr() as *mut T;
+        let ptr = Handle::as_mut_ptr(&mut buf.handle) as *mut T;
 
         unsafe {
             ptr::copy(ptr.add(start), ptr, new_len);
@@ -686,7 +681,13 @@ impl<'a, T> IntoIter<'a, T> {
     #[must_use]
     #[inline]
     const fn data_start(&self) -> *const T {
-        unsafe { self.data.ptr.as_ptr().cast::<T>().add(self.front_idx) }
+        unsafe { Handle::as_ptr(&self.data).cast::<T>().add(self.front_idx) }
+    }
+
+    #[must_use]
+    #[inline]
+    const fn data_start_mut(&mut self) -> *mut T {
+        unsafe { Handle::as_mut_ptr(&mut self.data).cast::<T>().add(self.front_idx) }
     }
 
     #[must_use]
