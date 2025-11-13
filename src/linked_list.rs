@@ -659,7 +659,7 @@ impl<T: fmt::Debug> fmt::Debug for NodeIter<T> {
 }
 
 #[allow(dead_code, unused)]
-pub struct CursorMut<'a, T> {
+struct CursorMut<'a, T> {
     head: Option<NonNull<Node<T>>>,
     tail: Option<NonNull<Node<T>>>,
     curr: Option<NonNull<Node<T>>>,
@@ -667,16 +667,17 @@ pub struct CursorMut<'a, T> {
     _boo: PhantomData<&'a mut Node<T>>,
 }
 
+#[allow(dead_code, unused)]
 impl<'a, T> CursorMut<'a, T> {
-    pub fn move_next(&mut self) {}
+    fn move_next(&mut self) {}
 
-    pub fn move_prev(&mut self) {}
+    fn move_prev(&mut self) {}
 
-    pub fn current(&mut self) -> Option<&mut T> {
+    fn current(&mut self) -> Option<&mut T> {
         todo!()
     }
 
-    pub fn remove_current(&mut self) -> Option<Handle<'a, T>> {
+    fn remove_current(&mut self) -> Option<Handle<'a, T>> {
         todo!()
     }
 }
