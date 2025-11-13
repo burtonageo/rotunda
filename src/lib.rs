@@ -536,7 +536,7 @@ impl<A: Allocator> Arena<A> {
     #[must_use]
     #[inline]
     pub fn block_size(&self) -> usize {
-        self.blocks.block_size
+        self.blocks.block_size()
     }
 
     /// Returns a new allocation from the current block in the `Arena`.
@@ -555,7 +555,7 @@ impl<A: Allocator> Arena<A> {
     pub fn alloc_raw(&self, layout: Layout) -> NonNull<c_void> {
         let block = self
             .blocks
-            .curr_block
+            .curr_block()
             .get()
             .filter(|_| self.blocks.can_write_layout(&layout))
             .unwrap_or_else(|| {
@@ -614,25 +614,25 @@ impl<A: Allocator> Arena<A> {
     #[must_use]
     #[inline]
     unsafe fn get_free_block(&self) -> NonNull<Block> {
-        let block = match self.blocks.free_blocks.get() {
+        let block = match self.blocks.free_blocks().get() {
             // If we have a free block, grab it
             Some(block) => unsafe {
                 let next_free_block = block.as_ref().next.get();
                 block.as_ref().next.set(None);
 
-                self.blocks.free_blocks.set(next_free_block);
+                self.blocks.free_blocks().set(next_free_block);
                 block
             },
             // otherwise, alloc another one
             _ => self.alloc_block(),
         };
 
-        self.blocks.curr_block_pos.set(0);
-        if let Some(curr_block) = self.blocks.curr_block.get() {
+        self.blocks.curr_block_pos().set(0);
+        if let Some(curr_block) = self.blocks.curr_block().get() {
             self.blocks.push_used_block(curr_block);
         }
 
-        self.blocks.curr_block.set(Some(block));
+        self.blocks.curr_block().set(Some(block));
         block
     }
 

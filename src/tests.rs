@@ -66,14 +66,14 @@ fn test_arena_clear() {
     arena.reset();
 
     let mut num_free_blocks = 0;
-    let mut curr_block = arena.blocks.free_blocks.get();
+    let mut curr_block = arena.blocks.free_blocks().get();
     while let Some(block) = curr_block {
         num_free_blocks += 1;
         curr_block = unsafe { block.as_ref().next.get() };
     }
 
     assert_eq!(num_free_blocks, 2);
-    assert!(arena.blocks.curr_block.get().is_some());
+    assert!(arena.blocks.curr_block().get().is_some());
 }
 
 #[test]
@@ -178,15 +178,15 @@ fn test_trim() {
         assert_eq!(*handle_2, 32);
     }
 
-    assert_ne!(arena.blocks.used_blocks.get(), None);
-    assert_eq!(arena.blocks.free_blocks.get(), None);
+    assert_ne!(arena.blocks.used_blocks().get(), None);
+    assert_eq!(arena.blocks.free_blocks().get(), None);
 
     arena.reset();
-    assert_eq!(arena.blocks.used_blocks.get(), None);
-    assert_ne!(arena.blocks.free_blocks.get(), None);
+    assert_eq!(arena.blocks.used_blocks().get(), None);
+    assert_ne!(arena.blocks.free_blocks().get(), None);
 
     arena.trim();
-    assert_eq!(arena.blocks.free_blocks.get(), None);
+    assert_eq!(arena.blocks.free_blocks().get(), None);
 }
 
 #[test]
@@ -233,17 +233,17 @@ fn test_scoped() {
     const SIZE: usize = 124;
     let _value = Handle::new_in(&arena, [0u8; SIZE]);
 
-    assert_eq!(arena.blocks.curr_block_pos.get(), SIZE);
+    assert_eq!(arena.blocks.curr_block_pos().get(), SIZE);
     arena.with_scope(|| {
         let _slice_handle = Handle::new_slice_splat_in(&arena, SIZE, [0u8; 8]);
         assert_eq!(
-            arena.blocks.curr_block_pos.get(),
+            arena.blocks.curr_block_pos().get(),
             SIZE + (SIZE * mem::size_of::<[u8; 8]>())
         );
         arena.reserve_blocks(2);
     });
 
-    assert_eq!(arena.blocks.curr_block_pos.get(), SIZE);
+    assert_eq!(arena.blocks.curr_block_pos().get(), SIZE);
 
     let mut value = Handle::new_uninit_in(&arena);
     arena.with_scope(|| {

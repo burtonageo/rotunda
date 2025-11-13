@@ -1,4 +1,4 @@
-use alloc::alloc::{Allocator, AllocError, Layout, handle_alloc_error};
+use alloc::alloc::{AllocError, Allocator, Layout, handle_alloc_error};
 use core::{
     cell::{Cell, UnsafeCell},
     ffi::c_void,
@@ -11,11 +11,11 @@ use core::{
 
 #[non_exhaustive]
 pub(super) struct Blocks {
-    pub(super) block_size: usize,
-    pub(super) curr_block_pos: Cell<usize>,
-    pub(super) curr_block: BlockPtr,
-    pub(super) free_blocks: BlockPtr,
-    pub(super) used_blocks: BlockPtr,
+    block_size: usize,
+    curr_block_pos: Cell<usize>,
+    curr_block: BlockPtr,
+    free_blocks: BlockPtr,
+    used_blocks: BlockPtr,
     _priv: (),
 }
 
@@ -179,6 +179,37 @@ impl Blocks {
             Err(_) => panic!("bad layout"),
         }
     }
+
+    #[must_use]
+    #[inline]
+    pub(crate) const fn block_size(&self) -> usize {
+        self.block_size
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) const fn curr_block_pos(&self) -> &Cell<usize> {
+        &self.curr_block_pos
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) const fn curr_block(&self) -> &BlockPtr {
+        &self.curr_block
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) const fn free_blocks(&self) -> &BlockPtr {
+        &self.free_blocks
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    #[inline]
+    pub(crate) const fn used_blocks(&self) -> &BlockPtr {
+        &self.used_blocks
+    }
 }
 
 #[repr(C)]
@@ -195,7 +226,8 @@ impl Block {
     #[inline(never)]
     pub(super) unsafe fn alloc(block_layout: Layout, allocator: &dyn Allocator) -> NonNull<Block> {
         unsafe {
-            Self::try_alloc(block_layout, allocator).unwrap_or_else(|_| handle_alloc_error(block_layout))
+            Self::try_alloc(block_layout, allocator)
+                .unwrap_or_else(|_| handle_alloc_error(block_layout))
         }
     }
 
@@ -203,7 +235,10 @@ impl Block {
     #[must_use]
     #[cold]
     #[inline(never)]
-    pub(super) unsafe fn try_alloc(block_layout: Layout, allocator: &dyn Allocator) -> Result<NonNull<Block>, AllocError> {
+    pub(super) unsafe fn try_alloc(
+        block_layout: Layout,
+        allocator: &dyn Allocator,
+    ) -> Result<NonNull<Block>, AllocError> {
         allocator
             .allocate(block_layout)
             .map(NonNull::cast::<Block>)
@@ -302,7 +337,9 @@ impl<'a> Drop for ScopedRestore<'a> {
 
 const fn push_single_block(list_head: &BlockPtr, block: NonNull<Block>) {
     let old_head = list_head.get();
-    unsafe { block.as_ref().next.replace(old_head); }
+    unsafe {
+        block.as_ref().next.replace(old_head);
+    }
     list_head.replace(Some(block));
 }
 
