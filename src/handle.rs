@@ -695,6 +695,13 @@ impl<'a, T, const N: usize> TryFrom<Handle<'a, [T]>> for Handle<'a, [T; N]> {
     }
 }
 
+impl<'a, T> From<Handle<'a, T>> for Handle<'a, [T]> {
+    #[inline]
+    fn from(value: Handle<'a, T>) -> Self {
+        Handle::into_slice(value)
+    }
+}
+
 impl<'a, T: ?Sized> Deref for Handle<'a, T> {
     type Target = T;
     #[inline]
