@@ -5,7 +5,7 @@
     const_index,
     const_trait_impl,
     derive_coerce_pointee,
-    ptr_metadata,
+    ptr_metadata
 )]
 
 //! This module contains types for using the arena allocation strategy. See the [`Arena`] type
@@ -589,7 +589,7 @@ impl<A: Allocator> Arena<A> {
     }
 
     /// Returns a new zeroed allocation from the current block in the `Arena`.
-    /// 
+    ///
     /// If the current block in the `Arena` is full, then a new one will be allocated and used.
     ///
     /// # Panics
