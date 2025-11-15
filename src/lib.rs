@@ -324,7 +324,7 @@ impl<A: Allocator> Arena<A> {
     pub fn reserve_blocks(&self, num_blocks: usize) {
         let (layout, alloc) = (self.blocks.block_layout(), self.allocator());
         for _ in 0..num_blocks {
-            let block = unsafe { Block::alloc(layout, alloc) };
+            let block = Block::alloc(layout, alloc);
             self.blocks.push_free_block(block);
         }
     }
@@ -333,7 +333,7 @@ impl<A: Allocator> Arena<A> {
     pub fn try_reserve_blocks(&self, num_blocks: usize) -> Result<(), AllocError> {
         let (layout, alloc) = (self.blocks.block_layout(), self.allocator());
         for _ in 0..num_blocks {
-            let block = unsafe { Block::try_alloc(layout, alloc)? };
+            let block = Block::try_alloc(layout, alloc)?;
             self.blocks.push_free_block(block);
         }
         Ok(())
@@ -640,7 +640,7 @@ impl<A: Allocator> Arena<A> {
     #[inline]
     fn alloc_block(&self) -> NonNull<Block> {
         let layout = self.blocks.block_layout();
-        unsafe { Block::alloc(layout, self.allocator()) }
+        Block::alloc(layout, self.allocator())
     }
 }
 

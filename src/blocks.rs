@@ -224,18 +224,16 @@ impl Block {
     #[must_use]
     #[cold]
     #[inline(never)]
-    pub(super) unsafe fn alloc(block_layout: Layout, allocator: &dyn Allocator) -> NonNull<Block> {
-        unsafe {
-            Self::try_alloc(block_layout, allocator)
-                .unwrap_or_else(|_| handle_alloc_error(block_layout))
-        }
+    pub(super) fn alloc(block_layout: Layout, allocator: &dyn Allocator) -> NonNull<Block> {
+        Self::try_alloc(block_layout, allocator)
+            .unwrap_or_else(|_| handle_alloc_error(block_layout))
     }
 
     #[track_caller]
     #[must_use]
     #[cold]
     #[inline(never)]
-    pub(super) unsafe fn try_alloc(
+    pub(super) fn try_alloc(
         block_layout: Layout,
         allocator: &dyn Allocator,
     ) -> Result<NonNull<Block>, AllocError> {
