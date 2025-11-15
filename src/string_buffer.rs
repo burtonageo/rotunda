@@ -14,7 +14,6 @@ pub struct StringBuffer<'a> {
     inner: Buffer<'a, u8>,
 }
 
-#[allow(unused)]
 impl<'a> StringBuffer<'a> {
     #[must_use]
     #[inline]
