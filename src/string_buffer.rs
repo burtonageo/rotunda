@@ -1,4 +1,8 @@
-use crate::{Arena, handle::Handle, buffer::{Buffer, TryExtendError}};
+use crate::{
+    Arena,
+    buffer::{Buffer, TryExtendError},
+    handle::Handle,
+};
 use alloc::alloc::Allocator;
 use core::{
     borrow::{Borrow, BorrowMut},
@@ -19,7 +23,7 @@ impl<'a> StringBuffer<'a> {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            inner: Buffer::new(),
+            inner: const { Buffer::new() },
         }
     }
 
