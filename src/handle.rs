@@ -105,6 +105,16 @@ impl<'a, T: Default> Handle<'a, T> {
 
 impl<'a, T> Handle<'a, MaybeUninit<T>> {
     /// Create a new `Handle` in `arena`, containing an uninitialized `MaybeUninit<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use rotunda::{Arena, handle::Handle};
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_uninit_in(&arena);
+    /// # let _handle = handle;
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
@@ -115,6 +125,16 @@ impl<'a, T> Handle<'a, MaybeUninit<T>> {
     }
 
     /// Create a new `Handle` in `arena`, containing a zeroed `MaybeUninit<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use rotunda::{Arena, handle::Handle};
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_uninit_zeroed_in(&arena);
+    /// # let _handle = handle;
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
