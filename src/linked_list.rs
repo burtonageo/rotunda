@@ -65,7 +65,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     }
 
     #[inline]
-    pub fn pop_front(&mut self) -> Option<T> {
+    pub fn pop_front(&'_ mut self) -> Option<Handle<'a, T>> {
         self.remove(0)
     }
 
@@ -81,7 +81,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     }
 
     #[inline]
-    pub fn pop_back(&mut self) -> Option<T> {
+    pub fn pop_back(&'_ mut self) -> Option<Handle<'a, T>> {
         self.remove(self.len.saturating_sub(1))
     }
 
@@ -112,9 +112,14 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     }
 
     #[inline]
-    pub fn remove(&mut self, index: usize) -> Option<T> {
-        self.remove_node_by_index(index)
-            .map(|node| unsafe { ptr::read(&node.as_ref().data) })
+    pub fn remove(&'_ mut self, index: usize) -> Option<Handle<'a, T>> {
+        self.remove_node_by_index(index).map(|node| unsafe {
+            Handle::from_raw(
+                node.as_ptr()
+                    .map_addr(|addr| addr + mem::size_of::<Node<()>>())
+                    .cast::<T>(),
+            )
+        })
     }
 
     #[inline]
@@ -131,7 +136,10 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         let second_node = unsafe { self.remove_node_by_index(second_index).unwrap_unchecked() };
         self.insert_node(first_index, second_node);
 
-        let first_node = unsafe { self.remove_node_by_index(first_index + 1).unwrap_unchecked() };
+        let first_node = unsafe {
+            self.remove_node_by_index(first_index + 1)
+                .unwrap_unchecked()
+        };
         self.insert_node(second_index, first_node);
     }
 
@@ -300,9 +308,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     fn remove_node_by_index(&mut self, index: usize) -> Option<NonNull<Node<T>>> {
         let node = self.get_node(index)?;
 
-        unsafe {
-            Some(self.remove_node(node, index))
-        }
+        unsafe { Some(self.remove_node(node, index)) }
     }
 
     #[inline]
@@ -319,7 +325,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
                 node.next.as_mut().prev = node.prev;
             }
 
-            if index == 0{
+            if index == 0 {
                 self.head = node.next;
             } else if index == self.len {
                 self.tail = node.prev;

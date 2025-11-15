@@ -578,7 +578,7 @@ fn test_list() {
     assert_eq!(list.get(2), Some(&2));
 
     let removed = list.remove(1);
-    assert_eq!(removed, Some(23));
+    assert_eq!(removed.as_deref(), Some(&23));
     assert_eq!(list.get(0), Some(&1));
     assert_eq!(list.get(1), Some(&2));
     assert_eq!(list.get(4), Some(&5));
@@ -593,13 +593,13 @@ fn test_list() {
     assert_eq!(list.back(), Some(&1));
 
     let back = list.pop_back();
-    assert_eq!(back, Some(1));
+    assert_eq!(back.as_deref(), Some(&1));
     assert_eq!(list, [5usize, 3]);
     list.reverse();
     assert_eq!(list, [3usize, 5]);
 
     let front = list.pop_front();
-    assert_eq!(front, Some(3));
+    assert_eq!(front.as_deref(), Some(&3));
 
     list.clear();
 
