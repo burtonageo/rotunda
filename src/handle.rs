@@ -110,9 +110,10 @@ impl<'a, T> Handle<'a, MaybeUninit<T>> {
     ///
     /// ```
     /// # use rotunda::{Arena, handle::Handle};
+    /// # use core::mem::MaybeUninit;
     /// let arena = Arena::new();
     ///
-    /// let handle = Handle::new_uninit_in(&arena);
+    /// let handle: Handle<MaybeUninit<i32>> = Handle::new_uninit_in(&arena);
     /// # let _handle = handle;
     /// ```
     #[track_caller]
@@ -130,9 +131,10 @@ impl<'a, T> Handle<'a, MaybeUninit<T>> {
     ///
     /// ```
     /// # use rotunda::{Arena, handle::Handle};
+    /// # use core::mem::MaybeUninit;
     /// let arena = Arena::new();
     ///
-    /// let handle = Handle::new_uninit_zeroed_in(&arena);
+    /// let handle: Handle<MaybeUninit<i32>> = Handle::new_uninit_zeroed_in(&arena);
     /// # let _handle = handle;
     /// ```
     #[track_caller]
