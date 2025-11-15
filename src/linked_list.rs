@@ -113,7 +113,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
 
     #[inline]
     pub fn remove(&mut self, index: usize) -> Option<T> {
-        self.remove_node(index)
+        self.remove_node_by_index(index)
             .map(|node| unsafe { ptr::read(&node.as_ref().data) })
     }
 
@@ -128,10 +128,10 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             mem::swap(&mut first_index, &mut second_index);
         }
 
-        let second_node = unsafe { self.remove_node(second_index).unwrap_unchecked() };
+        let second_node = unsafe { self.remove_node_by_index(second_index).unwrap_unchecked() };
         self.insert_node(first_index, second_node);
 
-        let first_node = unsafe { self.remove_node(first_index + 1).unwrap_unchecked() };
+        let first_node = unsafe { self.remove_node_by_index(first_index + 1).unwrap_unchecked() };
         self.insert_node(second_index, first_node);
     }
 
@@ -297,8 +297,16 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     }
 
     #[inline]
-    fn remove_node(&mut self, index: usize) -> Option<NonNull<Node<T>>> {
-        let mut node = self.get_node(index)?;
+    fn remove_node_by_index(&mut self, index: usize) -> Option<NonNull<Node<T>>> {
+        let node = self.get_node(index)?;
+
+        unsafe {
+            Some(self.remove_node(node, index))
+        }
+    }
+
+    #[inline]
+    unsafe fn remove_node(&mut self, mut node: NonNull<Node<T>>, index: usize) -> NonNull<Node<T>> {
         unsafe {
             let node = node.as_mut();
             self.len = self.len.checked_sub(1).expect("list underflow");
@@ -311,14 +319,14 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
                 node.next.as_mut().prev = node.prev;
             }
 
-            if index == 0 {
+            if index == 0{
                 self.head = node.next;
             } else if index == self.len {
                 self.tail = node.prev;
             }
         }
 
-        Some(node)
+        node
     }
 }
 
@@ -542,7 +550,7 @@ impl<'a, T: 'a, A: Allocator> Iterator for IntoIter<'a, T, A> {
     type Item = Handle<'a, T>;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.list.remove_node(0).map(|mut node| unsafe {
+        self.list.remove_node_by_index(0).map(|mut node| unsafe {
             self.list.len -= 1;
             Handle::from_raw(&mut node.as_mut().data)
         })
@@ -568,7 +576,7 @@ impl<'a, T: 'a, A: Allocator> DoubleEndedIterator for IntoIter<'a, T, A> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         self.list
-            .remove_node(self.list.len.saturating_sub(1))
+            .remove_node_by_index(self.list.len.saturating_sub(1))
             .map(|mut node| unsafe { Handle::from_raw(&mut node.as_mut().data) })
     }
 }
