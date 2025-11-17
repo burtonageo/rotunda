@@ -530,16 +530,13 @@ impl<'a, T> Handle<'a, MaybeUninit<T>> {
 
 impl<'a, T> Handle<'a, [MaybeUninit<T>]> {
     #[inline]
-    pub const unsafe fn assume_init_slice(mut this: Self) -> Handle<'a, [T]> {
-        let len = this.ptr.len();
-        let ptr = unsafe { this.ptr.as_mut().as_mut_ptr() as *mut T };
-        let _this = ManuallyDrop::new(this);
+    pub const unsafe fn assume_init_slice(this: Self) -> Handle<'a, [T]> {
+        let ptr = Handle::into_raw(this);
+        let len = ptr.len();
+        let ptr = ptr::from_raw_parts_mut(ptr as *mut T, len);
 
-        let ptr = unsafe { NonNull::slice_from_raw_parts(NonNull::new_unchecked(ptr), len) };
-
-        Handle {
-            ptr,
-            _boo: PhantomData,
+        unsafe {
+            Handle::from_raw(ptr)
         }
     }
 }
