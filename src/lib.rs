@@ -421,7 +421,7 @@ impl<A: Allocator> Arena<A> {
     /// ```
     /// # use rotunda::{Arena, handle::Handle};
     /// let arena = Arena::new();
-    /// let result = arena.with_scope(|| {
+    /// let result = arena.with_scope(|arena| {
     ///     let h1 = Handle::new_in(&arena, 5);
     ///     let h2 = Handle::new_in(&arena, 10);
     ///     *h1 + *h2
@@ -435,7 +435,10 @@ impl<A: Allocator> Arena<A> {
     ///
     /// # Notes
     ///
-    /// The lifetime of `T` must be `'static`, which means that the closure cannot return borrowed data.
+    /// The lifetime of `T` must be `'static`, which means that the closure cannot return borrowed data,
+    /// and the lifetime of `F` is `'static`, which means that data used in the scope must be moved into
+    /// the closure.
+    ///
     /// If this is too restrictive, you can use [`Arena::with_scope_dynamic()`].
     ///
     /// The arena state is restored using a guard type, so the arena's memory will be restored if the given
@@ -443,14 +446,17 @@ impl<A: Allocator> Arena<A> {
     ///
     /// [`Arena::with_scope_dynamic()`]: ./struct.Arena.html#method.with_scope_dynamic
     #[inline]
-    pub fn with_scope<T: 'static, F: FnMut() -> T>(&self, mut f: F) -> T {
+    pub fn with_scope<T: 'static, F: 'static + FnOnce(&Arena<A>) -> T>(&self, f: F) -> T {
         let _scope = ScopedRestore::new(&self.blocks);
-        f()
+        f(self)
     }
 
     /// This function is similar to [`Arena::with_scope()`], except that it relaxes the
     /// `'static` lifetime requirement on the return type. This allows the caller to
     /// return borrowed data from the scope closure.
+    ///
+    /// As the closure taken by function does not take ownership of items moved into it, it
+    /// can freely use items from the caller's scope, and does not have an `Arena` parameter.
     ///
     /// # Examples
     ///
@@ -493,6 +499,24 @@ impl<A: Allocator> Arena<A> {
     /// # core::mem::forget(handle);
     /// ```
     ///
+    /// Note that this includes 'smuggling' handles out through a collection type which
+    /// uses the `Arena` as a backing store:
+    ///
+    /// ```rust,unsafe
+    /// # use rotunda::{Arena, buffer::Buffer, handle::Handle};
+    /// let arena = Arena::new();
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 5);
+    /// unsafe {
+    ///     arena.with_scope_dynamic(|| {
+    ///         let handle = Handle::new_in(&arena, 21);
+    ///         buffer.push(handle);
+    ///     });
+    /// };
+    ///
+    /// // Warning ⚠️: `buffer[0]` points to uninitialised memory here. It is undefined behaviour
+    /// // to dereference it in any way (including via non-trivial drop).
+    /// ```
+    /// 
     /// [`Arena::with_scope()`]: ./struct.Arena.html#method.with_scope
     #[inline]
     pub unsafe fn with_scope_dynamic<T, F: FnMut() -> T>(&self, mut f: F) -> T {

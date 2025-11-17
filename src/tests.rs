@@ -9,6 +9,7 @@ use std::{
     alloc::{Allocator, Layout, System},
     mem,
     ptr::{self, NonNull},
+    sync::atomic::{AtomicU32, Ordering as AtomicOrdering},
 };
 
 #[test]
@@ -196,28 +197,30 @@ fn test_scoped() {
     let handle = Handle::new_in(&arena, 25i32);
     let handle_2 = Handle::new_in(&arena, 25i64);
 
-    let handle_3_ptr = arena.with_scope(|| {
+    let handle_3_ptr = arena.with_scope(|arena| {
         let handle_3 = Handle::new_in(&arena, 45i64);
         Handle::as_ptr(&handle_3)
     });
 
-    arena.with_scope(|| {
+    arena.with_scope(move |arena| {
         let handle_4 = Handle::new_in(&arena, 5i64);
         let handle_4_ptr = Handle::as_ptr(&handle_4);
 
         assert!(ptr::eq(handle_3_ptr, handle_4_ptr));
     });
 
-    arena.with_scope(|| {
+    arena.with_scope(|arena| {
         let first = Handle::new_in(&arena, 255i32);
         let second = Handle::new_in(&arena, 132u64);
 
-        arena.with_scope(|| {
+        unsafe {
+            arena.with_scope_dynamic(|| {
             let value = Handle::new_in(&arena, *first as u64 + *second);
             assert_eq!(*value, 387);
             let _value = Handle::new_in(&arena, 510u16);
             arena.reserve_blocks(2);
         });
+        }
 
         let _third = Handle::new_in(&arena, 432);
     });
@@ -234,7 +237,7 @@ fn test_scoped() {
     let _value = Handle::new_in(&arena, [0u8; SIZE]);
 
     assert_eq!(arena.blocks.curr_block_pos().get(), SIZE);
-    arena.with_scope(|| {
+    arena.with_scope(|arena| {
         let _slice_handle = Handle::new_slice_splat_in(&arena, SIZE, [0u8; 8]);
         assert_eq!(
             arena.blocks.curr_block_pos().get(),
@@ -246,11 +249,13 @@ fn test_scoped() {
     assert_eq!(arena.blocks.curr_block_pos().get(), SIZE);
 
     let mut value = Handle::new_uninit_in(&arena);
-    arena.with_scope(|| {
+    unsafe {
+        arena.with_scope_dynamic(|| {
         let val_1 = Handle::new_in(&arena, 2);
         let val_2 = Handle::new_in(&arena, 4);
         value.as_mut().write(*val_1 + *val_2);
     });
+    }
 
     let value = unsafe { Handle::assume_init(value) };
     let _data = Handle::new_in(&arena, [0i32; 16]);
@@ -277,7 +282,7 @@ fn test_multithreaded() {
     assert_eq!(*value, 21);
     drop(value);
 
-    let send_arena = thread::spawn(move || {
+    let send_arena = thread::spawn(|| {
         let _arena = arena;
     });
 
@@ -289,7 +294,7 @@ fn test_rc() {
     use std::string::String;
     let arena = Arena::new();
 
-    arena.with_scope(|| {
+    arena.with_scope(|arena| {
         use std::convert::identity;
 
         fn take_rc(hndl: RcHandle<'_, i32>) {
@@ -308,7 +313,7 @@ fn test_rc() {
         }
     });
 
-    arena.with_scope(|| {
+    arena.with_scope(|arena| {
         let mut weak = WeakHandle::<'_, i32>::new();
         {
             let ptr = weak.clone().into_raw();
@@ -352,7 +357,6 @@ fn test_rc() {
         assert!(WeakHandle::upgrade(&weak_2).is_none());
     });
 
-    use std::sync::atomic::{AtomicU32, Ordering as AtomicOrdering};
     static DROP_COUNT: AtomicU32 = AtomicU32::new(0);
 
     #[derive(Debug, Eq, PartialEq)]
@@ -364,7 +368,7 @@ fn test_rc() {
         }
     }
 
-    arena.with_scope(|| {
+    arena.with_scope(|arena| {
         let sv_3 = RcHandle::new_in(&arena, CountDrops(21));
         assert_eq!(DROP_COUNT.load(AtomicOrdering::SeqCst), 0);
 
@@ -378,7 +382,7 @@ fn test_rc() {
         assert_eq!(DROP_COUNT.load(AtomicOrdering::SeqCst), 1);
     });
 
-    arena.with_scope(|| {
+    arena.with_scope(|arena| {
         let rc_handle = RcHandle::new_in(&arena, String::from("Hello!"));
         let weak = RcHandle::downgrade(&rc_handle);
 
@@ -543,7 +547,7 @@ fn test_custom_alloc() {
 fn test_string_buffer() {
     let arena = Arena::new();
 
-    arena.with_scope(|| {
+    arena.with_scope(|arena| {
         let mut string_buf = StringBuffer::with_capacity_in_arena(200, &arena);
 
         string_buf.push_str("Lorem ipsum");
