@@ -4,9 +4,9 @@ use core::{
     ffi::c_void,
     fmt,
     marker::{PhantomData, PhantomPinned},
-    mem,
+    mem::{self, offset_of},
     ptr::{self, NonNull},
-    str,
+    slice, str,
 };
 
 #[non_exhaustive]
@@ -220,6 +220,15 @@ pub(super) struct Block {
 }
 
 impl Block {
+    #[must_use]
+    #[inline]
+    pub(super) unsafe fn data(&mut self, len: usize) -> &mut [u8] {
+        let ptr = ptr::from_mut(self)
+            .map_addr(|addr| addr + offset_of!(Block, data))
+            .cast::<u8>();
+        unsafe { slice::from_raw_parts_mut(ptr, len) }
+    }
+
     #[track_caller]
     #[must_use]
     #[cold]

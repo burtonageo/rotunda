@@ -160,6 +160,7 @@ use alloc::alloc::{AllocError, Allocator, Global, Layout};
 use core::{
     ffi::c_void,
     fmt,
+    iter::FusedIterator,
     marker::PhantomData,
     ptr::{self, NonNull},
 };
@@ -662,6 +663,21 @@ impl<A: Allocator> Arena<A> {
 
     #[must_use]
     #[inline]
+    pub fn curr_block(&mut self) -> Option<&mut [u8]> {
+        unsafe {
+            let mut block = self.blocks.curr_block().get()?;
+            Some(block.as_mut().data(self.block_size()))
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn free_blocks(&mut self) -> FreeBlocksMut<'_, A> {
+        FreeBlocksMut::new(self)
+    }
+
+    #[must_use]
+    #[inline]
     fn alloc_block(&self) -> NonNull<Block> {
         let layout = self.blocks.block_layout();
         Block::alloc(layout, self.allocator())
@@ -690,5 +706,46 @@ impl<A: Allocator> Drop for Arena<A> {
         unsafe {
             self.blocks.dealloc_all_memory(self.allocator());
         }
+    }
+}
+
+pub struct FreeBlocksMut<'a, A: Allocator = Global> {
+    arena: &'a mut Arena<A>,
+    curr: Option<NonNull<Block>>,
+}
+
+impl<'a, A: Allocator> FreeBlocksMut<'a, A> {
+    #[must_use]
+    #[inline]
+    const fn new(arena: &'a mut Arena<A>) -> Self {
+        let curr = arena.blocks.free_blocks().get();
+        Self { arena, curr }
+    }
+}
+
+impl<'a, A: Allocator> Iterator for FreeBlocksMut<'a, A> {
+    type Item = &'a mut [u8];
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let block_size = self.arena.block_size();
+        let (data, next) = unsafe {
+            let block = self.curr.as_mut().map(|block| NonNull::as_mut(block))?;
+            let next = block.next.get();
+
+            (block.data(block_size), next)
+        };
+
+        self.curr = next;
+        Some(data)
+    }
+}
+
+impl<'a, A: Allocator> FusedIterator for FreeBlocksMut<'a, A> {}
+
+impl<'a, A: Allocator> fmt::Debug for FreeBlocksMut<'a, A> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+        fmtr.debug_struct("BlocksMut").finish_non_exhaustive()
     }
 }
