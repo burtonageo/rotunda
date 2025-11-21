@@ -745,7 +745,7 @@ impl<'a, A: Allocator> FusedIterator for FreeBlocksMut<'a, A> {}
 
 impl<'a, A: Allocator> fmt::Debug for FreeBlocksMut<'a, A> {
     #[inline]
-    fn fmt(&self, fmtr: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmtr.debug_struct("BlocksMut").finish_non_exhaustive()
     }
 }
