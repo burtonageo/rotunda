@@ -665,7 +665,7 @@ impl<A: Allocator> Arena<A> {
             self.blocks
                 .curr_block()
                 .get()
-                .map(|mut block| block.as_mut().data(self.block_size()))
+                .map(|block| Block::data(block, self.block_size()))
         }
     }
 
@@ -794,10 +794,13 @@ impl<'a, A: Allocator> Iterator for FreeBlocksMut<'a, A> {
     fn next(&mut self) -> Option<Self::Item> {
         let block_size = self.arena.block_size();
         let (data, next) = unsafe {
-            let block = self.curr.as_mut().map(|block| NonNull::as_mut(block))?;
-            let next = block.next.get();
+            let block = self.curr?;
+            let next = {
+                let block = block.as_ref();
+                block.next.get()
+            };
 
-            (block.data(block_size), next)
+            (Block::data(block, block_size), next)
         };
 
         self.curr = next;
@@ -849,7 +852,9 @@ impl<'a, A: Allocator> Iterator for AllBlocksMut<'a, A> {
         let block_size = self.arena.block_size();
         match self.state {
             State::Pending => {
-                let curr = unsafe { self.curr.map(|mut block| block.as_mut().data(block_size)) };
+                let curr = unsafe {
+                    self.curr.map(|block| Block::data(block, block_size))
+                };
 
                 self.state = State::Started;
                 self.curr = self.arena.blocks.free_blocks().get();
@@ -858,10 +863,13 @@ impl<'a, A: Allocator> Iterator for AllBlocksMut<'a, A> {
             }
             State::Started => {
                 let (data, next) = unsafe {
-                    let block = self.curr.as_mut().map(|block| NonNull::as_mut(block))?;
-                    let next = block.next.get();
+                    let block = self.curr?;
+                    let next = {
+                        let block = block.as_ref();
+                        block.next.get()
+                    };
 
-                    (block.data(block_size), next)
+                    (Block::data(block, block_size), next)
                 };
 
                 self.curr = next;
