@@ -41,6 +41,26 @@ impl<'a, T> RcHandle<'a, T> {
         let handle = RcHandle::new_uninit_in(arena);
         unsafe { RcHandle::init(handle, value) }
     }
+
+    #[must_use]
+    #[inline]
+    pub fn new_with<A: Allocator, F: FnOnce() -> T>(arena: &'a Arena<A>, f: F) -> Self {
+        let handle = RcHandle::new_uninit_in(arena);
+        unsafe { RcHandle::init(handle, f()) }
+    }
+
+    #[must_use]
+    #[inline]
+    pub unsafe fn init_with<A: Allocator, F: FnOnce(&mut MaybeUninit<T>)>(
+        arena: &'a Arena<A>,
+        f: F,
+    ) -> Self {
+        let mut handle = RcHandle::new_uninit_in(arena);
+        unsafe {
+            f(RcHandle::get_mut_unchecked(&mut handle));
+            RcHandle::assume_init(handle)
+        }
+    }
 }
 
 impl<'a, T> RcHandle<'a, [T]> {

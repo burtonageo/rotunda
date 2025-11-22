@@ -62,6 +62,26 @@ impl<'a, T> Handle<'a, T> {
         Handle::init(handle, value)
     }
 
+    #[must_use]
+    #[inline]
+    pub fn new_with<A: Allocator, F: FnOnce() -> T>(arena: &'a Arena<A>, f: F) -> Self {
+        let handle = Handle::new_uninit_in(arena);
+        Handle::init(handle, f())
+    }
+
+    #[must_use]
+    #[inline]
+    pub unsafe fn init_with<A: Allocator, F: FnOnce(&mut MaybeUninit<T>)>(
+        arena: &'a Arena<A>,
+        f: F,
+    ) -> Self {
+        let mut handle = Handle::new_uninit_in(arena);
+        f(handle.as_mut());
+        unsafe {
+            Handle::assume_init(handle)
+        }
+    }
+
     /// Converts the handle into a `Handle<[T]>` with a slice length of `1`.
     ///
     /// # Examples
