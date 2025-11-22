@@ -306,7 +306,7 @@ fn test_rc() {
         assert_eq!(*sv_1, 21);
 
         const LEN: usize = 102;
-        let sv_2 = RcHandle::new_from_fn_in(&arena, LEN, identity);
+        let sv_2 = RcHandle::new_slice_from_fn_in(&arena, LEN, identity);
         assert_eq!(sv_2.len(), LEN);
         for (i, item) in sv_2.iter().enumerate() {
             assert_eq!(i, *item);

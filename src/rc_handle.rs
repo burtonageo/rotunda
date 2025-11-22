@@ -46,7 +46,7 @@ impl<'a, T> RcHandle<'a, T> {
 impl<'a, T> RcHandle<'a, [T]> {
     #[must_use]
     #[inline]
-    pub fn new_from_fn_in<A: Allocator, F: FnMut(usize) -> T>(
+    pub fn new_slice_from_fn_in<A: Allocator, F: FnMut(usize) -> T>(
         arena: &'a Arena<A>,
         slice_len: usize,
         mut f: F,
