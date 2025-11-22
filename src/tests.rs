@@ -626,7 +626,6 @@ fn test_list() {
         let mut data = (0usize..=NUM).collect::<alloc::vec::Vec<_>>();
         list.extend(data.iter().cloned());
 
-        let list = list;
         {
             let back = list.back();
             let front = list.front();
@@ -642,10 +641,8 @@ fn test_list() {
             assert_eq!(x, y);
         }
 
-        let mut list = list;
         list.reverse();
         data.reverse();
-        let list = list;
 
         assert_eq!(&list, &data[..]);
         for (lhs, rhs) in list.iter().zip(data.iter()) {
