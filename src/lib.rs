@@ -644,7 +644,7 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # use core::{mem::drop, ptr};
+    /// # use core::mem::drop;
     /// # use rotunda::{Arena, handle::Handle};
     /// let mut arena = Arena::new();
     ///
@@ -656,9 +656,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// let block = arena.curr_block().expect("block must be allocated");
     ///
-    /// unsafe {
-    ///     ptr::write_bytes(block.as_mut_ptr(), 0xcd, block.len());
-    /// }
+    /// block.fill(0xcd);
     /// ```
     #[must_use]
     #[inline]
@@ -685,7 +683,7 @@ impl<A: Allocator> Arena<A> {
     /// # arena.force_push_new_block();
     ///
     /// for free_block in arena.free_blocks() {
-    ///     ptr::write_bytes(block.as_mut_ptr(), 0x00, block.len());
+    ///     free_block.fill(0x00);
     /// }
     /// ```
     #[must_use]
@@ -708,7 +706,7 @@ impl<A: Allocator> Arena<A> {
     /// # arena.force_push_new_block();
     ///
     /// for block in arena.all_blocks() {
-    ///     ptr::write_bytes(block.as_mut_ptr(), 0xff, block.len());
+    ///     block.fill(0xff);
     /// }
     /// ```
     #[must_use]
