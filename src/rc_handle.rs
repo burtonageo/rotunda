@@ -771,6 +771,24 @@ impl<'a, T: ?Sized + Pointee> WeakHandle<'a, T> {
     }
 }
 
+impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for WeakHandle<'a, T> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(strong) = WeakHandle::upgrade(self) {
+            fmt::Debug::fmt(strong.as_ref(), fmtr)
+        } else {
+            fmtr.debug_struct("WeakHandle").finish_non_exhaustive()
+        }
+    }
+}
+
+impl<'a, T: ?Sized> fmt::Pointer for WeakHandle<'a, T> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Pointer::fmt(&self.ptr, fmtr)
+    }
+}
+
 impl<'a, T> Default for WeakHandle<'a, T> {
     #[inline]
     fn default() -> Self {
