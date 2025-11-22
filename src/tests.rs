@@ -215,11 +215,11 @@ fn test_scoped() {
 
         unsafe {
             arena.with_scope_dynamic(|| {
-            let value = Handle::new_in(&arena, *first as u64 + *second);
-            assert_eq!(*value, 387);
-            let _value = Handle::new_in(&arena, 510u16);
-            arena.reserve_blocks(2);
-        });
+                let value = Handle::new_in(&arena, *first as u64 + *second);
+                assert_eq!(*value, 387);
+                let _value = Handle::new_in(&arena, 510u16);
+                arena.reserve_blocks(2);
+            });
         }
 
         let _third = Handle::new_in(&arena, 432);
@@ -251,10 +251,10 @@ fn test_scoped() {
     let mut value = Handle::new_uninit_in(&arena);
     unsafe {
         arena.with_scope_dynamic(|| {
-        let val_1 = Handle::new_in(&arena, 2);
-        let val_2 = Handle::new_in(&arena, 4);
-        value.as_mut().write(*val_1 + *val_2);
-    });
+            let val_1 = Handle::new_in(&arena, 2);
+            let val_2 = Handle::new_in(&arena, 4);
+            value.as_mut().write(*val_1 + *val_2);
+        });
     }
 
     let value = unsafe { Handle::assume_init(value) };
@@ -567,70 +567,101 @@ fn test_string_buffer() {
 fn test_list() {
     let arena = Arena::new();
 
-    let mut list = LinkedList::new(&arena);
+    arena.with_scope(|arena| {
+        let mut list = LinkedList::new(&arena);
+        list.extend([1, 2, 3, 4, 5]);
+        list.swap(3, 4);
+        list.swap(2, 3);
+        assert_eq!(list, [1, 2, 5, 3, 4]);
+    });
 
-    list.extend([1usize, 2, 3, 4, 5]);
+    arena.with_scope(|arena| {
+        let mut list = LinkedList::new(&arena);
+        list.extend([1usize, 2, 3, 4, 5]);
 
-    for (i, elem) in list.iter().copied().enumerate() {
-        assert_eq!(i + 1, elem);
-    }
+        for (i, elem) in list.iter().copied().enumerate() {
+            assert_eq!(i + 1, elem);
+        }
 
-    list.insert(1, 23);
+        list.insert(1, 23);
 
-    assert_eq!(list.get(0), Some(&1));
-    assert_eq!(list.get(1), Some(&23));
-    assert_eq!(list.get(2), Some(&2));
+        assert_eq!(list.get(0), Some(&1));
+        assert_eq!(list.get(1), Some(&23));
+        assert_eq!(list.get(2), Some(&2));
+        assert_eq!(list.get(4), Some(&4));
+        assert_eq!(list.get(list.len() - 1), list.back());
 
-    let removed = list.remove(1);
-    assert_eq!(removed.as_deref(), Some(&23));
-    assert_eq!(list.get(0), Some(&1));
-    assert_eq!(list.get(1), Some(&2));
-    assert_eq!(list.get(4), Some(&5));
+        let removed = list.remove(1);
+        assert_eq!(removed.as_deref(), Some(&23));
+        assert_eq!(list.get(0), Some(&1));
+        assert_eq!(list.get(1), Some(&2));
+        assert_eq!(list.get(4), Some(&5));
 
-    list.clear();
-    assert!(list.is_empty());
+        list.clear();
+        assert!(list.is_empty());
+    });
 
-    list.extend([1usize, 3, 5]);
-    list.swap(0, 2);
+    arena.with_scope(|arena| {
+        let mut list = LinkedList::new(&arena);
+        list.extend([1usize, 3, 5]);
+        list.swap(0, 2);
 
-    assert_eq!(list.front(), Some(&5));
-    assert_eq!(list.back(), Some(&1));
+        assert_eq!(list.front(), Some(&5));
+        assert_eq!(list.back(), Some(&1));
 
-    let back = list.pop_back();
-    assert_eq!(back.as_deref(), Some(&1));
-    assert_eq!(list, [5usize, 3]);
-    list.reverse();
-    assert_eq!(list, [3usize, 5]);
+        let back = list.pop_back();
+        assert_eq!(back.as_deref(), Some(&1));
+        assert_eq!(list, [5usize, 3]);
+        list.reverse();
+        assert_eq!(list, [3usize, 5]);
 
-    let front = list.pop_front();
-    assert_eq!(front.as_deref(), Some(&3));
+        let front = list.pop_front();
+        assert_eq!(front.as_deref(), Some(&3));
+    });
 
-    list.clear();
+    arena.with_scope(|arena| {
+        let mut list = LinkedList::new(&arena);
+        const NUM: usize = 150;
 
-    const NUM: usize = 150;
+        let mut data = (0usize..=NUM).collect::<alloc::vec::Vec<_>>();
+        list.extend(data.iter().cloned());
 
-    let mut data = (0usize..=NUM).collect::<alloc::vec::Vec<_>>();
-    list.extend(data.iter().cloned());
+        let list = list;
+        {
+            let back = list.back();
+            let front = list.front();
 
-    {
-        let back = list.back();
-        let front = list.front();
+            let last = list.iter().next_back();
+            let first = list.iter().rev().nth(NUM);
 
-        let last = list.iter().next_back();
-        let first = list.iter().rev().nth(NUM);
+            assert_eq!(back, last);
+            assert_eq!(front, first);
+        }
 
-        assert_eq!(back, last);
-        assert_eq!(front, first);
-    }
+        for (x, y) in list.iter().rev().zip(data.iter().rev()) {
+            assert_eq!(x, y);
+        }
 
-    for (x, y) in list.iter().rev().zip(data.iter().rev()) {
-        assert_eq!(x, y);
-    }
+        let mut list = list;
+        list.reverse();
+        data.reverse();
+        let list = list;
 
-    list.reverse();
-    data.reverse();
+        assert_eq!(&list, &data[..]);
+        for (lhs, rhs) in list.iter().zip(data.iter()) {
+            assert_eq!(lhs, rhs);
+        }
 
-    assert_eq!(&list, &data[..]);
-    assert_eq!(list.front(), Some(&NUM));
-    assert_eq!(list.back(), Some(&0));
+        assert_eq!(list.get(NUM - 1), Some(&1));
+        assert_eq!(list.front(), Some(&NUM));
+        assert_eq!(list.back(), Some(&0));
+    });
+
+    arena.with_scope(|arena| {
+        let mut list = LinkedList::new(&arena);
+        list.extend([1, 2, 3, 4, 5]);
+
+        let reversed = list.iter().rev().cloned().collect::<std::vec::Vec<_>>();
+        assert_eq!(reversed.as_slice(), &[5, 4, 3, 2, 1]);
+    });
 }

@@ -4,7 +4,7 @@ use core::{
     fmt,
     iter::{DoubleEndedIterator, FusedIterator, Iterator},
     marker::PhantomData,
-    mem,
+    mem::{self, offset_of},
     ptr::{self, NonNull},
 };
 
@@ -113,13 +113,8 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
 
     #[inline]
     pub fn remove(&'_ mut self, index: usize) -> Option<Handle<'a, T>> {
-        self.remove_node_by_index(index).map(|node| unsafe {
-            Handle::from_raw(
-                node.as_ptr()
-                    .map_addr(|addr| addr + mem::size_of::<Node<()>>())
-                    .cast::<T>(),
-            )
-        })
+        self.remove_node_by_index(index)
+            .map(|node| unsafe { Node::into_handle(node) })
     }
 
     #[inline]
@@ -133,21 +128,89 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             mem::swap(&mut first_index, &mut second_index);
         }
 
-        let second_node = unsafe { self.remove_node_by_index(second_index).unwrap_unchecked() };
-        self.insert_node(first_index, second_node);
-
-        let first_node = unsafe {
-            self.remove_node_by_index(first_index + 1)
-                .unwrap_unchecked()
+        let (mut first_node, mut second_node) = unsafe {
+            (
+                self.get_node_unchecked(first_index),
+                self.get_node_unchecked(second_index),
+            )
         };
-        self.insert_node(second_index, first_node);
+
+        let (mut first_prev, first_next) = unsafe {
+            let first_node = first_node.as_ref();
+            (first_node.prev, first_node.next)
+        };
+
+        let (mut second_prev, mut second_next) = unsafe {
+            let second_node = second_node.as_ref();
+            (second_node.prev, second_node.next)
+        };
+
+        unsafe {
+            {
+                debug_assert!(second_index > 0);
+                let second_prev = second_prev.as_mut();
+                second_prev.next = first_node;
+            }
+
+            if second_index == self.len() - 1 {
+                self.tail = first_node;
+            } else {
+                let second_next = second_next.as_mut();
+                second_next.prev = first_node;
+            }
+
+            if first_index == 0 {
+                self.head = second_node;
+            } else {
+                let first_prev = first_prev.as_mut();
+                first_prev.next = second_node;
+            }
+
+            if first_index.abs_diff(second_index) > 1 {
+                {
+                    let second_node = second_node.as_mut();
+                    second_node.next = first_next;
+                }
+
+                {
+                    let first_node = first_node.as_mut();
+                    first_node.prev = second_prev;
+                }
+            } else {
+                {
+                    let second_node = second_node.as_mut();
+                    second_node.next = first_node;
+                }
+                {
+                    let first_node = first_node.as_mut();
+                    first_node.prev = second_node;
+                }
+            }
+
+            if first_index > 0 {
+                let second_node = second_node.as_mut();
+                second_node.prev = first_prev;
+            }
+            if second_index < self.len {
+                let first_node = first_node.as_mut();
+                first_node.next = second_next;
+            }
+        } 
     }
 
     #[inline]
     pub fn reverse(&mut self) {
-        let n = self.len / 2;
+        let len = self.len();
+        if len <= 1 {
+            return;
+        }
 
-        for i in 0..n {
+        let n = {
+            let n = self.len() / 2;
+            if len <= 3 || len.is_multiple_of(2) { n } else { n }
+        };
+
+        for i in (0..n).rev() {
             let inv = self.len.saturating_sub(1).saturating_sub(i);
             self.swap(i, inv);
         }
@@ -253,7 +316,12 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     unsafe fn get_node_unchecked(&self, index: usize) -> NonNull<Node<T>> {
         let mut iter = NodeIter::new(self);
         // @TODO(George): Iter from the end of the list if index >= self.len / 2
-        let node = iter.nth(index);
+
+        let node = if index >= self.len / 2 {
+            iter.rev().nth(self.len().saturating_sub(index + 1))
+        } else {
+            iter.nth(index)
+        };
 
         unsafe { node.unwrap_unchecked() }
     }
@@ -307,7 +375,6 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     fn remove_node_by_index(&mut self, index: usize) -> Option<NonNull<Node<T>>> {
         let node = self.get_node(index)?;
-
         unsafe { Some(self.remove_node(node, index)) }
     }
 
@@ -556,10 +623,9 @@ impl<'a, T: 'a, A: Allocator> Iterator for IntoIter<'a, T, A> {
     type Item = Handle<'a, T>;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.list.remove_node_by_index(0).map(|mut node| unsafe {
-            self.list.len -= 1;
-            Handle::from_raw(&mut node.as_mut().data)
-        })
+        self.list
+            .remove_node_by_index(0)
+            .map(|node| unsafe { Node::into_handle(node) })
     }
 
     #[inline]
@@ -583,7 +649,7 @@ impl<'a, T: 'a, A: Allocator> DoubleEndedIterator for IntoIter<'a, T, A> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.list
             .remove_node_by_index(self.list.len.saturating_sub(1))
-            .map(|mut node| unsafe { Handle::from_raw(&mut node.as_mut().data) })
+            .map(|node| unsafe { Node::into_handle(node) })
     }
 }
 
@@ -700,4 +766,18 @@ struct Node<T> {
     next: NonNull<Node<T>>,
     prev: NonNull<Node<T>>,
     data: T,
+}
+
+impl<T> Node<T> {
+    #[must_use]
+    #[inline]
+    unsafe fn into_handle<'a>(node: NonNull<Node<T>>) -> Handle<'a, T> {
+        unsafe {
+            Handle::from_raw(
+                node.as_ptr()
+                    .map_addr(|addr| addr + offset_of!(Node<T>, data))
+                    .cast::<T>(),
+            )
+        }
+    }
 }
