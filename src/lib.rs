@@ -517,7 +517,7 @@ impl<A: Allocator> Arena<A> {
     /// // Warning ⚠️: `buffer[0]` points to uninitialised memory here. It is undefined behaviour
     /// // to dereference it in any way (including via non-trivial drop).
     /// ```
-    /// 
+    ///
     /// [`Arena::with_scope()`]: ./struct.Arena.html#method.with_scope
     #[inline]
     pub unsafe fn with_scope_dynamic<T, F: FnMut() -> T>(&self, mut f: F) -> T {
