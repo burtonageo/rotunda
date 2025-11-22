@@ -9,7 +9,7 @@ use core::{
     hash::{Hash, Hasher},
     iter::IntoIterator,
     marker::{CoercePointee, PhantomData, PhantomPinned},
-    mem::{self, ManuallyDrop, MaybeUninit},
+    mem::{self, ManuallyDrop, MaybeUninit, offset_of},
     ops::Deref,
     ptr::{self, NonNull, Pointee, Thin},
     slice,
@@ -377,11 +377,17 @@ impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
     pub fn new_uninit_in<A: Allocator>(arena: &'a Arena<A>) -> RcHandle<'a, MaybeUninit<T>> {
         let layout = const { rc_inner_layout_for_value_layout(Layout::new::<T>()) };
 
-        let mut ptr = arena
+        let ptr = arena
             .alloc_raw(layout)
             .cast::<RcHandleInner<MaybeUninit<T>>>();
+
         unsafe {
-            ptr::write(ptr.as_mut().ref_count_raw_mut(), Cell::new(1));
+            let count_ptr = ptr
+                .map_addr(|addr| addr.saturating_add(offset_of!(RcHandleInner<T>, count)))
+                .cast::<Cell<usize>>()
+                .as_ptr();
+
+            ptr::write(count_ptr, Cell::new(1));
             RcHandle::from_raw_inner(ptr.as_ptr().cast_const())
         }
     }
@@ -391,11 +397,17 @@ impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
     pub fn new_uninit_zeroed_in<A: Allocator>(arena: &'a Arena<A>) -> RcHandle<'a, MaybeUninit<T>> {
         let layout = const { rc_inner_layout_for_value_layout(Layout::new::<T>()) };
 
-        let mut ptr = arena
+        let ptr = arena
             .alloc_raw_zeroed(layout)
             .cast::<RcHandleInner<MaybeUninit<T>>>();
+
         unsafe {
-            ptr::write(ptr.as_mut().ref_count_raw_mut(), Cell::new(1));
+            let count_ptr = ptr
+                .map_addr(|addr| addr.saturating_add(offset_of!(RcHandleInner<T>, count)))
+                .cast::<Cell<usize>>()
+                .as_ptr();
+
+            ptr::write(count_ptr, Cell::new(1));
             RcHandle::from_raw_inner(ptr.as_ptr().cast_const())
         }
     }
@@ -453,7 +465,12 @@ impl<'a, T> RcHandle<'a, [MaybeUninit<T>]> {
                 .alloc_raw(inner_layout)
                 .cast::<RcHandleInner<MaybeUninit<T>>>()
                 .as_ptr();
-            ptr::write((&mut *ptr).ref_count_raw_mut(), Cell::new(1));
+
+            let count_ptr = ptr
+                .map_addr(|addr| addr.saturating_add(offset_of!(RcHandleInner<T>, count)))
+                .cast::<Cell<usize>>();
+
+            ptr::write(count_ptr, Cell::new(1));
             let ptr = RcHandleInner::cast_to_slice(ptr, slice_len);
             RcHandle::from_raw_inner(ptr)
         }
@@ -848,12 +865,6 @@ impl<T: ?Sized> RcHandleInner<T> {
         };
 
         self.count.replace(new_count);
-    }
-
-    #[must_use]
-    #[inline]
-    const fn ref_count_raw_mut(&mut self) -> *mut Cell<usize> {
-        &raw mut self.count
     }
 }
 
