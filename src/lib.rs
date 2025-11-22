@@ -636,6 +636,87 @@ impl<A: Allocator> Arena<A> {
         slot
     }
 
+    /// Returns a reference to the currently in-use block, if it is available.
+    ///
+    /// This method requires exclusive access to the `Arena`, so there
+    /// cannot be any objects allocated live from the arena.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use core::{mem::drop, ptr};
+    /// # use rotunda::{Arena, handle::Handle};
+    /// let mut arena = Arena::new();
+    ///
+    /// let no_block = arena.curr_block();
+    /// assert_eq!(no_block, None);
+    ///
+    /// let handle = Handle::new_str_in(&arena, "Hello, world!");
+    /// drop(handle);
+    ///
+    /// let block = arena.curr_block().expect("block must be allocated");
+    ///
+    /// unsafe {
+    ///     ptr::write_bytes(block.as_mut_ptr(), 0xcd, block.len());
+    /// }
+    /// ```
+    #[must_use]
+    #[inline]
+    pub fn curr_block(&mut self) -> Option<&mut [u8]> {
+        unsafe {
+            self.blocks
+                .curr_block()
+                .get()
+                .map(|mut block| block.as_mut().data(self.block_size()))
+        }
+    }
+
+    /// Returns an iterator over free blocks in the `Arena`.
+    ///
+    /// This method requires exclusive access to the `Arena`, so there
+    /// cannot be any objects allocated live from the arena.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use rotunda::{Arena, handle::Handle};
+    /// let mut arena = Arena::new();
+    /// # arena.force_push_new_block();
+    /// # arena.force_push_new_block();
+    ///
+    /// for free_block in arena.free_blocks() {
+    ///     ptr::write_bytes(block.as_mut_ptr(), 0x00, block.len());
+    /// }
+    /// ```
+    #[must_use]
+    #[inline]
+    pub fn free_blocks(&mut self) -> FreeBlocksMut<'_, A> {
+        FreeBlocksMut::new(self)
+    }
+
+    /// Returns an iterator over all blocks in the `Arena`.
+    ///
+    /// This method requires exclusive access to the `Arena`, so there
+    /// cannot be any objects allocated live from the arena.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use rotunda::{Arena, handle::Handle};
+    /// let mut arena = Arena::new();
+    /// # arena.force_push_new_block();
+    /// # arena.force_push_new_block();
+    ///
+    /// for block in arena.all_blocks() {
+    ///     ptr::write_bytes(block.as_mut_ptr(), 0xff, block.len());
+    /// }
+    /// ```
+    #[must_use]
+    #[inline]
+    pub fn all_blocks(&mut self) -> AllBlocksMut<'_, A> {
+        AllBlocksMut::new(self)
+    }
+
     #[must_use]
     #[inline]
     unsafe fn get_free_block(&self) -> NonNull<Block> {
@@ -659,21 +740,6 @@ impl<A: Allocator> Arena<A> {
 
         self.blocks.curr_block().set(Some(block));
         block
-    }
-
-    #[must_use]
-    #[inline]
-    pub fn curr_block(&mut self) -> Option<&mut [u8]> {
-        unsafe {
-            let mut block = self.blocks.curr_block().get()?;
-            Some(block.as_mut().data(self.block_size()))
-        }
-    }
-
-    #[must_use]
-    #[inline]
-    pub fn free_blocks(&mut self) -> FreeBlocksMut<'_, A> {
-        FreeBlocksMut::new(self)
     }
 
     #[must_use]
@@ -747,5 +813,69 @@ impl<'a, A: Allocator> fmt::Debug for FreeBlocksMut<'a, A> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmtr.debug_struct("BlocksMut").finish_non_exhaustive()
+    }
+}
+
+pub struct AllBlocksMut<'a, A: Allocator = Global> {
+    curr: Option<NonNull<Block>>,
+    arena: &'a mut Arena<A>,
+    state: State,
+}
+
+#[derive(Default)]
+enum State {
+    #[default]
+    Pending,
+    Started,
+}
+
+impl<'a, A: Allocator> AllBlocksMut<'a, A> {
+    #[inline]
+    const fn new(arena: &'a mut Arena<A>) -> Self {
+        let (curr, state) = {
+            match arena.blocks.curr_block().get() {
+                block @ Some(_) => (block, State::Pending),
+                None => (arena.blocks.free_blocks().get(), State::Started),
+            }
+        };
+
+        Self { curr, arena, state }
+    }
+}
+
+impl<'a, A: Allocator> Iterator for AllBlocksMut<'a, A> {
+    type Item = &'a mut [u8];
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let block_size = self.arena.block_size();
+        match self.state {
+            State::Pending => {
+                let curr = unsafe { self.curr.map(|mut block| block.as_mut().data(block_size)) };
+
+                self.state = State::Started;
+                self.curr = self.arena.blocks.free_blocks().get();
+
+                if curr.is_some() { curr } else { self.next() }
+            }
+            State::Started => {
+                let (data, next) = unsafe {
+                    let block = self.curr.as_mut().map(|block| NonNull::as_mut(block))?;
+                    let next = block.next.get();
+
+                    (block.data(block_size), next)
+                };
+
+                self.curr = next;
+                Some(data)
+            }
+        }
+    }
+}
+
+impl<'a, A: Allocator> fmt::Debug for AllBlocksMut<'a, A> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmtr.debug_struct("AllBlocksMut").finish_non_exhaustive()
     }
 }
