@@ -96,10 +96,26 @@ impl<'a, T> Handle<'a, T> {
     #[must_use]
     #[inline]
     pub const fn into_slice(this: Self) -> Handle<'a, [T]> {
-        let ptr = Handle::into_raw(this);
+        Handle::into_array(this)
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn into_array(this: Self) -> Handle<'a, [T; 1]> {
+        let ptr = Handle::into_raw(this).cast::<[T; 1]>();
         unsafe {
-            let slice_ptr = ptr::from_raw_parts_mut(ptr, 1);
-            Handle::from_raw(slice_ptr)
+            Handle::from_raw(ptr)
+        }
+    }
+}
+
+impl<'a, T> Handle<'a, [T; 1]> {
+    #[must_use]
+    #[inline]
+    pub const fn from_array(this: Self) -> Handle<'a, T> {
+        let ptr = Handle::into_raw(this).cast::<T>();
+        unsafe {
+            Handle::from_raw(ptr)
         }
     }
 }
@@ -699,6 +715,27 @@ impl<'a> From<StringBuffer<'a>> for Handle<'a, str> {
     }
 }
 
+impl<'a, T> From<Handle<'a, T>> for Handle<'a, [T]> {
+    #[inline]
+    fn from(value: Handle<'a, T>) -> Self {
+        Handle::into_slice(value)
+    }
+}
+
+impl<'a, T> From<Handle<'a, T>> for Handle<'a, [T; 1]> {
+    #[inline]
+    fn from(value: Handle<'a, T>) -> Self {
+        Handle::into_array(value)
+    }
+}
+
+impl<'a, T> From<Handle<'a, [T; 1]>> for Handle<'a, T> {
+    #[inline]
+    fn from(value: Handle<'a, [T; 1]>) -> Self {
+        Handle::from_array(value)
+    }
+}
+
 impl<'a, T: ?Sized> Drop for Handle<'a, T> {
     #[inline]
     fn drop(&mut self) {
@@ -731,13 +768,6 @@ impl<'a, T, const N: usize> TryFrom<Handle<'a, [T]>> for Handle<'a, [T; N]> {
         } else {
             Err(value)
         }
-    }
-}
-
-impl<'a, T> From<Handle<'a, T>> for Handle<'a, [T]> {
-    #[inline]
-    fn from(value: Handle<'a, T>) -> Self {
-        Handle::into_slice(value)
     }
 }
 
