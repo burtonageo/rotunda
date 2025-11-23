@@ -794,7 +794,15 @@ impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for WeakHandle<'a, T> {
         if let Some(strong) = WeakHandle::upgrade(self) {
             fmt::Debug::fmt(strong.as_ref(), fmtr)
         } else {
-            fmtr.debug_struct("WeakHandle").finish_non_exhaustive()
+            struct Destroyed;
+            impl fmt::Debug for Destroyed {
+                fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    fmtr.write_str("<Destroyed>")
+                }
+            }
+
+            let mut debug_tuple = fmtr.debug_tuple("WeakHandle");
+            debug_tuple.field(&Destroyed).finish()
         }
     }
 }
