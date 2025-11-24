@@ -448,6 +448,18 @@ impl<'a, T> Handle<'a, [T]> {
         Buffer::from_slice_handle(this)
     }
 
+    #[must_use]
+    #[inline]
+    pub fn split_off(this: &mut Self, at: usize) -> Handle<'a, [T]> {
+        let (lhs, rhs) = {
+            let this = mem::replace(this, Handle::empty());
+            Handle::split_at(this, at)
+        };
+
+        *this = lhs;
+        rhs
+    }
+
     #[track_caller]
     #[must_use]
     #[inline]
