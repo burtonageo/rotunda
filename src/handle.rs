@@ -10,9 +10,10 @@ use core::{
     iter::IntoIterator,
     marker::{CoercePointee, PhantomData, Unpin},
     mem::{self, ManuallyDrop, MaybeUninit},
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, Index, IndexMut},
     pin::Pin,
     ptr::{self, NonNull, Pointee, Thin},
+    slice::SliceIndex,
     str,
 };
 #[cfg(feature = "std")]
@@ -680,6 +681,21 @@ impl<'a, T: ?Sized> BorrowMut<T> for Handle<'a, T> {
     #[inline]
     fn borrow_mut(&mut self) -> &mut T {
         self.as_mut()
+    }
+}
+
+impl<'a, T, I: SliceIndex<[T]>> Index<I> for Handle<'a, [T]> {
+    type Output = <[T] as Index<I>>::Output;
+    #[inline]
+    fn index(&self, index: I) -> &Self::Output {
+        self.as_ref().index(index)
+    }
+}
+
+impl<'a, T, I: SliceIndex<[T]>> IndexMut<I> for Handle<'a, [T]> {
+    #[inline]
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        self.as_mut().index_mut(index)
     }
 }
 
