@@ -78,9 +78,7 @@ impl<'a, T> Handle<'a, T> {
     ) -> Self {
         let mut handle = Handle::new_uninit_in(arena);
         f(handle.as_mut());
-        unsafe {
-            Handle::assume_init(handle)
-        }
+        unsafe { Handle::assume_init(handle) }
     }
 
     /// Converts the handle into a `Handle<[T]>` with a slice length of `1`.
@@ -104,9 +102,7 @@ impl<'a, T> Handle<'a, T> {
     #[inline]
     pub const fn into_array(this: Self) -> Handle<'a, [T; 1]> {
         let ptr = Handle::into_raw(this).cast::<[T; 1]>();
-        unsafe {
-            Handle::from_raw(ptr)
-        }
+        unsafe { Handle::from_raw(ptr) }
     }
 }
 
@@ -115,9 +111,7 @@ impl<'a, T> Handle<'a, [T; 1]> {
     #[inline]
     pub const fn from_array(this: Self) -> Handle<'a, T> {
         let ptr = Handle::into_raw(this).cast::<T>();
-        unsafe {
-            Handle::from_raw(ptr)
-        }
+        unsafe { Handle::from_raw(ptr) }
     }
 }
 
@@ -584,9 +578,7 @@ impl<'a, T> Handle<'a, [MaybeUninit<T>]> {
         let len = ptr.len();
         let ptr = ptr::from_raw_parts_mut(ptr as *mut T, len);
 
-        unsafe {
-            Handle::from_raw(ptr)
-        }
+        unsafe { Handle::from_raw(ptr) }
     }
 }
 
