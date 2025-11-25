@@ -421,14 +421,14 @@ impl<'a, T: fmt::Debug, A: Allocator> fmt::Debug for LinkedList<'a, T, A> {
     }
 }
 
-impl<'a, T: 'a, A: Allocator> From<&'a Arena<A>> for LinkedList<'a, T, A> {
+impl<'a, T, A: Allocator> From<&'a Arena<A>> for LinkedList<'a, T, A> {
     #[inline]
     fn from(arena: &'a Arena<A>) -> Self {
         Self::new(arena)
     }
 }
 
-impl<'a, T: 'a + PartialEq, A: Allocator> PartialEq for LinkedList<'a, T, A> {
+impl<'a, T: PartialEq, A: Allocator> PartialEq for LinkedList<'a, T, A> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         if self.len != other.len {
@@ -441,9 +441,9 @@ impl<'a, T: 'a + PartialEq, A: Allocator> PartialEq for LinkedList<'a, T, A> {
     }
 }
 
-impl<'a, T: 'a + Eq, A: Allocator> Eq for LinkedList<'a, T, A> {}
+impl<'a, T: Eq, A: Allocator> Eq for LinkedList<'a, T, A> {}
 
-impl<'a, T: 'a + PartialEq, A: Allocator> PartialEq<[T]> for LinkedList<'a, T, A> {
+impl<'a, T: PartialEq, A: Allocator> PartialEq<[T]> for LinkedList<'a, T, A> {
     #[inline]
     fn eq(&self, other: &[T]) -> bool {
         if self.len != other.len() {
@@ -456,7 +456,14 @@ impl<'a, T: 'a + PartialEq, A: Allocator> PartialEq<[T]> for LinkedList<'a, T, A
     }
 }
 
-impl<'a, T: 'a + PartialEq, A: Allocator, const N: usize> PartialEq<[T; N]>
+impl<'a, 's, T: PartialEq, A: Allocator> PartialEq<&'s [T]> for LinkedList<'a, T, A> {
+    #[inline]
+    fn eq(&self, other: &&'s [T]) -> bool {
+        PartialEq::eq(self, &other[..])
+    }
+}
+
+impl<'a, T: PartialEq, A: Allocator, const N: usize> PartialEq<[T; N]>
     for LinkedList<'a, T, A>
 {
     #[inline]
@@ -465,7 +472,16 @@ impl<'a, T: 'a + PartialEq, A: Allocator, const N: usize> PartialEq<[T; N]>
     }
 }
 
-impl<'a, T: 'a, A: Allocator> IntoIterator for &'_ LinkedList<'a, T, A> {
+impl<'a, 's, T: PartialEq, A: Allocator, const N: usize> PartialEq<&'s [T; N]>
+    for LinkedList<'a, T, A>
+{
+    #[inline]
+    fn eq(&self, other: &&'s [T; N]) -> bool {
+        PartialEq::eq(self, &other[..])
+    }
+}
+
+impl<'a, T, A: Allocator> IntoIterator for &'_ LinkedList<'a, T, A> {
     type IntoIter = Iter<'a, T>;
     type Item = &'a T;
     #[inline]
@@ -474,7 +490,7 @@ impl<'a, T: 'a, A: Allocator> IntoIterator for &'_ LinkedList<'a, T, A> {
     }
 }
 
-impl<'a, T: 'a, A: Allocator> IntoIterator for &'_ mut LinkedList<'a, T, A> {
+impl<'a, T, A: Allocator> IntoIterator for &'_ mut LinkedList<'a, T, A> {
     type IntoIter = IterMut<'a, T>;
     type Item = &'a mut T;
     #[inline]
@@ -483,7 +499,7 @@ impl<'a, T: 'a, A: Allocator> IntoIterator for &'_ mut LinkedList<'a, T, A> {
     }
 }
 
-impl<'a, T: 'a + Unpin, A: Allocator> IntoIterator for LinkedList<'a, T, A> {
+impl<'a, T: Unpin, A: Allocator> IntoIterator for LinkedList<'a, T, A> {
     type IntoIter = IntoIter<'a, T, A>;
     type Item = Handle<'a, T>;
     #[inline]
@@ -492,7 +508,7 @@ impl<'a, T: 'a + Unpin, A: Allocator> IntoIterator for LinkedList<'a, T, A> {
     }
 }
 
-impl<'a, T: 'a, A: Allocator> Extend<T> for LinkedList<'a, T, A> {
+impl<'a, T, A: Allocator> Extend<T> for LinkedList<'a, T, A> {
     #[track_caller]
     #[inline]
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
