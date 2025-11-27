@@ -1,7 +1,8 @@
 use crate::{
-    Arena, LinkedList, buf,
+    Arena, buf,
     buffer::Buffer,
     handle::Handle,
+    linked_list::LinkedList,
     rc_handle::{RcHandle, WeakHandle},
     string_buffer::StringBuffer,
 };
@@ -570,7 +571,7 @@ fn test_list() {
     arena.with_scope(|arena| {
         let mut list = LinkedList::new(&arena);
         list.extend([1, 2, 3, 4, 5]);
-        list.swap(0,    1);
+        list.swap(0, 1);
         assert_eq!(list, [2, 1, 3, 4, 5]);
 
         list.swap(2, 3);

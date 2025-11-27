@@ -175,12 +175,6 @@ mod blocks;
 #[cfg(test)]
 mod tests;
 
-pub use self::buffer::Buffer;
-pub use self::handle::Handle;
-pub use self::linked_list::LinkedList;
-pub use self::rc_handle::{RcHandle, WeakHandle};
-pub use self::string_buffer::StringBuffer;
-
 /// An arena allocator, paramterised by global allocator.
 ///
 /// See the [module documentation](index.html) for more info.
