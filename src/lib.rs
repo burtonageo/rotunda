@@ -572,6 +572,17 @@ impl<A: Allocator> Arena<A> {
     #[track_caller]
     #[must_use]
     pub fn alloc_raw(&self, layout: Layout) -> NonNull<c_void> {
+        if layout.size() == 0 {
+            let mut ptr = NonNull::dangling();
+            let offset = ptr.align_offset(layout.align());
+
+            if offset != 0 || offset != usize::MAX {
+                ptr = ptr.map_addr(|addr| addr.saturating_add(offset));
+            } 
+
+            return ptr;
+        }
+
         let block = self
             .blocks
             .curr_block()
