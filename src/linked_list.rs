@@ -179,7 +179,6 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
                 first_prev.as_mut().next = second_node;
             } else {
                 self.head = second_node;
-                second_node.as_mut().prev = NonNull::dangling();
             }
 
             if let Some(mut second_next) = second_next {
@@ -189,7 +188,6 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
                 second_next.as_mut().prev = first_node;
             } else {
                 self.tail = first_node;
-                first_node.as_mut().next = NonNull::dangling();
             }
         }
     }
@@ -206,7 +204,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             if len <= 3 || len.is_multiple_of(2) { n } else { n }
         };
 
-        for i in (0..n).rev() {
+        for i in 0..n {
             let inv = self.len.saturating_sub(1).saturating_sub(i);
             self.swap(i, inv);
         }
