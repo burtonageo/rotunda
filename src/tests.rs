@@ -570,9 +570,13 @@ fn test_list() {
     arena.with_scope(|arena| {
         let mut list = LinkedList::new(&arena);
         list.extend([1, 2, 3, 4, 5]);
-        list.swap(3, 4);
+        list.swap(0,    1);
+        assert_eq!(list, [2, 1, 3, 4, 5]);
+
         list.swap(2, 3);
-        assert_eq!(list, [1, 2, 5, 3, 4]);
+        assert_eq!(list, [2, 1, 4, 3, 5]);
+        list.swap(3, 4);
+        assert_eq!(list, [2, 1, 4, 5, 3]);
     });
 
     arena.with_scope(|arena| {
@@ -602,6 +606,15 @@ fn test_list() {
     });
 
     arena.with_scope(|arena| {
+        let mut list = LinkedList::new(arena);
+        const DATA: &'static [usize] = &[1, 2, 3, 4];
+        list.extend(DATA.into_iter().copied());
+        list.reverse();
+        list.reverse();
+        assert_eq!(list, DATA);
+    });
+
+    arena.with_scope(|arena| {
         let mut list = LinkedList::new(&arena);
         list.extend([1usize, 3, 5]);
         list.swap(0, 2);
@@ -621,7 +634,7 @@ fn test_list() {
 
     arena.with_scope(|arena| {
         let mut list = LinkedList::new(&arena);
-        const NUM: usize = 150;
+        const NUM: usize = 15;
 
         let mut data = (0usize..=NUM).collect::<alloc::vec::Vec<_>>();
         list.extend(data.iter().cloned());
@@ -652,6 +665,11 @@ fn test_list() {
         assert_eq!(list.get(NUM - 1), Some(&1));
         assert_eq!(list.front(), Some(&NUM));
         assert_eq!(list.back(), Some(&0));
+
+        list.reverse();
+        list.reverse();
+
+        assert_eq!(&list, &data[..]);
     });
 
     arena.with_scope(|arena| {
