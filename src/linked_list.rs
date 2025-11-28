@@ -124,17 +124,71 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         &self.arena
     }
 
+    /// Pushes the given `value` to the front of the `LinkedList`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    /// let mut linked_list = LinkedList::new(&arena);
+    ///
+    /// linked_list.push_front(Handle::new_str_in(&arena, "Test!"));
+    ///
+    /// assert_eq!(linked_list.front().map(|handle| handle.as_ref()), Some("Test!"));
+    /// ```
     #[inline]
     pub fn push_front(&mut self, value: T) {
         self.insert(0, value);
     }
 
+    /// Pushes the given `value` to the front of the `LinkedList`, returning a mutable
+    /// reference to the newly added value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    /// let mut linked_list = LinkedList::new(&arena);
+    ///
+    /// let value = linked_list.push_front_mut(25);
+    /// assert_eq!(*value, 25);
+    ///
+    /// *value = 31;
+    /// # drop(value);
+    ///
+    /// assert_eq!(linked_list.front(), Some(&31));
+    /// ```
     #[must_use]
     #[inline]
     pub fn push_front_mut(&mut self, value: T) -> &mut T {
         self.insert_mut(0, value)
     }
 
+    /// Removes the first element in the `LinkedList`.
+    ///
+    /// If the list is empty, this method returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    /// let mut linked_list = LinkedList::new(&arena);
+    ///
+    /// linked_list.push_front(2);
+    /// linked_list.push_front(3);
+    ///
+    /// assert!(linked_list.pop_front().is_some_and(|val| *val == 3));
+    /// assert!(linked_list.pop_front().is_some_and(|val| *val == 2));
+    /// assert_eq!(linked_list.pop_front(), None);
+    ///
+    /// linked_list.push_front(4);
+    /// ```
     #[inline]
     pub fn pop_front(&'_ mut self) -> Option<Handle<'a, T>> {
         self.remove(0)
