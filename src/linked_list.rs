@@ -19,7 +19,7 @@ pub struct LinkedList<'a, T: 'a, A: Allocator = Global> {
     tail: NonNull<Node<T>>,
     len: usize,
     arena: &'a Arena<A>,
-    _boo: PhantomData<(T, fn(&'a Arena) -> &'a Arena)>,
+    _boo: PhantomData<(T, fn(&'a Arena<A>) -> &'a Arena<A>)>,
 }
 
 // A LinkedList can be sent to other threads if the type within is
@@ -74,7 +74,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// let mut linked_list = LinkedList::new(&arena);
     ///
     /// linked_list.push_back(24);
-    /// 
+    ///
     /// assert_eq!(linked_list.len(), 1);
     /// ```
     #[must_use]
@@ -617,9 +617,7 @@ impl<'a, 's, T: PartialEq, A: Allocator> PartialEq<&'s [T]> for LinkedList<'a, T
     }
 }
 
-impl<'a, T: PartialEq, A: Allocator, const N: usize> PartialEq<[T; N]>
-    for LinkedList<'a, T, A>
-{
+impl<'a, T: PartialEq, A: Allocator, const N: usize> PartialEq<[T; N]> for LinkedList<'a, T, A> {
     #[inline]
     fn eq(&self, other: &[T; N]) -> bool {
         PartialEq::eq(self, &other[..])
