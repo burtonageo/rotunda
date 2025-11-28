@@ -8,6 +8,12 @@ use core::{
     ptr::{self, NonNull},
 };
 
+/// A doubly-linked list type, backed by an [`Arena`].
+///
+/// See the [module documentation] for more info.
+///
+/// [`Arena`]: ../struct.Arena.html
+/// [module documentation]: ./index.html
 pub struct LinkedList<'a, T: 'a, A: Allocator = Global> {
     head: NonNull<Node<T>>,
     tail: NonNull<Node<T>>,
@@ -23,6 +29,16 @@ unsafe impl<'a, T: Send> Send for LinkedList<'a, T> {}
 unsafe impl<'a, T: Sync> Sync for LinkedList<'a, T> {}
 
 impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
+    /// Create an empty `LinkedList` backed by the given `Arena`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    /// let arena = Arena::new();
+    ///
+    /// let linked_list = LinkedList::<i32>::new(&arena);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn new(arena: &'a Arena<A>) -> Self {
@@ -35,6 +51,20 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    /// Returns the number of elements in the `LinkedList`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    /// let mut linked_list = LinkedList::new(&arena);
+    ///
+    /// linked_list.push_back(24);
+    /// 
+    /// assert_eq!(linked_list.len(), 1);
+    /// ```
     #[must_use]
     #[inline]
     pub fn len(&self) -> usize {
