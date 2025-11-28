@@ -309,9 +309,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             return LinkedList::new(self.arena);
         }
 
-        let node = unsafe {
-            self.get_node_unchecked(index)
-        };
+        let node = unsafe { self.get_node_unchecked(index) };
 
         let mut list = LinkedList::new(&self.arena);
 
