@@ -113,7 +113,7 @@ impl<'a> StringBuffer<'a> {
 
     #[inline]
     pub fn push_char(&mut self, ch: char) {
-        let mut ch_bytes = [0u8; 4];
+        let mut ch_bytes = [0u8; char::MAX_LEN_UTF8];
         self.push_str(ch.encode_utf8(&mut ch_bytes));
     }
 
