@@ -334,9 +334,10 @@ impl<A: Allocator> Arena<A> {
         Ok(())
     }
 
-    /// Forces the `Arena` to push all allocations into a new block of memory. The current
-    /// block of memory will be moved to the used list, and will be inaccessible until the
-    /// `Arena` is cleared.
+    /// Forces the `Arena` to push all allocations into a new block of memory.
+    /// 
+    /// The current block of memory will be moved to the used list, and will be
+    /// inaccessible until the `Arena` is cleared.
     ///
     /// This function will take a block from the free list if it is available, or allocate
     /// a new one otherwise.
@@ -778,6 +779,12 @@ impl<A: Allocator> Drop for Arena<A> {
     }
 }
 
+/// An iterator type over the free blocks of an [`Arena`].
+///
+/// See the [`Arena::free_blocks()`] method for more information.
+///
+/// [`Arena`]: ./struct.Arena.html
+/// [`Arena::free_blocks()`]: ./struct.Arena.html#method.free_blocks
 pub struct FreeBlocksMut<'a, A: Allocator = Global> {
     arena: &'a mut Arena<A>,
     curr: Option<NonNull<Block>>,
@@ -822,6 +829,12 @@ impl<'a, A: Allocator> fmt::Debug for FreeBlocksMut<'a, A> {
     }
 }
 
+/// An iterator type over every block of an [`Arena`].
+///
+/// See the [`Arena::all_blocks()`] method for more information.
+///
+/// [`Arena`]: ./struct.Arena.html
+/// [`Arena::all_blocks()`]: ./struct.Arena.html#method.all_blocks
 pub struct AllBlocksMut<'a, A: Allocator = Global> {
     curr: Option<NonNull<Block>>,
     arena: &'a mut Arena<A>,
