@@ -336,7 +336,7 @@ impl<A: Allocator> Arena<A> {
     }
 
     /// Forces the `Arena` to push all allocations into a new block of memory.
-    /// 
+    ///
     /// The current block of memory will be moved to the used list, and will be
     /// inaccessible until the `Arena` is cleared.
     ///
@@ -448,11 +448,14 @@ impl<A: Allocator> Arena<A> {
         f(self)
     }
 
+    /// Runs the given closure within a scope that frees all memory allocated from the arena within
+    /// it.
+    ///
     /// This function is similar to [`Arena::with_scope()`], except that it relaxes the
     /// `'static` lifetime requirement on the return type. This allows the caller to
     /// return borrowed data from the scope closure.
     ///
-    /// As the closure taken by function does not take ownership of items moved into it, it
+    /// As the closure taken by the function does not take ownership of items moved into it, it
     /// can freely use items from the caller's scope, and does not have an `Arena` parameter.
     ///
     /// # Examples
@@ -580,7 +583,7 @@ impl<A: Allocator> Arena<A> {
 
             if offset != 0 || offset != usize::MAX {
                 ptr = ptr.map_addr(|addr| addr.saturating_add(offset));
-            } 
+            }
 
             return ptr;
         }
