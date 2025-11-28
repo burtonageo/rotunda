@@ -176,7 +176,7 @@ mod blocks;
 #[cfg(test)]
 mod tests;
 
-/// An arena allocator, paramterised by global allocator.
+/// An arena allocator, parameterised by global allocator.
 ///
 /// See the [module documentation](index.html) for more info.
 pub struct Arena<A: Allocator = Global> {
