@@ -4,7 +4,7 @@ use core::{
     ffi::c_void,
     fmt,
     marker::{PhantomData, PhantomPinned},
-    mem::{self, offset_of},
+    mem::{self, MaybeUninit, offset_of},
     ptr::{self, NonNull},
     slice, str,
 };
@@ -222,11 +222,11 @@ pub(super) struct Block {
 impl Block {
     #[must_use]
     #[inline]
-    pub(super) unsafe fn data<'a>(this: NonNull<Self>, len: usize) -> &'a mut [u8] {
+    pub(super) unsafe fn data<'a>(this: NonNull<Self>, len: usize) -> &'a mut [MaybeUninit<u8>] {
         let ptr = this
             .map_addr(|addr| addr.saturating_add(offset_of!(Block, data)))
             .cast::<u8>();
-        unsafe { slice::from_raw_parts_mut(ptr.as_ptr(), len) }
+        unsafe { slice::from_raw_parts_mut(ptr.as_ptr().cast(), len) }
     }
 
     #[track_caller]

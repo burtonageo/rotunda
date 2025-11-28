@@ -162,6 +162,7 @@ use core::{
     fmt,
     iter::FusedIterator,
     marker::PhantomData,
+    mem::MaybeUninit,
     ptr::{self, NonNull},
 };
 
@@ -650,23 +651,23 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # use core::mem::drop;
+    /// # use core::mem::{drop, MaybeUninit};
     /// # use rotunda::{Arena, handle::Handle};
     /// let mut arena = Arena::new();
     ///
     /// let no_block = arena.curr_block();
-    /// assert_eq!(no_block, None);
+    /// assert!(no_block.is_none());
     ///
     /// let handle = Handle::new_str_in(&arena, "Hello, world!");
     /// drop(handle);
     ///
     /// let block = arena.curr_block().expect("block must be allocated");
     ///
-    /// block.fill(0xcd);
+    /// block.fill(MaybeUninit::new(0xcd));
     /// ```
     #[must_use]
     #[inline]
-    pub fn curr_block(&mut self) -> Option<&mut [u8]> {
+    pub fn curr_block(&mut self) -> Option<&mut [MaybeUninit<u8>]> {
         unsafe {
             self.blocks
                 .curr_block()
@@ -684,12 +685,13 @@ impl<A: Allocator> Arena<A> {
     ///
     /// ```
     /// # use rotunda::{Arena, handle::Handle};
+    /// # use core::mem::MaybeUninit;
     /// let mut arena = Arena::new();
     /// # arena.force_push_new_block();
     /// # arena.force_push_new_block();
     ///
     /// for free_block in arena.free_blocks() {
-    ///     free_block.fill(0x00);
+    ///     free_block.fill(MaybeUninit::new(0x00));
     /// }
     /// ```
     #[must_use]
@@ -707,12 +709,13 @@ impl<A: Allocator> Arena<A> {
     ///
     /// ```
     /// # use rotunda::{Arena, handle::Handle};
+    /// # use core::mem::MaybeUninit;
     /// let mut arena = Arena::new();
     /// # arena.force_push_new_block();
     /// # arena.force_push_new_block();
     ///
     /// for block in arena.all_blocks() {
-    ///     block.fill(0xff);
+    ///     block.fill(MaybeUninit::new(0xff));
     /// }
     /// ```
     #[must_use]
@@ -800,7 +803,7 @@ impl<'a, A: Allocator> FreeBlocksMut<'a, A> {
 }
 
 impl<'a, A: Allocator> Iterator for FreeBlocksMut<'a, A> {
-    type Item = &'a mut [u8];
+    type Item = &'a mut [MaybeUninit<u8>];
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -863,16 +866,14 @@ impl<'a, A: Allocator> AllBlocksMut<'a, A> {
 }
 
 impl<'a, A: Allocator> Iterator for AllBlocksMut<'a, A> {
-    type Item = &'a mut [u8];
+    type Item = &'a mut [MaybeUninit<u8>];
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         let block_size = self.arena.block_size();
         match self.state {
             State::Pending => {
-                let curr = unsafe {
-                    self.curr.map(|block| Block::data(block, block_size))
-                };
+                let curr = unsafe { self.curr.map(|block| Block::data(block, block_size)) };
 
                 self.state = State::Started;
                 self.curr = self.arena.blocks.free_blocks().get();
