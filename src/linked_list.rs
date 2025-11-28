@@ -1,3 +1,7 @@
+//! A doubly-linked owned list of nodes.
+//!
+//! The `LinkedList` allows pushing and popping elements at either end of the list in constant time.
+
 use crate::{Arena, handle::Handle};
 use alloc::alloc::{Allocator, Global, Layout};
 use core::{

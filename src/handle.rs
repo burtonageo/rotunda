@@ -1,3 +1,5 @@
+//! A singly-owned mutable pointer backed by an `Arena`.
+
 use crate::{Arena, buf, buffer::Buffer, rc_handle::RcHandle, string_buffer::StringBuffer};
 use alloc::alloc::{Allocator, Layout};
 use core::{

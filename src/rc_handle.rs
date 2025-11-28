@@ -1,3 +1,5 @@
+//! Single-threaded reference-counting pointer types backed by an `Arena`.
+
 use crate::{Arena, handle::Handle};
 use alloc::alloc::{Allocator, Layout};
 use core::{

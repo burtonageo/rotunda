@@ -1,3 +1,5 @@
+//! A UTF8-encoded, growable string. Backed by an `Arena`.
+
 use crate::{
     Arena,
     buffer::{Buffer, TryExtendError},
