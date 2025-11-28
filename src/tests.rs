@@ -680,4 +680,12 @@ fn test_list() {
         let reversed = list.iter().rev().cloned().collect::<std::vec::Vec<_>>();
         assert_eq!(reversed.as_slice(), &[5, 4, 3, 2, 1]);
     });
+
+    arena.with_scope(|arena| {
+        let mut list = LinkedList::new_from_iter_in(arena, [1, 2, 3, 4]);
+        let end = list.split_off(2);
+
+        assert_eq!(list, [1, 2]);
+        assert_eq!(end, &[3, 4]);
+    });
 }

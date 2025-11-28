@@ -258,6 +258,41 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         let _ = mem::replace(self, Self::new(arena));
     }
 
+    #[inline]
+    pub fn split_off(&mut self, index: usize) -> LinkedList<'a, T, A> {
+        let len = self.len;
+        assert!(index < len);
+
+        if index == 0 {
+            return mem::replace(self, LinkedList::new(self.arena));
+        } else if index == len - 1 {
+            return LinkedList::new(self.arena);
+        }
+
+        let node = unsafe {
+            self.get_node_unchecked(index)
+        };
+
+        let mut list = LinkedList::new(&self.arena);
+
+        unsafe {
+            let (mut split_off_head, split_off_tail) = (node, self.tail);
+
+            let mut new_tail = split_off_head.as_ref().prev;
+
+            self.tail = new_tail;
+            new_tail.as_mut().next = NonNull::dangling();
+            self.len = index;
+
+            split_off_head.as_mut().prev = NonNull::dangling();
+            list.head = split_off_head;
+            list.tail = split_off_tail;
+            list.len = len - index;
+        }
+
+        list
+    }
+
     #[must_use]
     #[inline]
     pub fn front(&self) -> Option<&T> {
