@@ -51,6 +51,18 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    #[must_use]
+    #[inline]
+    pub fn new_from_iter_in<I: IntoIterator<Item = T>>(arena: &'a Arena<A>, iter: I) -> Self {
+        let mut list = Self::new(arena);
+
+        for item in iter {
+            list.push_back(item);
+        }
+
+        list
+    }
+
     /// Returns the number of elements in the `LinkedList`.
     ///
     /// # Examples
