@@ -315,6 +315,25 @@ impl<A: Allocator> Arena<A> {
         self.blocks.curr_block_capacity()
     }
 
+    /// Reserves the given number of `num_blocks` into the `Arena`, placing them in the free list.
+    ///
+    /// Should the current block overflow while servicing allocation requests, the free blocks
+    /// can be used without needing to call the allocator.
+    ///
+    /// # Panics
+    ///
+    /// If the allocator cannot allocate the blocks, then `handle_alloc_err()` will be called,
+    /// which may panic or abort the process.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rotunda::Arena;
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// arena.reserve_blocks(3);
+    /// ``
     #[track_caller]
     #[inline]
     pub fn reserve_blocks(&self, num_blocks: usize) {
@@ -325,6 +344,31 @@ impl<A: Allocator> Arena<A> {
         }
     }
 
+    /// Tries to reserve the given number of `num_blocks` into the `Arena`, placing them in the free list.
+    ///
+    /// Should the current block overflow while servicing allocation requests, the free blocks
+    /// can be used without needing to call the allocator.
+    ///
+    /// # Errors
+    ///
+    /// If the allocator cannot allocate a `Block`, then `AllocError` is returned. If other blocks were allocated
+    /// as part of this call, then they will remain in the `Arena`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # #![feature(allocator_api)]
+    /// use rotunda::Arena;
+    /// # extern crate alloc;
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// # fn inner(arena: &Arena) -> Result<(), alloc::alloc::AllocError> {
+    /// arena.try_reserve_blocks(3)?;
+    /// # Ok(())
+    /// # }
+    /// # inner(&arena);
+    /// ```
     #[inline]
     pub fn try_reserve_blocks(&self, num_blocks: usize) -> Result<(), AllocError> {
         let (layout, alloc) = (self.blocks.block_layout(), self.allocator());
