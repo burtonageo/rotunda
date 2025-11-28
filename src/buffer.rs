@@ -74,10 +74,16 @@ impl<'a, T> Buffer<'a, T> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn from_fn_in<A: Allocator, F: FnMut(usize) -> T>(arena: &'a Arena<A>, len: usize, mut f: F) -> Self {
+    pub fn from_fn_in<A: Allocator, F: FnMut(usize) -> T>(
+        arena: &'a Arena<A>,
+        len: usize,
+        mut f: F,
+    ) -> Self {
         let mut buf = Buffer::with_capacity_in(arena, len);
         for i in 0..len {
-            unsafe { buf.push_unchecked(f(i)); }
+            unsafe {
+                buf.push_unchecked(f(i));
+            }
         }
 
         buf
@@ -419,7 +425,9 @@ impl<'a, T: Copy> Buffer<'a, T> {
         unsafe {
             ptr::copy_nonoverlapping(
                 slice.as_ptr(),
-                Handle::as_mut_ptr(&mut self.handle).cast::<T>().add(self.len),
+                Handle::as_mut_ptr(&mut self.handle)
+                    .cast::<T>()
+                    .add(self.len),
                 count,
             );
             self.set_len(self.len + count);
@@ -525,7 +533,7 @@ impl<'a, T, I: SliceIndex<[T]>> Index<I> for Buffer<'a, T> {
 impl<'a, T, I: SliceIndex<[T]>> IndexMut<I> for Buffer<'a, T> {
     #[inline]
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
-        self.as_mut_slice().index_mut(index)   
+        self.as_mut_slice().index_mut(index)
     }
 }
 
@@ -689,7 +697,11 @@ impl<'a, T> IntoIter<'a, T> {
     #[must_use]
     #[inline]
     const fn data_start_mut(&mut self) -> *mut T {
-        unsafe { Handle::as_mut_ptr(&mut self.data).cast::<T>().add(self.front_idx) }
+        unsafe {
+            Handle::as_mut_ptr(&mut self.data)
+                .cast::<T>()
+                .add(self.front_idx)
+        }
     }
 
     #[must_use]
