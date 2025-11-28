@@ -538,7 +538,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             let node = node.as_mut();
             self.len = self.len.checked_sub(1).expect("list underflow");
 
-            if self.len > 0 {
+            if self.len > 0 && index > 0 {
                 node.prev.as_mut().next = node.next;
             }
 
