@@ -83,12 +83,41 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         self.len
     }
 
+    /// Returns `true` if there are no elements in the `LinkedList`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    /// let mut linked_list = LinkedList::new(&arena);
+    ///
+    /// assert!(linked_list.is_empty());
+    ///
+    /// linked_list.push_front(25);
+    ///
+    /// assert!(!linked_list.is_empty());
+    /// ```
     #[must_use]
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
 
+    /// Returns a reference to the underlying `Arena` which is used to allocate from.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    /// let linked_list = LinkedList::<usize>::new(&arena);
+    ///
+    /// let list_arena = linked_list.arena();
+    /// assert!(core::ptr::eq(&arena, list_arena));
+    /// ```
     #[must_use]
     #[inline]
     pub fn arena(&self) -> &Arena<A> {
