@@ -689,3 +689,17 @@ fn test_list() {
         assert_eq!(end, &[3, 4]);
     });
 }
+
+#[test]
+fn test_list_pop() {
+    let arena = Arena::new();
+
+    arena.with_scope(|arena| {
+        let mut list = LinkedList::new(arena);
+        list.push_front(21);
+        list.push_front(32);
+
+        let front = list.pop_front().unwrap();
+        assert_eq!(*front, 32);
+    });
+}
