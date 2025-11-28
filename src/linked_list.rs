@@ -253,67 +253,15 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             mem::swap(&mut first_index, &mut second_index);
         }
 
-        let (mut first_node, mut second_node) = unsafe {
+        let (first_node, second_node) = unsafe {
             (
                 self.get_node_unchecked(first_index),
                 self.get_node_unchecked(second_index),
             )
         };
 
-        debug_assert!(!ptr::eq(first_node.as_ptr(), NonNull::dangling().as_ptr()));
-        debug_assert!(!ptr::eq(second_node.as_ptr(), NonNull::dangling().as_ptr()));
-
-        let (first_prev, mut first_next) = unsafe {
-            let prev = if first_index > 0 {
-                Some(first_node.as_ref().prev)
-            } else {
-                None
-            };
-
-            (prev, first_node.as_ref().next)
-        };
-
-        let (mut second_prev, second_next) = unsafe {
-            let next = if second_index < (self.len - 1) {
-                Some(second_node.as_ref().next)
-            } else {
-                None
-            };
-
-            (second_node.as_ref().prev, next)
-        };
-
         unsafe {
-            if first_index.abs_diff(second_index) == 1 {
-                first_node.as_mut().prev = second_node;
-                second_node.as_mut().next = first_node;
-            } else {
-                first_node.as_mut().prev = second_prev;
-                second_prev.as_mut().next = first_node;
-
-                second_node.as_mut().next = first_next;
-                first_next.as_mut().prev = second_node;
-            }
-        }
-
-        unsafe {
-            if let Some(mut first_prev) = first_prev {
-                debug_assert!(!ptr::eq(first_prev.as_ptr(), NonNull::dangling().as_ptr()));
-
-                second_node.as_mut().prev = first_prev;
-                first_prev.as_mut().next = second_node;
-            } else {
-                self.head = second_node;
-            }
-
-            if let Some(mut second_next) = second_next {
-                debug_assert!(!ptr::eq(second_next.as_ptr(), NonNull::dangling().as_ptr()));
-
-                first_node.as_mut().next = second_next;
-                second_next.as_mut().prev = first_node;
-            } else {
-                self.tail = first_node;
-            }
+            self.swap_nodes(first_node, first_index, second_node, second_index);
         }
     }
 
@@ -324,14 +272,23 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             return;
         }
 
-        let n = {
-            let n = self.len() / 2;
-            if len <= 3 || len.is_multiple_of(2) { n } else { n }
-        };
+        let n = len / 2;
 
-        for i in 0..n {
-            let inv = self.len.saturating_sub(1).saturating_sub(i);
-            self.swap(i, inv);
+        let mut first = self.head;
+        let mut second = self.tail;
+
+        for first_idx in 0..n {
+            let second_idx = len.saturating_sub(first_idx + 1);
+
+            unsafe {
+                let first_next = first.as_mut().next;
+                let second_next = second.as_mut().prev;
+
+                self.swap_nodes(first, first_idx, second, second_idx);
+
+                first = first_next;
+                second = second_next;
+            }
         }
     }
 
@@ -554,6 +511,70 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
 
         node
+    }
+
+    unsafe fn swap_nodes(
+        &mut self,
+        mut first_node: NonNull<Node<T>>,
+        first_index: usize,
+        mut second_node: NonNull<Node<T>>,
+        second_index: usize,
+    ) {
+        debug_assert!(!ptr::eq(first_node.as_ptr(), NonNull::dangling().as_ptr()));
+        debug_assert!(!ptr::eq(second_node.as_ptr(), NonNull::dangling().as_ptr()));
+
+        let (first_prev, mut first_next) = unsafe {
+            let prev = if first_index > 0 {
+                Some(first_node.as_ref().prev)
+            } else {
+                None
+            };
+
+            (prev, first_node.as_ref().next)
+        };
+
+        let (mut second_prev, second_next) = unsafe {
+            let next = if second_index < (self.len - 1) {
+                Some(second_node.as_ref().next)
+            } else {
+                None
+            };
+
+            (second_node.as_ref().prev, next)
+        };
+
+        unsafe {
+            if first_index.abs_diff(second_index) == 1 {
+                first_node.as_mut().prev = second_node;
+                second_node.as_mut().next = first_node;
+            } else {
+                first_node.as_mut().prev = second_prev;
+                second_prev.as_mut().next = first_node;
+
+                second_node.as_mut().next = first_next;
+                first_next.as_mut().prev = second_node;
+            }
+        }
+
+        unsafe {
+            if let Some(mut first_prev) = first_prev {
+                debug_assert!(!ptr::eq(first_prev.as_ptr(), NonNull::dangling().as_ptr()));
+
+                second_node.as_mut().prev = first_prev;
+                first_prev.as_mut().next = second_node;
+            } else {
+                self.head = second_node;
+            }
+
+            if let Some(mut second_next) = second_next {
+                debug_assert!(!ptr::eq(second_next.as_ptr(), NonNull::dangling().as_ptr()));
+
+                first_node.as_mut().next = second_next;
+                second_next.as_mut().prev = first_node;
+            } else {
+                self.tail = first_node;
+            }
+        }
     }
 }
 
