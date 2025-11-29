@@ -162,7 +162,7 @@ use core::{
     fmt,
     iter::FusedIterator,
     marker::PhantomData,
-    mem::MaybeUninit,
+    mem::{ManuallyDrop, MaybeUninit},
     ptr::{self, NonNull},
 };
 
@@ -688,6 +688,41 @@ impl<A: Allocator> Arena<A> {
             ptr::write_bytes(slot.as_ptr().cast::<u8>(), b'\0', layout.size());
         }
         slot
+    }
+
+    /// Allocate the given `value` into this `Arena` and returns an exclusive reference to it.
+    ///
+    /// The allocated value is wrapped in a `ManuallyDrop` to indicate that its `drop` method
+    /// will not be called when the value goes out of scope. If the value has a meaningful
+    /// `Drop::drop()` implementation, then you should call `ManuallyDrop::drop()` on it.
+    ///
+    /// # Errors
+    ///
+    /// This method can fail if the arena cannot allocate a new block to store the value. 
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use core::mem::ManuallyDrop;
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let mut arena = Arena::new();
+    ///
+    /// let value = arena.alloc_ref("Hello!");
+    /// assert_eq!(**value, "Hello!");
+    ///
+    /// unsafe {
+    ///     ManuallyDrop::drop(value);
+    /// }
+    /// ```
+    #[must_use]
+    #[inline]
+    pub fn alloc_ref<T>(&self, value: T) -> &mut ManuallyDrop<T> {
+        let mut slot = self.alloc_raw(Layout::new::<T>()).cast::<ManuallyDrop<T>>();
+        unsafe {
+            slot.write(ManuallyDrop::new(value));
+            slot.as_mut()
+        }
     }
 
     /// Returns a reference to the currently in-use block, if it is available.

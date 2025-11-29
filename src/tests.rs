@@ -6,6 +6,7 @@ use crate::{
     rc_handle::{RcHandle, WeakHandle},
     string_buffer::StringBuffer,
 };
+use core::mem::ManuallyDrop;
 use std::{
     alloc::{Allocator, Layout, System},
     mem,
@@ -16,6 +17,10 @@ use std::{
 #[test]
 fn test_arena_alloc() {
     let arena = Arena::new();
+
+    let twenty = arena.alloc_ref(20);
+    assert_eq!(**twenty, 20);
+    unsafe { ManuallyDrop::drop(twenty); }
 
     let five = Handle::new_in(&arena, 5);
     assert!(Handle::as_ptr(&five).is_aligned());
