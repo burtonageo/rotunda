@@ -463,7 +463,7 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// use rotunda::{Arena, handle::Handle};
+    /// use rotunda::Arena;
     /// 
     /// let mut arena = Arena::new();
     /// arena.reserve_blocks(5);
@@ -479,8 +479,30 @@ impl<A: Allocator> Arena<A> {
         self.blocks.trim_n(n, self.allocator());
     }
 
+    /// Deallocates the currently active block in the `Arena`.
+    ///
+    /// As this takes an exclusive reference, it is guaranteed that there are
+    /// no other active allocations backed by the current block.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::Arena;
+    /// 
+    /// let mut arena = Arena::new();
+    ///
+    /// let data = arena.alloc_ref(25);
+    /// drop(data);
+    ///
+    /// assert!(arena.curr_block().is_some());
+    ///
+    /// arena.deallocate_current();
+    ///
+    /// assert!(arena.curr_block().is_none());
+    /// ```
     #[inline]
     pub fn deallocate_current(&mut self) {
+        self.blocks.curr_block_pos().set(0);
         self.blocks.deallocate_current(self.allocator());
     }
 
