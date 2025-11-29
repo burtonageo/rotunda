@@ -402,7 +402,6 @@ impl<A: Allocator> Arena<A> {
     ///     Handle::as_ptr(&handle_2).addr() - Handle::as_ptr(&handle_1).addr(),
     ///     mem::size_of::<i32>());
     ///
-    ///
     /// arena.force_push_new_block();
     ///
     /// let handle_3 = Handle::new_in(&arena, 456);
