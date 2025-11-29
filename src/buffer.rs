@@ -690,6 +690,19 @@ impl<'a, T> IntoIter<'a, T> {
 
     #[must_use]
     #[inline]
+    const fn new(buffer: Buffer<'a, T>) -> Self {
+        let len = buffer.as_slice().len();
+        let data = Handle::transpose_into_uninit(buffer.into_slice_handle());
+
+        Self {
+            data,
+            front_idx: 0,
+            back_idx: len,
+        }
+    }
+
+    #[must_use]
+    #[inline]
     const fn data_start(&self) -> *const T {
         unsafe { Handle::as_ptr(&self.data).cast::<T>().add(self.front_idx) }
     }
@@ -708,21 +721,6 @@ impl<'a, T> IntoIter<'a, T> {
     #[inline]
     const fn len_const(&self) -> usize {
         self.back_idx - self.front_idx
-    }
-}
-
-impl<'a, T> IntoIter<'a, T> {
-    #[must_use]
-    #[inline]
-    const fn new(buffer: Buffer<'a, T>) -> Self {
-        let len = buffer.as_slice().len();
-        let data = Handle::transpose_into_uninit(buffer.into_slice_handle());
-
-        Self {
-            data,
-            front_idx: 0,
-            back_idx: len,
-        }
     }
 
     #[must_use]
