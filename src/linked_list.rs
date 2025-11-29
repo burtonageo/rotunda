@@ -187,11 +187,9 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// linked_list.push_front(2);
     /// linked_list.push_front(3);
     ///
-    /// assert!(linked_list.pop_front().is_some_and(|val| *val == 3));
-    /// assert!(linked_list.pop_front().is_some_and(|val| *val == 2));
+    /// assert_eq!(*linked_list.pop_front().unwrap(), 3);
+    /// assert_eq!(*linked_list.pop_front().unwrap(), 2);
     /// assert_eq!(linked_list.pop_front(), None);
-    ///
-    /// linked_list.push_front(4);
     /// ```
     #[inline]
     pub fn pop_front(&'_ mut self) -> Option<Handle<'a, T>> {
@@ -209,6 +207,23 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         self.insert_mut(self.len, value)
     }
 
+    /// Removes the last element in the `LinkedList`.
+    ///
+    /// If the list is empty, this method returns `None`.
+    ///
+    /// ```
+    ///  use rotunda::{Arena, handle::Handle, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    /// let mut linked_list = LinkedList::new(&arena);
+    ///
+    /// linked_list.push_back(2);
+    /// linked_list.push_back(3);
+    ///
+    /// assert_eq!(*linked_list.pop_back().unwrap(), 3);
+    /// assert_eq!(*linked_list.pop_back().unwrap(), 2);
+    /// assert_eq!(linked_list.pop_back(), None);
+    /// ```
     #[inline]
     pub fn pop_back(&'_ mut self) -> Option<Handle<'a, T>> {
         self.remove(self.len.saturating_sub(1))
