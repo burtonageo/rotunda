@@ -344,6 +344,50 @@ impl<A: Allocator> Arena<A> {
         }
     }
 
+    /// Returns a pointer into the head of the current block.
+    ///
+    /// The available space in the current block is returned as the slice length.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use core::{mem, ptr};
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let capacity = 3100;
+    /// 
+    /// let arena = Arena::with_block_size(capacity);
+    ///
+    /// assert!(arena.curr_block_head().is_none());
+    /// 
+    /// arena.force_push_new_block();
+    ///
+    /// let block = arena.curr_block_head().unwrap();
+    /// assert_eq!(block.len(), capacity);
+    ///
+    /// let data = Handle::new_in(&arena, 24i32);
+    /// assert!(ptr::eq(Handle::as_ptr(&data).cast::<u8>(), block.as_ptr() as *mut _ as *mut u8));
+    ///
+    /// let block = arena.curr_block_head().unwrap();
+    /// assert_eq!(block.len(), capacity - mem::size_of::<i32>());
+    /// ```
+    #[inline]
+    pub fn curr_block_head(&self) -> Option<NonNull<[MaybeUninit<u8>]>> {
+        let curr_block = match self.blocks.curr_block().get() {
+            Some(block) => block,
+            None => return None,
+        };
+
+        let (block_size, block_pos) = (self.block_size(), self.blocks.curr_block_pos().get());
+
+        let data = unsafe {
+            let data = Block::data(curr_block, block_size).as_ptr();
+            NonNull::new_unchecked(data.map_addr(|data| data + block_pos).cast_mut())
+        };
+
+        Some(NonNull::from_raw_parts(data, block_size - block_pos))
+    }
+
     /// Tries to reserve the given number of `num_blocks` into the `Arena`, placing them in the free list.
     ///
     /// Should the current block overflow while servicing allocation requests, the free blocks
