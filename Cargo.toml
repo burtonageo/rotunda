@@ -4,6 +4,7 @@ version = "0.0.0"
 edition = "2024"
 description = "Memory arena and associated smart pointers"
 license = "MIT/Apache-2.0"
+readme = "./Readme.md"
 
 [dependencies]
 
