@@ -685,14 +685,26 @@ fn test_list() {
         let reversed = list.iter().rev().cloned().collect::<std::vec::Vec<_>>();
         assert_eq!(reversed.as_slice(), &[5, 4, 3, 2, 1]);
     });
+}
 
-    arena.with_scope(|arena| {
-        let mut list = LinkedList::new_from_iter_in(arena, [1, 2, 3, 4]);
-        let end = list.split_off(2);
+#[test]
+fn test_list_split() {
+    let arena = Arena::new();
 
-        assert_eq!(list, [1, 2]);
-        assert_eq!(end, &[3, 4]);
-    });
+    const LIST_LEN: usize = 25;
+    for i in 0..=LIST_LEN {
+        arena.with_scope(move |arena| {
+            let mut list = LinkedList::new_from_iter_in(arena, 1..=LIST_LEN);
+            let end = list.split_off(i);
+
+            if i > 0 {
+                assert_eq!(list, &(1..=i).collect::<alloc::vec::Vec<_>>()[..]);
+            } else {
+                assert!(list.is_empty());
+            }
+            assert_eq!(end, &(i+1..=LIST_LEN).collect::<alloc::vec::Vec<_>>()[..]);
+        });
+    }
 }
 
 #[test]

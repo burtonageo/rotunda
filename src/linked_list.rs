@@ -304,11 +304,11 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     pub fn split_off(&mut self, index: usize) -> LinkedList<'a, T, A> {
         let len = self.len;
-        assert!(index < len);
+        assert!(index <= len);
 
         if index == 0 {
             return mem::replace(self, LinkedList::new(self.arena));
-        } else if index == len - 1 {
+        } else if index == len {
             return LinkedList::new(self.arena);
         }
 
