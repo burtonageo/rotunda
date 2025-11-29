@@ -333,7 +333,7 @@ impl<A: Allocator> Arena<A> {
     /// let arena = Arena::new();
     ///
     /// arena.reserve_blocks(3);
-    /// ``
+    /// ```
     #[track_caller]
     #[inline]
     pub fn reserve_blocks(&self, num_blocks: usize) {
