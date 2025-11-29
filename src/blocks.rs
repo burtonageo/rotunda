@@ -48,10 +48,20 @@ impl Blocks {
         let block_layout = self.block_layout();
         unsafe {
             dealloc_blocks(block_layout, &self.free_blocks, allocator);
+        }
+    }
 
-            if self.curr_block_pos.get() == 0 {
-                dealloc_blocks(block_layout, &self.curr_block, allocator);
-            }
+    pub(super) fn trim_n(&self, n: usize, allocator: &dyn Allocator) {
+        let block_layout = self.block_layout();
+        unsafe {
+            dealloc_blocks_n(n, block_layout, &self.free_blocks, allocator);
+        }
+    }
+
+    pub(super) fn deallocate_current(&self, allocator: &dyn Allocator) {
+        debug_assert_eq!(self.curr_block_pos.get(), 0);
+        unsafe {
+            dealloc_blocks(self.block_layout(), &self.curr_block, allocator);
         }
     }
 
@@ -276,16 +286,35 @@ pub(super) unsafe fn dealloc_blocks(
     block_start: &BlockPtr,
     allocator: &dyn Allocator,
 ) {
+    unsafe { dealloc_blocks_n(usize::MAX, block_layout, block_start, allocator); }
+}
+
+pub(super) unsafe fn dealloc_blocks_n(
+    n: usize,
+    block_layout: Layout,
+    block_start: &BlockPtr,
+    allocator: &dyn Allocator,
+) {
+    let mut i = 0;
+    let mut next_block = None;
     while let Some(block) = block_start.get() {
         let next = unsafe { &block.as_ref().next };
+
+        if i >= n {
+            next_block = Some(block);
+            break;
+        }
+
         block_start.set(next.get());
 
         unsafe {
             allocator.deallocate(block.cast(), block_layout);
         }
+
+        i += 1;
     }
 
-    block_start.set(None);
+    block_start.set(next_block);
 }
 
 pub(super) struct ScopedRestore<'a> {

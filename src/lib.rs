@@ -437,20 +437,51 @@ impl<A: Allocator> Arena<A> {
         self.blocks.reset();
     }
 
-    /// Deallocates all blocks in the `Arena`'s free list, and deallocates the current
-    /// block if the arena is empty.
+    /// Deallocates all blocks in the `Arena`'s free list.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use rotunda::{Arena, handle::Handle};
-    /// let arena = Arena::new();
-    /// let _handle = Handle::new_in(&arena, 23);
+    /// use rotunda::{Arena, handle::Handle};
+    /// 
+    /// let mut arena = Arena::new();
+    /// arena.reserve_blocks(1);
+    ///
+    /// assert_eq!(arena.free_blocks().count(), 1);
+    /// 
     /// arena.trim();
+    ///
+    /// assert_eq!(arena.free_blocks().count(), 0);
     /// ```
     #[inline]
     pub fn trim(&self) {
         self.blocks.trim(self.allocator());
+    }
+
+    /// Deallocates `n` blocks in the `Arena`'s free list.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    /// 
+    /// let mut arena = Arena::new();
+    /// arena.reserve_blocks(5);
+    ///
+    /// assert_eq!(arena.free_blocks().count(), 5);
+    /// 
+    /// arena.trim_n(2);
+    ///
+    /// assert_eq!(arena.free_blocks().count(), 3);
+    /// ```
+    #[inline]
+    pub fn trim_n(&self, n: usize) {
+        self.blocks.trim_n(n, self.allocator());
+    }
+
+    #[inline]
+    pub fn deallocate_current(&mut self) {
+        self.blocks.deallocate_current(self.allocator());
     }
 
     /// Runs the given closure within a scope that frees all memory allocated from the arena within

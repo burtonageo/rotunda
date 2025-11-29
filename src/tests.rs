@@ -194,6 +194,16 @@ fn test_trim() {
 
     arena.trim();
     assert_eq!(arena.blocks.free_blocks().get(), None);
+
+    const N: usize = 150;
+    for i in 0..N {
+        arena.reserve_blocks(N);
+
+        arena.trim_n(i);
+        assert_eq!(arena.free_blocks().count(), N.saturating_sub(i));
+
+        arena.trim();
+    }
 }
 
 #[test]
