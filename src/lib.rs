@@ -715,6 +715,7 @@ impl<A: Allocator> Arena<A> {
     ///     ManuallyDrop::drop(value);
     /// }
     /// ```
+    #[allow(clippy::mut_from_ref)]
     #[must_use]
     #[inline]
     pub fn alloc_ref<T>(&self, value: T) -> &mut ManuallyDrop<T> {

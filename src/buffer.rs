@@ -67,7 +67,7 @@ impl<'a, T> Buffer<'a, T> {
     #[must_use]
     #[inline]
     pub fn with_capacity_in<A: Allocator>(arena: &'a Arena<A>, capacity: usize) -> Self {
-        let handle = Handle::new_slice_uninit_in(&arena, capacity);
+        let handle = Handle::new_slice_uninit_in(arena, capacity);
         unsafe { Self::from_raw_parts(handle, 0) }
     }
 

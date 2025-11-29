@@ -94,7 +94,7 @@ impl<'a, T> RcHandle<'a, [T]> {
         let slice = unsafe { RcHandle::get_mut_unchecked(&mut handle) };
 
         let mut guard = Guard {
-            slice: slice,
+            slice,
             len: 0,
         };
 
