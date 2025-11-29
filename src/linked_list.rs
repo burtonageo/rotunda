@@ -285,8 +285,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             let second_idx = len.saturating_sub(first_idx + 1);
 
             unsafe {
-                let first_next = first.as_mut().next;
-                let second_next = second.as_mut().prev;
+                let (first_next, second_next) = (first.as_mut().next, second.as_mut().prev);
 
                 self.swap_nodes(first, first_idx, second, second_idx);
 
