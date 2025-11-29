@@ -133,7 +133,7 @@
 //!
 //! ## `Handle`
 //!
-//! The basic handle type is [`Handle`], which is analogous to a `Box<T>` - it provides unique ownership
+//! The basic handle type is [`handle::Handle`], which is analogous to a `Box<T>` - it provides unique ownership
 //! of an object allocated in an [`Arena`], allows mutation, and drops the object when it goes out of scope.
 //!
 //! Read more in the [`handle`] module.
@@ -148,8 +148,8 @@
 //!
 //! [`Arena`]: ./struct.Arena.html
 //! [`Arena::reset()`]: ./struct.Arena.html#method.reset
-//! [`Handle`]: ./struct.Handle.html
-//! [`handle`]:
+//! [`handle::Handle`]: ./handle/struct.Handle.html
+//! [`handle`]: ./handle/index.html
 
 extern crate alloc;
 #[cfg(any(test, feature = "std"))]
@@ -487,12 +487,12 @@ impl<A: Allocator> Arena<A> {
     ///
     /// ```
     /// use rotunda::{Arena, handle::Handle};
-    /// 
+    ///
     /// let mut arena = Arena::new();
     /// arena.reserve_blocks(1);
     ///
     /// assert_eq!(arena.free_blocks().count(), 1);
-    /// 
+    ///
     /// arena.trim();
     ///
     /// assert_eq!(arena.free_blocks().count(), 0);
@@ -508,12 +508,12 @@ impl<A: Allocator> Arena<A> {
     ///
     /// ```
     /// use rotunda::Arena;
-    /// 
+    ///
     /// let mut arena = Arena::new();
     /// arena.reserve_blocks(5);
     ///
     /// assert_eq!(arena.free_blocks().count(), 5);
-    /// 
+    ///
     /// arena.trim_n(2);
     ///
     /// assert_eq!(arena.free_blocks().count(), 3);
@@ -532,7 +532,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// ```
     /// use rotunda::Arena;
-    /// 
+    ///
     /// let mut arena = Arena::new();
     ///
     /// let data = arena.alloc_ref(25);
@@ -788,13 +788,13 @@ impl<A: Allocator> Arena<A> {
 
     /// Allocate the given `value` into this `Arena` and returns an exclusive reference to it.
     ///
-    /// The allocated value is wrapped in a `ManuallyDrop` to indicate that its `drop` method
+    /// The allocated value is wrapped in a [`ManuallyDrop`] to indicate that its `drop` method
     /// will not be called when the value goes out of scope. If the value has a meaningful
-    /// `Drop::drop()` implementation, then you should call `ManuallyDrop::drop()` on it.
+    /// [`Drop::drop()`] implementation, then you should call [`ManuallyDrop::drop()`] on it.
     ///
     /// # Errors
     ///
-    /// This method can fail if the arena cannot allocate a new block to store the value. 
+    /// This method can fail if the arena cannot allocate a new block to store the value.
     ///
     /// # Example
     ///
@@ -811,6 +811,10 @@ impl<A: Allocator> Arena<A> {
     ///     ManuallyDrop::drop(value);
     /// }
     /// ```
+    /// 
+    /// [`ManuallyDrop`]: https://doc.rust-lang.org/stable/core/mem/struct.ManuallyDrop.html
+    /// [`Drop::drop()`]: https://doc.rust-lang.org/stable/core/ops/trait.Drop.html#tymethod.drop
+    /// [`ManuallyDrop::drop()`]: https://doc.rust-lang.org/stable/core/mem/struct.ManuallyDrop.html#method.drop
     #[allow(clippy::mut_from_ref)]
     #[must_use]
     #[inline]
@@ -831,7 +835,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// ```
     /// # use core::mem::{drop, MaybeUninit};
-    /// # use rotunda::{Arena, handle::Handle};
+    /// use rotunda::{Arena, handle::Handle};
     /// let mut arena = Arena::new();
     ///
     /// let no_block = arena.curr_block();
