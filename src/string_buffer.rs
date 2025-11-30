@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::missing_safety_doc)]
 
 //! A UTF8-encoded, growable string. Backed by an `Arena`.
 

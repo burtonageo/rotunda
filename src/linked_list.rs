@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::missing_safety_doc)]
 
 //! A doubly-linked owned list of nodes.
 //!

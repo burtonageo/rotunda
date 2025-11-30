@@ -9,6 +9,7 @@
 )]
 #![warn(missing_docs, clippy::empty_line_after_doc_comments)]
 #![deny(unsafe_attr_outside_unsafe, unsafe_op_in_unsafe_fn)]
+#![warn(clippy::missing_safety_doc)]
 
 //! This module contains types for using the arena allocation strategy. See the [`Arena`] type
 //! for more information on how to use arena allocation.

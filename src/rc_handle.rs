@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::missing_safety_doc)]
 
 //! Single-threaded reference-counting pointer types backed by an `Arena`.
 

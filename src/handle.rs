@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::missing_safety_doc)]
 
 //! A singly-owned mutable pointer backed by an `Arena`.
 
