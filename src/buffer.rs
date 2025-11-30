@@ -470,6 +470,34 @@ impl<'a, T: PartialEq, const N: usize> PartialEq<[T; N]> for Buffer<'a, T> {
     }
 }
 
+impl<'a, 's, T: PartialEq> PartialEq<&'s [T]> for Buffer<'a, T> {
+    #[inline]
+    fn eq(&self, other: &&'s [T]) -> bool {
+        self.as_slice().eq(*other)
+    }
+}
+
+impl<'a, 's, T: PartialEq, const N: usize> PartialEq<&'s [T; N]> for Buffer<'a, T> {
+    #[inline]
+    fn eq(&self, other: &&'s [T; N]) -> bool {
+        PartialEq::eq(self, &other[..])
+    }
+}
+
+impl<'a, 's, T: PartialEq> PartialEq<&'s mut [T]> for Buffer<'a, T> {
+    #[inline]
+    fn eq(&self, other: &&'s mut [T]) -> bool {
+        self.as_slice().eq(*other)
+    }
+}
+
+impl<'a, 's, T: PartialEq, const N: usize> PartialEq<&'s mut [T; N]> for Buffer<'a, T> {
+    #[inline]
+    fn eq(&self, other: &&'s mut [T; N]) -> bool {
+        PartialEq::eq(self, &other[..])
+    }
+}
+
 impl<'a, T: PartialEq> PartialEq<Handle<'_, [T]>> for Buffer<'a, T> {
     #[inline]
     fn eq(&self, other: &Handle<'_, [T]>) -> bool {
