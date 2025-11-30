@@ -492,15 +492,23 @@ impl<'a, T> Buffer<'a, T> {
             _boo: PhantomData,
         };
 
+        struct Unbump<'a, A: Allocator>(&'a Arena<A>, usize);
+        impl<'a, A: Allocator> Drop for Unbump<'a, A> {
+            fn drop(&mut self) {
+                unsafe {
+                    self.0.blocks.unbump(self.1);
+                }
+            }
+        }
+
+        let unbump = Unbump(arena, offset);
         let result = f(growable_buffer);
 
-        match result {
-            Err(_) => unsafe {
-                arena.blocks.unbump(offset);
-            },
-            Ok(ref buf) => unsafe {
+        if let Ok(ref buf) = result {
+            mem::forget(unbump);
+            unsafe {
                 arena.blocks.bump(buf.handle.len() * mem::size_of::<T>());
-            },
+            }
         }
 
         result.map_err(WithGrowableError::Inner)
