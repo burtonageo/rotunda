@@ -463,6 +463,13 @@ impl<'a, T: PartialEq> PartialEq<[T]> for Buffer<'a, T> {
     }
 }
 
+impl<'a, T: PartialEq, const N: usize> PartialEq<[T; N]> for Buffer<'a, T> {
+    #[inline]
+    fn eq(&self, other: &[T; N]) -> bool {
+        PartialEq::eq(self, &other[..])
+    }
+}
+
 impl<'a, T: PartialEq> PartialEq<Handle<'_, [T]>> for Buffer<'a, T> {
     #[inline]
     fn eq(&self, other: &Handle<'_, [T]>) -> bool {
