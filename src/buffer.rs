@@ -1,10 +1,10 @@
 //! A contiguous, growable array of values allocated in an `Arena`.
 
 use crate::{Arena, handle::Handle};
-use alloc::alloc::Allocator;
+use alloc::alloc::{Allocator, Layout};
 use core::{
     borrow::{Borrow, BorrowMut},
-    error::Error,
+    error::{self, Error},
     fmt,
     hash::{Hash, Hasher},
     hint::assert_unchecked,
@@ -12,7 +12,7 @@ use core::{
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut, Index, IndexMut},
-    ptr,
+    ptr::{self, NonNull},
     slice::{self, SliceIndex},
 };
 #[cfg(feature = "std")]
@@ -87,6 +87,66 @@ impl<'a, T> Buffer<'a, T> {
         }
 
         buf
+    }
+
+    #[track_caller]
+    #[must_use]
+    #[inline]
+    pub fn try_with_growable<
+        A: Allocator,
+        E,
+        F: FnOnce(GrowableBuffer<'a, T, A>) -> Result<Buffer<'a, T>, E>,
+    >(
+        arena: &'a Arena<A>,
+        f: F,
+    ) -> Result<Self, WithGrowableError<E>> {
+        Self::try_with_growable_guaranteeing_capacity(arena, 0, f)
+    }
+
+    #[track_caller]
+    #[inline]
+    pub fn with_growable<A: Allocator, F: FnOnce(GrowableBuffer<'a, T, A>) -> Buffer<'a, T>>(
+        arena: &'a Arena<A>,
+        f: F,
+    ) -> Self {
+        Self::with_growable_guaranteeing_capacity(arena, 0, f)
+    }
+
+    #[inline]
+    pub fn try_with_growable_guaranteeing_capacity<
+        A: Allocator,
+        E,
+        F: FnOnce(GrowableBuffer<'a, T, A>) -> Result<Buffer<'a, T>, E>,
+    >(
+        arena: &'a Arena<A>,
+        required_capacity: usize,
+        f: F,
+    ) -> Result<Self, WithGrowableError<E>> {
+        Self::growable_impl::<A, E, _>(arena, Some(required_capacity), f)
+    }
+
+    #[track_caller]
+    #[must_use]
+    #[inline]
+    pub fn with_growable_guaranteeing_capacity<
+        A: Allocator,
+        F: FnOnce(GrowableBuffer<'a, T, A>) -> Buffer<'a, T>,
+    >(
+        arena: &'a Arena<A>,
+        required_capacity: usize,
+        f: F,
+    ) -> Self {
+        enum Never {}
+        let result = Self::growable_impl::<A, Never, _>(arena, Some(required_capacity), |buffer| {
+            Ok(f(buffer))
+        });
+
+        match result {
+            Ok(buffer) => buffer,
+            Err(WithGrowableError::CapacityFail) => {
+                panic!("Required capacity not available in this arena")
+            }
+        }
     }
 
     #[must_use]
@@ -373,6 +433,67 @@ impl<'a, T> Buffer<'a, T> {
             ptr::copy(ptr.add(1), ptr, count);
         }
     }
+
+    #[track_caller]
+    #[must_use]
+    #[inline]
+    fn growable_impl<
+        A: Allocator,
+        E,
+        F: FnOnce(GrowableBuffer<'a, T, A>) -> Result<Buffer<'a, T>, E>,
+    >(
+        arena: &'a Arena<A>,
+        required_min_capacity_hint: Option<usize>,
+        f: F,
+    ) -> Result<Self, WithGrowableError<E>> {
+        if arena.block_size() < required_min_capacity_hint.unwrap_or(0) {
+            return Err(WithGrowableError::CapacityFail);
+        }
+
+        let curr_block_cap = arena.curr_block_capacity();
+        match curr_block_cap {
+            None => arena.force_push_new_block(),
+            Some(cap) if cap < required_min_capacity_hint.unwrap_or(usize::MAX) => {
+                arena.force_push_new_block()
+            }
+            _ => (),
+        }
+
+        let offset = arena.blocks.offset_to_align_for(&Layout::new::<T>());
+        unsafe {
+            arena.blocks.bump(offset);
+        }
+
+        let head = arena.curr_block_head();
+        debug_assert!(head.is_some());
+
+        let backing_storage = unsafe {
+            let data = head.unwrap_unchecked().as_ptr();
+            let len = data.len() / mem::size_of::<T>();
+            let data = ptr::from_raw_parts_mut(data.cast::<T>(), len);
+            NonNull::new_unchecked(data)
+        };
+
+        let growable_buffer = GrowableBuffer {
+            backing_storage,
+            len: 0,
+            cap: 0,
+            _boo: PhantomData,
+        };
+
+        let result = f(growable_buffer);
+
+        match result {
+            Err(_) => unsafe {
+                arena.blocks.unbump(offset);
+            },
+            Ok(ref buf) => unsafe {
+                arena.blocks.bump(buf.handle.len() * mem::size_of::<T>());
+            },
+        }
+
+        result.map_err(WithGrowableError::Inner)
+    }
 }
 
 impl<'a, T: Clone> Buffer<'a, T> {
@@ -641,6 +762,336 @@ impl<'a, T> Drop for Buffer<'a, T> {
     fn drop(&mut self) {
         unsafe {
             self.drop_initialized_contents(..self.len);
+        }
+    }
+}
+
+pub struct GrowableBuffer<'a, T, A: Allocator> {
+    backing_storage: NonNull<[MaybeUninit<T>]>,
+    cap: usize,
+    len: usize,
+    _boo: PhantomData<&'a Arena<A>>,
+}
+
+#[allow(dead_code, unused)]
+impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
+    #[must_use]
+    #[inline]
+    pub const fn max_capacity(&self) -> usize {
+        self.backing_storage.len()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn capacity(&self) -> usize {
+        self.cap
+    }
+
+    #[inline]
+    pub const fn is_full(&self) -> bool {
+        self.len == self.max_capacity()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn has_capacity(&self, required_capacity: usize) -> bool {
+        self.cap - self.len > required_capacity
+    }
+
+    #[inline]
+    pub const fn reserve(&mut self, additional: usize) -> Result<(), usize> {
+        let (new_cap, max_cap) = (self.cap + additional, self.max_capacity());
+        if new_cap > max_cap {
+            self.cap = max_cap;
+            Err(new_cap - max_cap)
+        } else {
+            self.cap = new_cap;
+            Ok(())
+        }
+    }
+
+    #[inline]
+    pub const fn try_push(&mut self, value: T) -> Result<(), T> {
+        if self.is_full() {
+            return Err(value);
+        }
+
+        // Because this method doesn't need to hit the system memory allocator,
+        // it don't need to grow by a growth factor.
+        match self.ensure_capacity(1) {
+            Ok(_) => (),
+            Err(_) => return Err(value),
+        }
+
+        unsafe {
+            let dst = self.backing_storage.cast::<T>().add(self.len).as_ptr();
+            ptr::write(dst, value);
+        }
+
+        self.len += 1;
+
+        Ok(())
+    }
+
+    #[inline]
+    pub fn push(&mut self, value: T) {
+        match self.try_push(value) {
+            Ok(_) => (),
+            Err(_) => panic!("No space for value in this buffer"),
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn pop(&mut self) -> Option<T> {
+        if self.len == 0 {
+            return None;
+        }
+
+        self.len -= 1;
+        let value = unsafe { ptr::read(self.backing_storage.cast::<T>().add(self.len).as_ptr()) };
+
+        Some(value)
+    }
+
+    #[inline]
+    pub const unsafe fn set_len(&mut self, new_len: usize) {
+        self.len = new_len;
+    }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        unsafe {
+            ptr::drop_in_place(self.as_mut_slice());
+            self.set_len(0);
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn as_slice(&self) -> &[T] {
+        let data = self.backing_storage.cast::<T>().as_ptr();
+        unsafe { slice::from_raw_parts(data, self.len) }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
+        let data = self.backing_storage.cast::<T>().as_ptr();
+        unsafe { slice::from_raw_parts_mut(data, self.len) }
+    }
+
+    #[inline]
+    pub fn into_buffer(self) -> Buffer<'a, T> {
+        let data = self.backing_storage.as_ptr().cast::<MaybeUninit<T>>();
+        let handle = unsafe { Handle::from_raw_parts(data, self.cap) };
+
+        let len = self.len;
+
+        mem::forget(self);
+
+        unsafe { Buffer::from_raw_parts(handle, len) }
+    }
+
+    #[inline]
+    pub fn iter(&'_ self) -> <&'_ [T] as IntoIterator>::IntoIter {
+        self.as_slice().into_iter()
+    }
+
+    #[inline]
+    pub fn iter_mut(&'_ mut self) -> <&'_ mut [T] as IntoIterator>::IntoIter {
+        self.as_mut_slice().into_iter()
+    }
+
+    #[inline]
+    const fn ensure_capacity(&mut self, required_capacity: usize) -> Result<(), usize> {
+        if self.has_capacity(required_capacity) {
+            return Ok(());
+        }
+        self.reserve(required_capacity)
+    }
+}
+
+impl<'a, T, A: Allocator> Deref for GrowableBuffer<'a, T, A> {
+    type Target = [T];
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl<'a, T, A: Allocator> DerefMut for GrowableBuffer<'a, T, A> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut_slice()
+    }
+}
+
+impl<'a, T, A: Allocator> Borrow<[T]> for GrowableBuffer<'a, T, A> {
+    #[inline]
+    fn borrow(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+impl<'a, T, A: Allocator> BorrowMut<[T]> for GrowableBuffer<'a, T, A> {
+    #[inline]
+    fn borrow_mut(&mut self) -> &mut [T] {
+        self.as_mut_slice()
+    }
+}
+
+impl<'a, T, A: Allocator> AsRef<[T]> for GrowableBuffer<'a, T, A> {
+    #[inline]
+    fn as_ref(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+impl<'a, T, A: Allocator> AsMut<[T]> for GrowableBuffer<'a, T, A> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut [T] {
+        self.as_mut_slice()
+    }
+}
+
+impl<'s, 'a, T, A: Allocator> IntoIterator for &'s GrowableBuffer<'a, T, A> {
+    type Item = &'s T;
+    type IntoIter = <&'s [T] as IntoIterator>::IntoIter;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'s, 'a, T, A: Allocator> IntoIterator for &'s mut GrowableBuffer<'a, T, A> {
+    type Item = &'s mut T;
+    type IntoIter = <&'s mut [T] as IntoIterator>::IntoIter;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
+impl<'a, T: fmt::Debug, A: Allocator> fmt::Debug for GrowableBuffer<'a, T, A> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmtr.debug_list().entries(self).finish()
+    }
+}
+
+impl<'a, T: fmt::Debug, A: Allocator> Extend<T> for GrowableBuffer<'a, T, A> {
+    #[track_caller]
+    #[inline]
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        let iter = iter.into_iter();
+
+        let additional = {
+            let hint = iter.size_hint();
+            hint.1.unwrap_or(hint.0)
+        };
+
+        if self.ensure_capacity(additional).is_err() {
+            panic!(
+                "Could not reserve space for {} additional items when extending buffer",
+                additional
+            );
+        }
+
+        for item in iter {
+            self.push(item);
+        }
+    }
+}
+
+impl<'a, T: PartialEq, A: Allocator> PartialEq for GrowableBuffer<'a, T, A> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        PartialEq::eq(self.as_slice(), other.as_slice())
+    }
+}
+
+impl<'a, T: PartialEq, A: Allocator> PartialEq<[T]> for GrowableBuffer<'a, T, A> {
+    #[inline]
+    fn eq(&self, other: &[T]) -> bool {
+        PartialEq::eq(self.as_slice(), other)
+    }
+}
+
+impl<'a, 's, T: PartialEq, A: Allocator> PartialEq<&'s [T]> for GrowableBuffer<'a, T, A> {
+    #[inline]
+    fn eq(&self, other: &&'s [T]) -> bool {
+        PartialEq::eq(self.as_slice(), *other)
+    }
+}
+
+impl<'a, 's, T: PartialEq, A: Allocator> PartialEq<&'s mut [T]> for GrowableBuffer<'a, T, A> {
+    #[inline]
+    fn eq(&self, other: &&'s mut [T]) -> bool {
+        PartialEq::eq(self.as_slice(), *other)
+    }
+}
+
+impl<'a, T: PartialEq, A: Allocator, const N: usize> PartialEq<[T; N]>
+    for GrowableBuffer<'a, T, A>
+{
+    #[inline]
+    fn eq(&self, other: &[T; N]) -> bool {
+        PartialEq::eq(self.as_slice(), &other[..])
+    }
+}
+
+impl<'a, 's, T: PartialEq, A: Allocator, const N: usize> PartialEq<&'s [T; N]>
+    for GrowableBuffer<'a, T, A>
+{
+    #[inline]
+    fn eq(&self, other: &&'s [T; N]) -> bool {
+        PartialEq::eq(self.as_slice(), *other)
+    }
+}
+
+impl<'a, 's, T: PartialEq, A: Allocator, const N: usize> PartialEq<&'s mut [T; N]>
+    for GrowableBuffer<'a, T, A>
+{
+    #[inline]
+    fn eq(&self, other: &&'s mut [T; N]) -> bool {
+        PartialEq::eq(self.as_slice(), *other)
+    }
+}
+
+impl<'a, T, A: Allocator> Drop for GrowableBuffer<'a, T, A> {
+    #[inline]
+    fn drop(&mut self) {
+        unsafe {
+            ptr::drop_in_place(self.as_mut_slice());
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum WithGrowableError<E> {
+    CapacityFail,
+    Inner(E),
+}
+
+impl<E: fmt::Display> fmt::Display for WithGrowableError<E> {
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::CapacityFail => fmtr.write_str("could not create buffer with required capacity"),
+            Self::Inner(ref e) => fmt::Display::fmt(e, fmtr),
+        }
+    }
+}
+
+impl<E: error::Error + 'static> error::Error for WithGrowableError<E> {
+    #[inline]
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        if let Self::Inner(ref e) = *self {
+            Some(e)
+        } else {
+            None
         }
     }
 }

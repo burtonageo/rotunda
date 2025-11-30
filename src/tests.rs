@@ -1,14 +1,15 @@
 use crate::{
     Arena, buf,
-    buffer::Buffer,
+    buffer::{Buffer, WithGrowableError},
     handle::Handle,
     linked_list::LinkedList,
     rc_handle::{RcHandle, WeakHandle},
     string_buffer::StringBuffer,
 };
-use core::mem::ManuallyDrop;
+use core::{mem::ManuallyDrop, sync::atomic::AtomicUsize};
 use std::{
     alloc::{Allocator, Layout, System},
+    iter::Extend,
     mem,
     ptr::{self, NonNull},
     sync::atomic::{AtomicU32, Ordering as AtomicOrdering},
@@ -20,7 +21,9 @@ fn test_arena_alloc() {
 
     let twenty = arena.alloc_ref(20);
     assert_eq!(**twenty, 20);
-    unsafe { ManuallyDrop::drop(twenty); }
+    unsafe {
+        ManuallyDrop::drop(twenty);
+    }
 
     let five = Handle::new_in(&arena, 5);
     assert!(Handle::as_ptr(&five).is_aligned());
@@ -712,7 +715,7 @@ fn test_list_split() {
             } else {
                 assert!(list.is_empty());
             }
-            assert_eq!(end, &(i+1..=LIST_LEN).collect::<alloc::vec::Vec<_>>()[..]);
+            assert_eq!(end, &(i + 1..=LIST_LEN).collect::<alloc::vec::Vec<_>>()[..]);
         });
     }
 }
@@ -729,4 +732,60 @@ fn test_list_pop() {
         let front = list.pop_front().unwrap();
         assert_eq!(*front, 32);
     });
+}
+
+#[test]
+fn test_growable_buffer() {
+    let arena = Arena::with_block_size(5 * mem::size_of::<i32>());
+
+    let buffer = Buffer::<'_, i32>::with_growable(&arena, |mut buffer| {
+        assert!(buffer.max_capacity() == 5);
+
+        buffer.reserve(4).unwrap();
+        buffer.extend([25, 42, 180]);
+
+        buffer.into_buffer()
+    });
+
+    assert_eq!(buffer, [25, 42, 180]);
+    assert_eq!(buffer.capacity(), 4);
+
+    static COUNT_DROPS: AtomicUsize = AtomicUsize::new(0);
+    #[derive(Debug)]
+    struct CountDrops(#[allow(unused)] u8);
+
+    impl Drop for CountDrops {
+        fn drop(&mut self) {
+            COUNT_DROPS.fetch_add(1, AtomicOrdering::SeqCst);
+        }
+    }
+
+    let prev_head = arena.curr_block_head().unwrap();
+    let buffer_result = Buffer::<CountDrops>::try_with_growable(&arena, |mut buffer| {
+        assert_eq!(buffer.max_capacity(), 4);
+        buffer.extend([CountDrops(0), CountDrops(0)]);
+
+        buffer.clear();
+        assert_eq!(COUNT_DROPS.load(AtomicOrdering::SeqCst), 2);
+        assert_eq!(buffer.len(), 0);
+
+        buffer.extend([CountDrops(0), CountDrops(0)]);
+
+        Err(())
+    });
+
+    assert_eq!(COUNT_DROPS.load(AtomicOrdering::SeqCst), 4);
+    buffer_result.unwrap_err();
+
+    let curr_head = arena.curr_block_head().unwrap();
+    assert!(ptr::eq(prev_head.as_ptr(), curr_head.as_ptr()));
+
+    let buffer_result =
+        Buffer::<'_, u64>::try_with_growable_guaranteeing_capacity(&arena, 50, |buffer| {
+            Result::<_, ()>::Ok(buffer.into_buffer())
+        });
+    assert!(matches!(
+        buffer_result.unwrap_err(),
+        WithGrowableError::CapacityFail
+    ));
 }
