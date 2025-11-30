@@ -60,9 +60,10 @@ impl<'a, T> Buffer<'a, T> {
         I::IntoIter: ExactSizeIterator,
     {
         let iter = iter.into_iter();
-        let mut buf = Buffer::with_capacity_in(arena, iter.len());
-        buf.extend(iter);
-        buf
+        Buffer::with_growable(arena, move |mut buffer| {
+            buffer.extend(iter);
+            buffer.into()
+        })
     }
 
     #[track_caller]
@@ -982,7 +983,7 @@ impl<'a, T: fmt::Debug, A: Allocator> fmt::Debug for GrowableBuffer<'a, T, A> {
     }
 }
 
-impl<'a, T: fmt::Debug, A: Allocator> Extend<T> for GrowableBuffer<'a, T, A> {
+impl<'a, T, A: Allocator> Extend<T> for GrowableBuffer<'a, T, A> {
     #[track_caller]
     #[inline]
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
@@ -1003,6 +1004,13 @@ impl<'a, T: fmt::Debug, A: Allocator> Extend<T> for GrowableBuffer<'a, T, A> {
         for item in iter {
             self.push(item);
         }
+    }
+}
+
+impl<'a, T, A: Allocator> From<GrowableBuffer<'a, T, A>> for Buffer<'a, T> {
+    #[inline]
+    fn from(value: GrowableBuffer<'a, T, A>) -> Self {
+        value.into_buffer()
     }
 }
 
