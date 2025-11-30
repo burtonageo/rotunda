@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 //! Single-threaded reference-counting pointer types backed by an `Arena`.
 
 use crate::{Arena, handle::Handle};
@@ -93,10 +95,7 @@ impl<'a, T> RcHandle<'a, [T]> {
 
         let slice = unsafe { RcHandle::get_mut_unchecked(&mut handle) };
 
-        let mut guard = Guard {
-            slice,
-            len: 0,
-        };
+        let mut guard = Guard { slice, len: 0 };
 
         for i in 0..slice_len {
             let slot = unsafe { guard.slice.get_unchecked_mut(i) };

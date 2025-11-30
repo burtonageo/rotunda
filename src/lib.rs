@@ -7,6 +7,8 @@
     derive_coerce_pointee,
     ptr_metadata
 )]
+#![warn(missing_docs, clippy::empty_line_after_doc_comments)]
+#![deny(unsafe_attr_outside_unsafe, unsafe_op_in_unsafe_fn)]
 
 //! This module contains types for using the arena allocation strategy. See the [`Arena`] type
 //! for more information on how to use arena allocation.
@@ -357,11 +359,11 @@ impl<A: Allocator> Arena<A> {
     /// use rotunda::{Arena, handle::Handle};
     ///
     /// let capacity = 3100;
-    /// 
+    ///
     /// let arena = Arena::with_block_size(capacity);
     ///
     /// assert!(arena.curr_block_head().is_none());
-    /// 
+    ///
     /// arena.force_push_new_block();
     ///
     /// let block = arena.curr_block_head().unwrap();
@@ -383,7 +385,9 @@ impl<A: Allocator> Arena<A> {
         let (block_size, block_pos) = (self.block_size(), self.blocks.curr_block_pos().get());
 
         let data = unsafe {
-            let data = Block::data_ptr(curr_block, block_size).cast::<MaybeUninit<u8>>().as_ptr();
+            let data = Block::data_ptr(curr_block, block_size)
+                .cast::<MaybeUninit<u8>>()
+                .as_ptr();
             NonNull::new_unchecked(data.map_addr(|data| data + block_pos))
         };
 
@@ -813,7 +817,7 @@ impl<A: Allocator> Arena<A> {
     ///     ManuallyDrop::drop(value);
     /// }
     /// ```
-    /// 
+    ///
     /// [`ManuallyDrop`]: https://doc.rust-lang.org/stable/core/mem/struct.ManuallyDrop.html
     /// [`Drop::drop()`]: https://doc.rust-lang.org/stable/core/ops/trait.Drop.html#tymethod.drop
     /// [`ManuallyDrop::drop()`]: https://doc.rust-lang.org/stable/core/mem/struct.ManuallyDrop.html#method.drop

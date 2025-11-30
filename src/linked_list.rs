@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 //! A doubly-linked owned list of nodes.
 //!
 //! The `LinkedList` allows pushing and popping elements at either end of the list in constant time.

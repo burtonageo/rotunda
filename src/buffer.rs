@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 //! A contiguous, growable array of values allocated in an `Arena`.
 
 use crate::{Arena, handle::Handle};

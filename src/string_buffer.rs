@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 //! A UTF8-encoded, growable string. Backed by an `Arena`.
 
 use crate::{
@@ -224,7 +226,7 @@ impl<'a> fmt::Display for StringBuffer<'a> {
 impl<'a> fmt::Write for StringBuffer<'a> {
     #[inline]
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        StringBuffer::try_push_str(self, s).map_err(|_|fmt::Error)
+        StringBuffer::try_push_str(self, s).map_err(|_| fmt::Error)
     }
 }
 
