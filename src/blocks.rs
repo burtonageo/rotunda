@@ -190,7 +190,7 @@ impl Blocks {
     #[must_use]
     #[inline]
     pub(super) const fn curr_block_capacity(&self) -> Option<usize> {
-        if let Some(_) = self.curr_block.get() {
+        if self.curr_block.get().is_some() {
             Some(self.block_size - self.curr_block_pos.get())
         } else {
             None
@@ -277,7 +277,6 @@ impl Block {
     }
 
     #[track_caller]
-    #[must_use]
     #[cold]
     #[inline(never)]
     pub(super) fn try_alloc(

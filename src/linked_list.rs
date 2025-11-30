@@ -25,8 +25,10 @@ pub struct LinkedList<'a, T: 'a, A: Allocator = Global> {
     tail: NonNull<Node<T>>,
     len: usize,
     arena: &'a Arena<A>,
-    _boo: PhantomData<(T, fn(&'a Arena<A>) -> &'a Arena<A>)>,
+    _boo: PhantomData<(T, CovariantLifetime<'a, Arena<A>>)>,
 }
+
+type CovariantLifetime<'a, T> = PhantomData<fn(&'a T) -> &'a T>;
 
 // A LinkedList can be sent to other threads if the type within is
 // thread-safe - it is guaranteed to drop before the arena is
@@ -123,7 +125,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[must_use]
     #[inline]
     pub fn arena(&self) -> &Arena<A> {
-        &self.arena
+        self.arena
     }
 
     /// Pushes the given `value` to the front of the `LinkedList`.
@@ -327,7 +329,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
 
         let node = unsafe { self.get_node_unchecked(index) };
 
-        let mut list = LinkedList::new(&self.arena);
+        let mut list = LinkedList::new(self.arena);
 
         unsafe {
             let (mut split_off_head, split_off_tail) = (node, self.tail);
@@ -412,7 +414,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     pub fn iter(&self) -> Iter<'a, T> {
         Iter {
-            iter: NodeIter::new(&self),
+            iter: NodeIter::new(self),
             _boo: PhantomData,
         }
     }
@@ -421,7 +423,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<'a, T> {
         IterMut {
-            iter: NodeIter::new(&self),
+            iter: NodeIter::new(self),
             _boo: PhantomData,
         }
     }
@@ -745,7 +747,7 @@ impl<'a, T> Clone for Iter<'a, T> {
     #[inline]
     fn clone(&self) -> Self {
         Self {
-            iter: self.iter.clone(),
+            iter: self.iter,
             _boo: PhantomData,
         }
     }

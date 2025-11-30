@@ -270,7 +270,6 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
         unsafe { &mut this.ptr.as_mut().data }
     }
 
-    #[must_use]
     #[inline]
     pub fn try_into_handle(this: Self) -> Result<Handle<'a, T>, Self> {
         if Self::is_unique(&this) {
@@ -339,7 +338,6 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
 }
 
 impl<'a, T: Unpin> RcHandle<'a, T> {
-    #[must_use]
     #[inline]
     pub fn try_unwrap(this: Self) -> Result<T, RcHandle<'a, T>> {
         Self::try_into_handle(this).map(Handle::into_inner)
@@ -355,7 +353,7 @@ impl<'a, T: Unpin> RcHandle<'a, T> {
 impl<'a> RcHandle<'a, dyn Any> {
     #[inline]
     pub fn downcast<T: Any>(self) -> Result<RcHandle<'a, T>, RcHandle<'a, dyn Any>> {
-        if (&*self).is::<T>() {
+        if (*self).is::<T>() {
             unsafe { Ok(Self::downcast_unchecked::<T>(self)) }
         } else {
             Err(self)
@@ -633,7 +631,7 @@ impl<'rc: 'a, 'a, T: 'a> IntoIterator for &'rc RcHandle<'a, [T]> {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        AsRef::<[T]>::as_ref(self).into_iter()
+        AsRef::<[T]>::as_ref(self).iter()
     }
 }
 
@@ -893,8 +891,7 @@ impl<T> RcHandleInner<T> {
     ) -> *mut RcHandleInner<[T]> {
         let data_ptr: *mut T = this.map_addr(|addr| addr + SIZE_OF_RC_HEADER).cast::<T>();
         let ptr = ptr::from_raw_parts_mut::<[T]>(data_ptr, slice_len);
-        let ptr = ptr.map_addr(|addr| addr - SIZE_OF_RC_HEADER) as *mut RcHandleInner<[T]>;
-        ptr
+        ptr.map_addr(|addr| addr - SIZE_OF_RC_HEADER) as *mut RcHandleInner<[T]>
     }
 }
 

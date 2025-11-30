@@ -377,10 +377,7 @@ impl<A: Allocator> Arena<A> {
     /// ```
     #[inline]
     pub fn curr_block_head(&self) -> Option<NonNull<[MaybeUninit<u8>]>> {
-        let curr_block = match self.blocks.curr_block().get() {
-            Some(block) => block,
-            None => return None,
-        };
+        let curr_block = self.blocks.curr_block().get()?;
 
         let (block_size, block_pos) = (self.block_size(), self.blocks.curr_block_pos().get());
 

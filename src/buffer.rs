@@ -92,7 +92,6 @@ impl<'a, T> Buffer<'a, T> {
     }
 
     #[track_caller]
-    #[must_use]
     #[inline]
     pub fn try_with_growable<
         A: Allocator,
@@ -437,7 +436,6 @@ impl<'a, T> Buffer<'a, T> {
     }
 
     #[track_caller]
-    #[must_use]
     #[inline]
     fn growable_impl<
         A: Allocator,
@@ -700,7 +698,7 @@ impl<'b: 'a, 'a, T> IntoIterator for &'b Buffer<'a, T> {
     type Item = &'a T;
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.as_slice().into_iter()
+        self.as_slice().iter()
     }
 }
 
@@ -709,7 +707,7 @@ impl<'b: 'a, 'a, T> IntoIterator for &'b mut Buffer<'a, T> {
     type Item = &'a mut T;
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.as_mut_slice().into_iter()
+        self.as_mut_slice().iter_mut()
     }
 }
 
@@ -897,12 +895,12 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
 
     #[inline]
     pub fn iter(&'_ self) -> <&'_ [T] as IntoIterator>::IntoIter {
-        self.as_slice().into_iter()
+        self.as_slice().iter()
     }
 
     #[inline]
     pub fn iter_mut(&'_ mut self) -> <&'_ mut [T] as IntoIterator>::IntoIter {
-        self.as_mut_slice().into_iter()
+        self.as_mut_slice().iter_mut()
     }
 
     #[inline]

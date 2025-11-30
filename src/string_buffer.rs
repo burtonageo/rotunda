@@ -136,7 +136,7 @@ impl<'a> StringBuffer<'a> {
     #[must_use]
     #[inline]
     pub fn into_str_handle(self) -> Handle<'a, str> {
-        let len = self.bytes().len();
+        let len = self.len();
         let handle = self.inner.into_slice_handle();
         let slice_ptr = Handle::into_raw(handle);
         let string = ptr::from_raw_parts_mut(slice_ptr as *mut u8, len);
@@ -263,21 +263,21 @@ impl<'a> Hash for StringBuffer<'a> {
 impl<'a> PartialOrd for StringBuffer<'a> {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.as_str().partial_cmp(other.as_str())
+        Some(self.cmp(other))
     }
 }
 
 impl<'a> PartialOrd<str> for StringBuffer<'a> {
     #[inline]
     fn partial_cmp(&self, other: &str) -> Option<core::cmp::Ordering> {
-        self.as_str().partial_cmp(other)
+        Some(self.as_str().cmp(other))
     }
 }
 
 impl<'a> PartialOrd<Handle<'_, str>> for StringBuffer<'a> {
     #[inline]
     fn partial_cmp(&self, other: &Handle<'_, str>) -> Option<core::cmp::Ordering> {
-        self.as_str().partial_cmp(other.as_ref())
+        Some(self.as_str().cmp(other.as_ref()))
     }
 }
 

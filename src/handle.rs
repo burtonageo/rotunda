@@ -451,7 +451,7 @@ impl<'a, T> Handle<'a, [T]> {
     #[inline]
     pub fn split_off(this: &mut Self, at: usize) -> Handle<'a, [T]> {
         let (lhs, rhs) = {
-            let this = mem::replace(this, Handle::empty());
+            let this = mem::take(this);
             Handle::split_at(this, at)
         };
 
@@ -470,7 +470,7 @@ impl<'a, T> Handle<'a, [T]> {
         }
     }
 
-    #[must_use]
+    #[allow(clippy::type_complexity)]
     #[inline]
     pub const fn split_at_checked(
         this: Self,
@@ -701,7 +701,7 @@ impl<'sl: 'a, 'a, T: 'a> IntoIterator for &'sl Handle<'a, [T]> {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        AsRef::<[T]>::as_ref(self).into_iter()
+        AsRef::<[T]>::as_ref(self).iter()
     }
 }
 
@@ -711,7 +711,7 @@ impl<'sl: 'a, 'a, T: 'a> IntoIterator for &'sl mut Handle<'a, [T]> {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        AsMut::<[T]>::as_mut(self).into_iter()
+        AsMut::<[T]>::as_mut(self).iter_mut()
     }
 }
 
