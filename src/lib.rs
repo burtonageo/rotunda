@@ -300,6 +300,8 @@ impl<A: Allocator> Arena<A> {
     /// Returns the total number of bytes which can be allocated into the current
     /// block before a new block will need to be allocated.
     ///
+    /// If a current block is not available, returns `None`.
+    ///
     /// # Example
     ///
     /// ```
@@ -307,11 +309,11 @@ impl<A: Allocator> Arena<A> {
     /// let block_size = 4 * 1024 * 1024;
     /// let arena = Arena::with_block_size(block_size);
     /// let handle = Handle::new_in(&arena, 54i32);
-    /// assert_eq!(arena.curr_block_capacity(), block_size - std::mem::size_of::<i32>());
+    /// assert_eq!(arena.curr_block_capacity().unwrap(), block_size - std::mem::size_of::<i32>());
     /// ```
     #[inline]
     #[must_use]
-    pub fn curr_block_capacity(&self) -> usize {
+    pub fn curr_block_capacity(&self) -> Option<usize> {
         self.blocks.curr_block_capacity()
     }
 
