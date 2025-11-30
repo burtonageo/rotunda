@@ -743,6 +743,7 @@ fn test_growable_buffer() {
 
         buffer.reserve(4).unwrap();
         buffer.extend([25, 42, 180]);
+        assert_eq!(buffer.as_slice(), &[25, 42, 180]);
 
         buffer.into_buffer()
     });
