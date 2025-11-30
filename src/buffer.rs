@@ -59,11 +59,17 @@ impl<'a, T> Buffer<'a, T> {
     where
         I::IntoIter: ExactSizeIterator,
     {
-        let iter = iter.into_iter();
-        Buffer::with_growable(arena, move |mut buffer| {
-            buffer.extend(iter);
-            buffer.into()
-        })
+        #[derive(Debug)]
+        enum Never {}
+
+        let result = unsafe {
+            Buffer::growable_impl::<A, Never, _>(arena, None, |mut buffer| {
+                buffer.extend(iter);
+                Ok(buffer.into())
+            })
+        };
+
+        result.expect("could not allocate buffer")
     }
 
     #[track_caller]
@@ -94,54 +100,58 @@ impl<'a, T> Buffer<'a, T> {
 
     #[track_caller]
     #[inline]
-    pub fn try_with_growable<
-        A: Allocator,
-        E,
-        F: FnOnce(GrowableBuffer<'a, T, A>) -> Result<Buffer<'a, T>, E>,
-    >(
+    pub fn try_with_growable<A, E, F>(
         arena: &'a Arena<A>,
         f: F,
-    ) -> Result<Self, WithGrowableError<E>> {
+    ) -> Result<Self, WithGrowableError<E>>
+    where
+        A: Allocator,
+        F: 'static + FnOnce(GrowableBuffer<'a, T, A>) -> Result<Buffer<'a, T>, E>,
+    {
         Self::try_with_growable_guaranteeing_capacity(arena, 0, f)
     }
 
     #[track_caller]
     #[inline]
-    pub fn with_growable<A: Allocator, F: FnOnce(GrowableBuffer<'a, T, A>) -> Buffer<'a, T>>(
-        arena: &'a Arena<A>,
-        f: F,
-    ) -> Self {
+    pub fn with_growable<A, F>(arena: &'a Arena<A>, f: F) -> Self
+    where
+        A: Allocator,
+        F: 'static + FnOnce(GrowableBuffer<'a, T, A>) -> Buffer<'a, T>,
+    {
         Self::with_growable_guaranteeing_capacity(arena, 0, f)
     }
 
     #[inline]
-    pub fn try_with_growable_guaranteeing_capacity<
-        A: Allocator,
-        E,
-        F: FnOnce(GrowableBuffer<'a, T, A>) -> Result<Buffer<'a, T>, E>,
-    >(
+    pub fn try_with_growable_guaranteeing_capacity<A, E, F>(
         arena: &'a Arena<A>,
         required_capacity: usize,
         f: F,
-    ) -> Result<Self, WithGrowableError<E>> {
-        Self::growable_impl::<A, E, _>(arena, Some(required_capacity), f)
+    ) -> Result<Self, WithGrowableError<E>>
+    where
+        A: Allocator,
+        F: 'static + FnOnce(GrowableBuffer<'a, T, A>) -> Result<Buffer<'a, T>, E>,
+    {
+        unsafe { Self::growable_impl::<A, E, _>(arena, Some(required_capacity), f) }
     }
 
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn with_growable_guaranteeing_capacity<
-        A: Allocator,
-        F: FnOnce(GrowableBuffer<'a, T, A>) -> Buffer<'a, T>,
-    >(
+    pub fn with_growable_guaranteeing_capacity<A, F>(
         arena: &'a Arena<A>,
         required_capacity: usize,
         f: F,
-    ) -> Self {
+    ) -> Self
+    where
+        A: Allocator,
+        F: 'static + FnOnce(GrowableBuffer<'a, T, A>) -> Buffer<'a, T>,
+    {
         enum Never {}
-        let result = Self::growable_impl::<A, Never, _>(arena, Some(required_capacity), |buffer| {
-            Ok(f(buffer))
-        });
+        let result = unsafe {
+            Self::growable_impl::<A, Never, _>(arena, Some(required_capacity), |buffer| {
+                Ok(f(buffer))
+            })
+        };
 
         match result {
             Ok(buffer) => buffer,
@@ -438,15 +448,15 @@ impl<'a, T> Buffer<'a, T> {
 
     #[track_caller]
     #[inline]
-    fn growable_impl<
-        A: Allocator,
-        E,
-        F: FnOnce(GrowableBuffer<'a, T, A>) -> Result<Buffer<'a, T>, E>,
-    >(
+    unsafe fn growable_impl<A, E, F>(
         arena: &'a Arena<A>,
         required_min_capacity_hint: Option<usize>,
         f: F,
-    ) -> Result<Self, WithGrowableError<E>> {
+    ) -> Result<Self, WithGrowableError<E>>
+    where
+        A: Allocator,
+        F: FnOnce(GrowableBuffer<'a, T, A>) -> Result<Buffer<'a, T>, E>,
+    {
         if arena.block_size() < required_min_capacity_hint.unwrap_or(0) {
             return Err(WithGrowableError::CapacityFail);
         }
