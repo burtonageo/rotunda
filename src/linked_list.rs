@@ -59,6 +59,17 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    /// Create a new `LinkedList` containing the contents of the given iterator.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    /// let arena = Arena::new();
+    ///
+    /// let linked_list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4, 5].into_iter());
+    /// assert_eq!(linked_list, &[1, 2, 3, 4, 5]);
+    /// ```
     #[must_use]
     #[inline]
     pub fn new_from_iter_in<I: IntoIterator<Item = T>>(arena: &'a Arena<A>, iter: I) -> Self {
@@ -196,11 +207,44 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         self.remove(0)
     }
 
+    /// Appends the given `value` to the end of the `LinkedList`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    /// let mut linked_list = LinkedList::new(&arena);
+    ///
+    /// linked_list.push_back(Handle::new_str_in(&arena, "Message"));
+    ///
+    /// assert_eq!(linked_list.front().map(|handle| handle.as_ref()), Some("Message"));
+    /// ```
     #[inline]
     pub fn push_back(&mut self, value: T) {
         self.insert(self.len, value);
     }
 
+    /// Pushes the given `value` to the back of the `LinkedList`, returning a mutable
+    /// reference to the newly added value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    /// let mut linked_list = LinkedList::new(&arena);
+    ///
+    /// let value = linked_list.push_back_mut(42);
+    /// assert_eq!(*value, 42);
+    ///
+    /// *value = 155;
+    /// # drop(value);
+    ///
+    /// assert_eq!(linked_list.back(), Some(&155));
+    /// ```
     #[must_use]
     #[inline]
     pub fn push_back_mut(&mut self, value: T) -> &mut T {
