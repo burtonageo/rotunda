@@ -6,7 +6,7 @@ use core::{
     marker::{PhantomData, PhantomPinned},
     mem::{self, MaybeUninit, offset_of},
     ptr::{self, NonNull},
-    slice, str,
+    str,
 };
 
 #[non_exhaustive]
@@ -155,6 +155,21 @@ impl Blocks {
         self.curr_block_pos.get()
     }
 
+    #[track_caller]
+    #[inline]
+    pub(super) unsafe fn unbump(&self, bytes: usize) -> usize {
+        #[cold]
+        fn bump_fail() -> ! {
+            panic!("Underflowed block allocated memory");
+        }
+
+        self.curr_block_pos.update(|curr| {
+            let new_size = curr.checked_sub(bytes);
+            new_size.unwrap_or_else(|| bump_fail())
+        });
+        self.curr_block_pos.get()
+    }
+
     #[must_use]
     #[inline]
     pub(super) const fn offset_to_align_for(&self, layout: &Layout) -> usize {
@@ -236,11 +251,20 @@ pub(super) struct Block {
 impl Block {
     #[must_use]
     #[inline]
-    pub(super) unsafe fn data<'a>(this: NonNull<Self>, len: usize) -> &'a mut [MaybeUninit<u8>] {
+    pub(super) unsafe fn data_mut<'a>(
+        this: NonNull<Self>,
+        len: usize,
+    ) -> &'a mut [MaybeUninit<u8>] {
+        unsafe { Self::data_ptr(this, len).as_mut() }
+    }
+
+    #[must_use]
+    #[inline]
+    pub(super) unsafe fn data_ptr(this: NonNull<Self>, len: usize) -> NonNull<[MaybeUninit<u8>]> {
         let ptr = this
             .map_addr(|addr| addr.saturating_add(offset_of!(Block, data)))
-            .cast::<u8>();
-        unsafe { slice::from_raw_parts_mut(ptr.as_ptr().cast(), len) }
+            .cast::<MaybeUninit<u8>>();
+        NonNull::from_raw_parts(ptr, len)
     }
 
     #[track_caller]
@@ -290,7 +314,9 @@ pub(super) unsafe fn dealloc_blocks(
     block_start: &BlockPtr,
     allocator: &dyn Allocator,
 ) {
-    unsafe { dealloc_blocks_n(usize::MAX, block_layout, block_start, allocator); }
+    unsafe {
+        dealloc_blocks_n(usize::MAX, block_layout, block_start, allocator);
+    }
 }
 
 pub(super) unsafe fn dealloc_blocks_n(

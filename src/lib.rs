@@ -383,8 +383,8 @@ impl<A: Allocator> Arena<A> {
         let (block_size, block_pos) = (self.block_size(), self.blocks.curr_block_pos().get());
 
         let data = unsafe {
-            let data = Block::data(curr_block, block_size).as_ptr();
-            NonNull::new_unchecked(data.map_addr(|data| data + block_pos).cast_mut())
+            let data = Block::data_ptr(curr_block, block_size).cast::<MaybeUninit<u8>>().as_ptr();
+            NonNull::new_unchecked(data.map_addr(|data| data + block_pos))
         };
 
         Some(NonNull::from_raw_parts(data, block_size - block_pos))
@@ -857,7 +857,7 @@ impl<A: Allocator> Arena<A> {
             self.blocks
                 .curr_block()
                 .get()
-                .map(|block| Block::data(block, self.block_size()))
+                .map(|block| Block::data_mut(block, self.block_size()))
         }
     }
 
@@ -1000,7 +1000,7 @@ impl<'a, A: Allocator> Iterator for FreeBlocksMut<'a, A> {
                 block.next.get()
             };
 
-            (Block::data(block, block_size), next)
+            (Block::data_mut(block, block_size), next)
         };
 
         self.curr = next;
@@ -1058,7 +1058,7 @@ impl<'a, A: Allocator> Iterator for AllBlocksMut<'a, A> {
         let block_size = self.arena.block_size();
         match self.state {
             State::Pending => {
-                let curr = unsafe { self.curr.map(|block| Block::data(block, block_size)) };
+                let curr = unsafe { self.curr.map(|block| Block::data_mut(block, block_size)) };
 
                 self.state = State::Started;
                 self.curr = self.arena.blocks.free_blocks().get();
@@ -1073,7 +1073,7 @@ impl<'a, A: Allocator> Iterator for AllBlocksMut<'a, A> {
                         block.next.get()
                     };
 
-                    (Block::data(block, block_size), next)
+                    (Block::data_mut(block, block_size), next)
                 };
 
                 self.curr = next;
