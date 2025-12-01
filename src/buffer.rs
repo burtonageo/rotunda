@@ -61,14 +61,9 @@ impl<'a, T> Buffer<'a, T> {
         I::IntoIter: ExactSizeIterator,
     {
         let iter = iter.into_iter();
-        let result = unsafe {
-            Buffer::growable_impl::<A, (), _>(arena, Some(iter.len()), |mut buffer| {
-                buffer.extend(iter);
-                Ok(buffer.into())
-            })
-        };
-
-        result.expect("could not allocate buffer")
+        let mut buffer = Buffer::with_capacity_in(arena, iter.len());
+        buffer.extend(iter);
+        buffer
     }
 
     #[track_caller]
