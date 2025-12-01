@@ -735,6 +735,16 @@ fn test_list_pop() {
 }
 
 #[test]
+fn test_list_retain() {
+    let arena = Arena::new();
+
+    let mut list = LinkedList::new_from_iter_in(&arena, 0..10);
+    list.retain(|elem| elem % 2 == 0);
+
+    assert_eq!(list, [0, 2, 4, 6, 8]);
+}
+
+#[test]
 fn test_growable_buffer() {
     let arena = Arena::with_block_size(5 * mem::size_of::<i32>());
 
