@@ -824,6 +824,20 @@ impl<'a, T: ?Sized + PartialEq> PartialEq<T> for Handle<'a, T> {
     }
 }
 
+impl<'a, 'h, T: ?Sized + PartialEq> PartialEq<&'h Handle<'h, T>> for Handle<'a, T> {
+    #[inline]
+    fn eq(&self, other: &&'h Handle<'h, T>) -> bool {
+        self.as_ref().eq(other.as_ref())
+    }
+}
+
+impl<'a, 'v, T: ?Sized + PartialEq> PartialEq<&'v T> for Handle<'a, T> {
+    #[inline]
+    fn eq(&self, other: &&'v T) -> bool {
+        self.as_ref().eq(*other)
+    }
+}
+
 impl<'a, T: ?Sized + Eq> Eq for Handle<'a, T> {}
 
 impl<'a, T: ?Sized + PartialOrd> PartialOrd for Handle<'a, T> {
