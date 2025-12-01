@@ -815,15 +815,15 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     }
 
     #[inline]
-    pub fn is_full(&self) -> bool {
-        self.len() == self.max_capacity()
+    pub const fn is_full(&self) -> bool {
+        self.len == self.max_capacity()
     }
 
     #[must_use]
     #[inline]
-    pub fn has_capacity(&self, required_capacity: usize) -> bool {
+    pub const fn has_capacity(&self, required_capacity: usize) -> bool {
         let cap = self.capacity();
-        cap - self.len() > required_capacity
+        cap - self.len > required_capacity
     }
 
     #[inline]
@@ -897,7 +897,7 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     }
 
     #[inline]
-    pub unsafe fn set_len(&mut self, new_len: usize) {
+    pub const unsafe fn set_len(&mut self, new_len: usize) {
         self.len = new_len;
     }
 
@@ -917,14 +917,14 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
 
     #[must_use]
     #[inline]
-    pub fn as_slice(&self) -> &[T] {
+    pub const fn as_slice(&self) -> &[T] {
         let data = self.backing_storage.cast::<T>().as_ptr();
         unsafe { slice::from_raw_parts(data, self.len) }
     }
 
     #[must_use]
     #[inline]
-    pub fn as_mut_slice(&mut self) -> &mut [T] {
+    pub const fn as_mut_slice(&mut self) -> &mut [T] {
         let data = self.backing_storage.cast::<T>().as_ptr();
         unsafe { slice::from_raw_parts_mut(data, self.len) }
     }
