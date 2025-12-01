@@ -789,4 +789,14 @@ fn test_growable_buffer() {
         buffer_result.unwrap_err(),
         WithGrowableError::CapacityFail
     ));
+
+    let arena = Arena::new();
+    let buffer = Buffer::with_growable(&arena, |mut buffer| {
+        buffer.reserve(4).unwrap();
+        buffer.extend([1usize, 2]);
+        buffer.shrink_to_fit();
+        buffer.into()
+    });
+
+    assert_eq!(buffer.capacity(), 2);
 }

@@ -6,6 +6,7 @@ use crate::{Arena, handle::Handle};
 use alloc::alloc::{Allocator, Layout};
 use core::{
     borrow::{Borrow, BorrowMut},
+    cell::Cell,
     error::{self, Error},
     fmt,
     hash::{Hash, Hasher},
@@ -483,30 +484,45 @@ impl<'a, T> Buffer<'a, T> {
             NonNull::new_unchecked(data)
         };
 
+        let cap = Cell::new(0);
+        let cap_ptr = NonNull::from_ref(&cap);
+
         let growable_buffer = GrowableBuffer {
             backing_storage,
+            arena,
             len: 0,
-            cap: 0,
-            _boo: PhantomData,
+            cap: cap_ptr,
         };
 
-        struct Unbump<'a, A: Allocator>(&'a Arena<A>, usize);
-        impl<'a, A: Allocator> Drop for Unbump<'a, A> {
+        struct Unbump<'a, A: Allocator, T> {
+            arena: &'a Arena<A>,
+            offset: usize,
+            cap_ptr: NonNull<Cell<usize>>,
+            _boo: PhantomData<NonNull<T>>,
+        }
+
+        impl<'a, A: Allocator, T> Drop for Unbump<'a, A, T> {
             fn drop(&mut self) {
                 unsafe {
-                    self.0.blocks.unbump(self.1);
+                    let cap = self.cap_ptr.as_ref().get();
+                    self.arena
+                        .blocks
+                        .unbump(self.offset + (cap * mem::size_of::<T>()));
                 }
             }
         }
 
-        let unbump = Unbump(arena, offset);
+        let unbump = Unbump {
+            arena,
+            offset,
+            cap_ptr,
+            _boo: PhantomData::<NonNull<T>>,
+        };
+
         let result = f(growable_buffer);
 
-        if let Ok(ref buf) = result {
+        if result.is_ok() {
             mem::forget(unbump);
-            unsafe {
-                arena.blocks.bump(buf.handle.len() * mem::size_of::<T>());
-            }
         }
 
         result.map_err(WithGrowableError::Inner)
@@ -785,9 +801,9 @@ impl<'a, T> Drop for Buffer<'a, T> {
 
 pub struct GrowableBuffer<'a, T, A: Allocator> {
     backing_storage: NonNull<[MaybeUninit<T>]>,
-    cap: usize,
+    arena: &'a Arena<A>,
     len: usize,
-    _boo: PhantomData<&'a Arena<A>>,
+    cap: NonNull<Cell<usize>>,
 }
 
 #[allow(dead_code, unused)]
@@ -801,34 +817,46 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn capacity(&self) -> usize {
-        self.cap
+        unsafe { self.cap.as_ref().get() }
     }
 
     #[inline]
-    pub const fn is_full(&self) -> bool {
-        self.len == self.max_capacity()
+    pub fn is_full(&self) -> bool {
+        self.len() == self.max_capacity()
     }
 
     #[must_use]
     #[inline]
-    pub const fn has_capacity(&self, required_capacity: usize) -> bool {
-        self.cap - self.len > required_capacity
+    pub fn has_capacity(&self, required_capacity: usize) -> bool {
+        let cap = self.capacity();
+        cap - self.len() > required_capacity
     }
 
     #[inline]
-    pub const fn reserve(&mut self, additional: usize) -> Result<(), usize> {
-        let (new_cap, max_cap) = (self.cap + additional, self.max_capacity());
+    pub fn try_reserve(&mut self, additional: usize) -> Result<(), usize> {
+        let cap = self.capacity();
+
+        let (new_cap, max_cap) = (cap + additional, self.max_capacity());
         if new_cap > max_cap {
-            self.cap = max_cap;
+            unsafe { self.cap.as_ref().set(max_cap) };
             Err(new_cap - max_cap)
         } else {
-            self.cap = new_cap;
+            unsafe {
+                self.arena.blocks.bump(additional * mem::size_of::<T>());
+                self.set_capacity(new_cap);
+            }
+
             Ok(())
         }
     }
 
     #[inline]
-    pub const fn try_push(&mut self, value: T) -> Result<(), T> {
+    pub fn reserve(&mut self, additional: usize) -> Result<(), usize> {
+        self.try_reserve(additional)
+    }
+
+    #[inline]
+    pub fn try_push(&mut self, value: T) -> Result<(), T> {
         if self.is_full() {
             return Err(value);
         }
@@ -861,7 +889,7 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub fn pop(&mut self) -> Option<T> {
-        if self.len == 0 {
+        if self.len() == 0 {
             return None;
         }
 
@@ -872,8 +900,14 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     }
 
     #[inline]
-    pub const unsafe fn set_len(&mut self, new_len: usize) {
+    pub unsafe fn set_len(&mut self, new_len: usize) {
         self.len = new_len;
+    }
+
+    #[inline]
+    pub fn shrink_to_fit(&mut self) {
+        let cap = self.capacity();
+        unsafe { self.set_capacity(cap - self.len()); }
     }
 
     #[inline]
@@ -900,8 +934,9 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
 
     #[inline]
     pub fn into_buffer(self) -> Buffer<'a, T> {
+        let cap = unsafe { self.cap.as_ref().get() };
         let data = self.backing_storage.as_ptr().cast::<MaybeUninit<T>>();
-        let handle = unsafe { Handle::from_raw_parts(data, self.cap) };
+        let handle = unsafe { Handle::from_raw_parts(data, cap) };
 
         let len = self.len;
 
@@ -921,11 +956,16 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     }
 
     #[inline]
-    const fn ensure_capacity(&mut self, required_capacity: usize) -> Result<(), usize> {
+    fn ensure_capacity(&mut self, required_capacity: usize) -> Result<(), usize> {
         if self.has_capacity(required_capacity) {
             return Ok(());
         }
         self.reserve(required_capacity)
+    }
+
+    #[inline]
+    unsafe fn set_capacity(&mut self, new_cap: usize) {
+        unsafe { self.cap.as_ref().set(new_cap); }
     }
 }
 
