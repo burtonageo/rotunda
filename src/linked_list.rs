@@ -462,7 +462,9 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             let next = node_iter.next();
 
             if should_drop {
-                unsafe { let _ = Node::into_handle(self.remove_node(node, i)); }
+                unsafe {
+                    let _ = Node::into_handle(self.remove_node(node, i));
+                }
             } else {
                 i += 1;
             }
