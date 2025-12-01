@@ -429,7 +429,10 @@ impl<'a, T> Handle<'a, [T]> {
     pub fn new_slice_from_iter_in<A: Allocator, I: IntoIterator<Item = T>>(
         arena: &'a Arena<A>,
         iter: I,
-    ) -> Self {
+    ) -> Self
+    where
+        I::IntoIter: ExactSizeIterator,
+    {
         Buffer::new_in(arena, iter).into_slice_handle()
     }
 

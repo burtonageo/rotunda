@@ -55,9 +55,13 @@ impl<'a, T> Buffer<'a, T> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_in<I: IntoIterator<Item = T>, A: Allocator>(arena: &'a Arena<A>, iter: I) -> Self {
+    pub fn new_in<I: IntoIterator<Item = T>, A: Allocator>(arena: &'a Arena<A>, iter: I) -> Self
+    where
+        I::IntoIter: ExactSizeIterator,
+    {
+        let iter = iter.into_iter();
         let result = unsafe {
-            Buffer::growable_impl::<A, (), _>(arena, None, |mut buffer| {
+            Buffer::growable_impl::<A, (), _>(arena, Some(iter.len()), |mut buffer| {
                 buffer.extend(iter);
                 Ok(buffer.into())
             })
