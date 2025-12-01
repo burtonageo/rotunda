@@ -741,7 +741,7 @@ fn test_growable_buffer() {
     let buffer = Buffer::with_growable(&arena, |mut buffer| {
         assert!(buffer.max_capacity() == 5);
 
-        buffer.reserve(4).unwrap();
+        buffer.reserve(4);
         buffer.extend([25, 42, 180]);
         assert_eq!(buffer.as_slice(), &[25, 42, 180]);
 
@@ -792,7 +792,7 @@ fn test_growable_buffer() {
 
     let arena = Arena::new();
     let buffer = Buffer::with_growable(&arena, |mut buffer| {
-        buffer.reserve(4).unwrap();
+        buffer.reserve(4);
         buffer.extend([1usize, 2]);
         buffer.shrink_to_fit();
         buffer.into()

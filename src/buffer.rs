@@ -806,7 +806,6 @@ pub struct GrowableBuffer<'a, T, A: Allocator> {
     cap: NonNull<Cell<usize>>,
 }
 
-#[allow(dead_code, unused)]
 impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     #[must_use]
     #[inline]
@@ -851,8 +850,11 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     }
 
     #[inline]
-    pub fn reserve(&mut self, additional: usize) -> Result<(), usize> {
-        self.try_reserve(additional)
+    pub fn reserve(&mut self, additional: usize) {
+        match self.try_reserve(additional) {
+            Ok(_) => (),
+            Err(_) => panic!("Could not reserve additional capacity in buffer",)
+        }
     }
 
     #[inline]
@@ -960,7 +962,7 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
         if self.has_capacity(required_capacity) {
             return Ok(());
         }
-        self.reserve(required_capacity)
+        self.try_reserve(required_capacity)
     }
 
     #[inline]
