@@ -886,7 +886,7 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub fn pop(&mut self) -> Option<T> {
-        if self.len() == 0 {
+        if self.is_empty() {
             return None;
         }
 
