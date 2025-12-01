@@ -738,7 +738,7 @@ fn test_list_pop() {
 fn test_growable_buffer() {
     let arena = Arena::with_block_size(5 * mem::size_of::<i32>());
 
-    let buffer = Buffer::with_growable(&arena, |mut buffer| {
+    let buffer = Buffer::with_growable_in(&arena, |mut buffer| {
         assert!(buffer.max_capacity() == 5);
 
         buffer.reserve(4);
@@ -762,7 +762,7 @@ fn test_growable_buffer() {
     }
 
     let prev_head = arena.curr_block_head().unwrap();
-    let buffer_result = Buffer::try_with_growable(&arena, |mut buffer| {
+    let buffer_result = Buffer::try_with_growable_in(&arena, |mut buffer| {
         assert_eq!(buffer.max_capacity(), 4);
         buffer.extend([CountDrops(0), CountDrops(0)]);
 
@@ -782,7 +782,7 @@ fn test_growable_buffer() {
     assert!(ptr::eq(prev_head.as_ptr(), curr_head.as_ptr()));
 
     let buffer_result =
-        Buffer::<'_, u64>::try_with_growable_guaranteeing_capacity(&arena, 50, |buffer| {
+        Buffer::<'_, u64>::try_with_growable_guaranteeing_capacity_in(&arena, 50, |buffer| {
             Result::<_, ()>::Ok(buffer.into_buffer())
         });
     assert!(matches!(
@@ -791,7 +791,7 @@ fn test_growable_buffer() {
     ));
 
     let arena = Arena::new();
-    let buffer = Buffer::with_growable(&arena, |mut buffer| {
+    let buffer = Buffer::with_growable_in(&arena, |mut buffer| {
         buffer.reserve(4);
         buffer.extend([1usize, 2]);
         buffer.shrink_to_fit();

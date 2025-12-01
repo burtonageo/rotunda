@@ -99,7 +99,7 @@ impl<'a, T> Buffer<'a, T> {
 
     #[track_caller]
     #[inline]
-    pub fn try_with_growable<A, E, F>(
+    pub fn try_with_growable_in<A, E, F>(
         arena: &'a Arena<A>,
         f: F,
     ) -> Result<Self, WithGrowableError<E>>
@@ -107,21 +107,21 @@ impl<'a, T> Buffer<'a, T> {
         A: Allocator,
         F: 'static + FnOnce(GrowableBuffer<'a, T, A>) -> Result<Buffer<'a, T>, E>,
     {
-        Self::try_with_growable_guaranteeing_capacity(arena, 0, f)
+        Self::try_with_growable_guaranteeing_capacity_in(arena, 0, f)
     }
 
     #[track_caller]
     #[inline]
-    pub fn with_growable<A, F>(arena: &'a Arena<A>, f: F) -> Self
+    pub fn with_growable_in<A, F>(arena: &'a Arena<A>, f: F) -> Self
     where
         A: Allocator,
         F: 'static + FnOnce(GrowableBuffer<'a, T, A>) -> Buffer<'a, T>,
     {
-        Self::with_growable_guaranteeing_capacity(arena, 0, f)
+        Self::with_growable_guaranteeing_capacity_in(arena, 0, f)
     }
 
     #[inline]
-    pub fn try_with_growable_guaranteeing_capacity<A, E, F>(
+    pub fn try_with_growable_guaranteeing_capacity_in<A, E, F>(
         arena: &'a Arena<A>,
         required_capacity: usize,
         f: F,
@@ -136,7 +136,7 @@ impl<'a, T> Buffer<'a, T> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn with_growable_guaranteeing_capacity<A, F>(
+    pub fn with_growable_guaranteeing_capacity_in<A, F>(
         arena: &'a Arena<A>,
         required_capacity: usize,
         f: F,
