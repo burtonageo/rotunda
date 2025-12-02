@@ -6,12 +6,13 @@ use crate::{
     rc_handle::{RcHandle, WeakHandle},
     string_buffer::StringBuffer,
 };
-use core::{mem::ManuallyDrop, sync::atomic::AtomicUsize};
+use core::{mem::ManuallyDrop, panic::AssertUnwindSafe, sync::atomic::AtomicUsize};
 use std::{
     alloc::{Allocator, Layout, System},
     iter::Extend,
     mem,
     ptr::{self, NonNull},
+    rc::Rc,
     sync::atomic::{AtomicU32, Ordering as AtomicOrdering},
 };
 
@@ -789,9 +790,8 @@ fn test_growable_buffer() {
     let curr_head = arena.curr_block_head().unwrap();
     assert!(ptr::eq(prev_head.as_ptr(), curr_head.as_ptr()));
 
-    let buffer_result = Buffer::<'_, u64>::try_with_growable_in(&arena, |buffer| {
-        buffer.try_reserve(50)
-    });
+    let buffer_result =
+        Buffer::<'_, u64>::try_with_growable_in(&arena, |buffer| buffer.try_reserve(50));
     assert!(buffer_result.is_err(),);
 
     let arena = Arena::new();
@@ -803,21 +803,19 @@ fn test_growable_buffer() {
 
     assert_eq!(buffer.capacity(), 2);
 
-    // @TODO(George): Fix this soundness hole
-    if false {
-        use alloc::rc::Rc;
-        let arena = Rc::new(Arena::new());
-        let arena_2 = Rc::clone(&arena);
+    let arena = Rc::new(Arena::new());
+    let arena_2 = Rc::clone(&arena);
 
-        let buffer = Buffer::with_growable_in(arena.as_ref(), move |buffer| {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        Buffer::with_growable_in(arena.as_ref(), move |buffer| {
             buffer.push(24);
             buffer.push(51);
             let handle = Handle::new_in(arena_2.as_ref(), 45);
             buffer.push(64);
             assert_eq!(handle, &45);
             let _handle = Handle::new_in(arena_2.as_ref(), 62);
-        });
+        })
+    }));
 
-        assert_eq!(buffer.as_slice(), &[24, 51, 64]);
-    }
+    assert!(result.is_err());
 }

@@ -9,6 +9,8 @@ use core::{
     str,
 };
 
+pub(super) mod lock;
+
 #[non_exhaustive]
 pub(super) struct Blocks {
     block_size: usize,
@@ -35,7 +37,9 @@ impl Blocks {
     }
 
     #[inline]
-    pub(super) const fn reset(&mut self) {
+    pub(super) fn reset(&mut self) {
+        self.ensure_unlocked();
+
         self.curr_block_pos.replace(0);
         let old_used = self.used_blocks.replace(None);
         if let Some(block) = old_used {
@@ -45,6 +49,8 @@ impl Blocks {
 
     #[inline]
     pub(super) fn trim(&self, allocator: &dyn Allocator) {
+        self.ensure_unlocked();
+
         let block_layout = self.block_layout();
         unsafe {
             dealloc_blocks(block_layout, &self.free_blocks, allocator);
@@ -52,6 +58,8 @@ impl Blocks {
     }
 
     pub(super) fn trim_n(&self, n: usize, allocator: &dyn Allocator) {
+        self.ensure_unlocked();
+
         let block_layout = self.block_layout();
         unsafe {
             dealloc_blocks_n(n, block_layout, &self.free_blocks, allocator);
@@ -77,6 +85,8 @@ impl Blocks {
 
     #[inline]
     pub(super) unsafe fn dealloc_blocks(&self, block_start: &BlockPtr, allocator: &dyn Allocator) {
+        self.ensure_unlocked();
+
         let block_layout = self.block_layout();
         unsafe {
             dealloc_blocks(block_layout, block_start, allocator);
@@ -84,6 +94,8 @@ impl Blocks {
     }
 
     pub(super) unsafe fn dealloc_all_memory(&self, allocator: &dyn Allocator) {
+        self.ensure_unlocked();
+
         unsafe {
             self.dealloc_blocks(&self.free_blocks, allocator);
             self.dealloc_blocks(&self.used_blocks, allocator);
@@ -139,6 +151,8 @@ impl Blocks {
     #[track_caller]
     #[inline]
     pub(super) unsafe fn bump(&self, bytes: usize) -> usize {
+        self.ensure_unlocked();
+
         #[cold]
         fn bump_fail() -> ! {
             panic!("Overflowed block allocated memory");
@@ -155,9 +169,12 @@ impl Blocks {
         self.curr_block_pos.get()
     }
 
+    #[allow(unused)]
     #[track_caller]
     #[inline]
     pub(super) unsafe fn unbump(&self, bytes: usize) -> usize {
+        self.ensure_unlocked();
+
         #[cold]
         fn bump_fail() -> ! {
             panic!("Underflowed block allocated memory");
@@ -238,6 +255,18 @@ impl Blocks {
     #[inline]
     pub(crate) const fn used_blocks(&self) -> &BlockPtr {
         &self.used_blocks
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) fn is_locked(&self) -> bool {
+        <Option<NonNull<Block>>>::eq(&self.free_blocks.get(), &Some(lock::LOCKED_PTR))
+    }
+
+    #[track_caller]
+    #[inline]
+    fn ensure_unlocked(&self) {
+        assert!(!self.is_locked(), "cannot modify Arena while it is locked")
     }
 }
 

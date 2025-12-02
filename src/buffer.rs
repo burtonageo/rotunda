@@ -2,7 +2,7 @@
 
 //! A contiguous, growable array of values allocated in an `Arena`.
 
-use crate::{Arena, handle::Handle};
+use crate::{Arena, blocks::lock::BlockLock, handle::Handle};
 use alloc::alloc::{Allocator, Layout};
 use core::{
     borrow::{Borrow, BorrowMut},
@@ -119,6 +119,8 @@ impl<'a, T> Buffer<'a, T> {
             NonNull::new_unchecked(data)
         };
 
+        let lock = unsafe { BlockLock::lock(arena) };
+
         let mut growable_buffer = GrowableBuffer {
             backing_storage,
             arena,
@@ -126,32 +128,15 @@ impl<'a, T> Buffer<'a, T> {
             cap: 0,
         };
 
-        struct Unbump<'a, 'b, T, A: Allocator> {
-            arena: &'a Arena<A>,
-            offset: usize,
-            buffer: &'b mut GrowableBuffer<'a, T, A>,
-        }
+        let result = f(&mut growable_buffer);
 
-        impl<'a, 'b, T, A: Allocator> Drop for Unbump<'a, 'b, T, A> {
-            fn drop(&mut self) {
-                unsafe {
-                    let cap = self.buffer.cap;
-                    self.arena
-                        .blocks
-                        .unbump(self.offset + (cap * mem::size_of::<T>()));
-                }
-            }
-        }
+        drop(lock);
 
-        let unbump = Unbump {
-            arena,
-            offset,
-            buffer: &mut growable_buffer,
-        };
-
-        match f(unbump.buffer) {
+        match result {
             Ok(_) => {
-                mem::forget(unbump);
+                unsafe {
+                    arena.blocks.bump(offset + growable_buffer.cap * mem::size_of::<T>());
+                }
                 Ok(growable_buffer.into_buffer())
             }
             Err(e) => Err(e),
@@ -734,6 +719,7 @@ impl<'a, T> Drop for Buffer<'a, T> {
 
 pub struct GrowableBuffer<'a, T, A: Allocator> {
     backing_storage: NonNull<[MaybeUninit<T>]>,
+    #[allow(unused)]
     arena: &'a Arena<A>,
     len: usize,
     cap: usize,
@@ -777,7 +763,6 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
             })
         } else {
             unsafe {
-                self.arena.blocks.bump(additional * mem::size_of::<T>());
                 self.set_capacity(new_cap);
             }
 
