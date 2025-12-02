@@ -464,6 +464,68 @@ impl<A: Allocator> Arena<A> {
         let _ = unsafe { self.get_free_block() };
     }
 
+    /// Checks whether the current block has the capacity to allocate up to `block_capacity_bytes`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate alloc;
+    /// use rotunda::Arena;
+    /// use alloc::alloc::Layout;
+    ///
+    /// let arena = Arena::with_block_size(25);
+    /// arena.force_push_new_block();
+    ///
+    /// assert!(arena.has_block_capacity(24));
+    /// 
+    /// let layout = Layout::new::<[u8; 5]>();
+    /// arena.alloc_raw(layout);
+    ///
+    /// assert!(!arena.has_block_capacity(24));
+    /// ```
+    #[inline]
+    pub fn has_block_capacity(&self, block_capacity_bytes: usize) -> bool {
+        if self.block_size() < block_capacity_bytes {
+            return false;
+        }
+
+        self.curr_block_capacity().map(|cap| cap >= block_capacity_bytes).unwrap_or_default()
+    }
+
+    /// Checks whether the current block has the capacity to allocate up to `block_capacity_bytes`,
+    /// and allocates a new block if it doesn't.
+    ///
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate alloc;
+    /// use rotunda::Arena;
+    /// use alloc::alloc::Layout;
+    ///
+    /// let arena = Arena::with_block_size(25);
+    /// assert_eq!(arena.curr_block_capacity(), None);
+    /// 
+    /// arena.ensure_block_capacity(20);
+    /// assert_eq!(arena.curr_block_capacity(), Some(25));
+    ///
+    /// let _ = arena.alloc_raw(Layout::new::<[u8; 23]>());
+    /// assert!(!arena.has_block_capacity(20));
+    ///
+    /// arena.ensure_block_capacity(20);
+    /// assert!(arena.has_block_capacity(20));
+    /// ```
+    #[inline]
+    pub fn ensure_block_capacity(&self, block_capacity_bytes: usize) {
+        if self.block_size() < block_capacity_bytes {
+            return;
+        }
+        
+        if !self.has_block_capacity(block_capacity_bytes) {
+            self.force_push_new_block();
+        }
+    }
+
     /// Resets the `Arena` so that all used blocks are moved into the free list, and
     /// the current block counter is reset to `0`.
     ///
