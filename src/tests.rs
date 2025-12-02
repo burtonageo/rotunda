@@ -1,6 +1,6 @@
 use crate::{
     Arena, buf,
-    buffer::{Buffer, WithGrowableError},
+    buffer::Buffer,
     handle::Handle,
     linked_list::LinkedList,
     rc_handle::{RcHandle, WeakHandle},
@@ -748,14 +748,12 @@ fn test_list_retain() {
 fn test_growable_buffer() {
     let arena = Arena::with_block_size(5 * mem::size_of::<i32>());
 
-    let buffer = Buffer::with_growable_in(&arena, |mut buffer| {
+    let buffer = Buffer::with_growable_in(&arena, |buffer| {
         assert!(buffer.max_capacity() == 5);
 
         buffer.reserve(4);
         buffer.extend([25, 42, 180]);
         assert_eq!(buffer.as_slice(), &[25, 42, 180]);
-
-        buffer.into_buffer()
     });
 
     assert_eq!(buffer, [25, 42, 180]);
@@ -772,7 +770,7 @@ fn test_growable_buffer() {
     }
 
     let prev_head = arena.curr_block_head().unwrap();
-    let buffer_result = Buffer::try_with_growable_in(&arena, |mut buffer| {
+    let buffer_result = Buffer::try_with_growable_in(&arena, |buffer| {
         assert_eq!(buffer.max_capacity(), 4);
         buffer.extend([CountDrops(0), CountDrops(0)]);
 
@@ -791,22 +789,35 @@ fn test_growable_buffer() {
     let curr_head = arena.curr_block_head().unwrap();
     assert!(ptr::eq(prev_head.as_ptr(), curr_head.as_ptr()));
 
-    let buffer_result =
-        Buffer::<'_, u64>::try_with_growable_guaranteeing_capacity_in(&arena, 50, |buffer| {
-            Result::<_, ()>::Ok(buffer.into_buffer())
-        });
-    assert!(matches!(
-        buffer_result.unwrap_err(),
-        WithGrowableError::CapacityFail
-    ));
+    let buffer_result = Buffer::<'_, u64>::try_with_growable_in(&arena, |buffer| {
+        buffer.try_reserve(50)
+    });
+    assert!(buffer_result.is_err(),);
 
     let arena = Arena::new();
-    let buffer = Buffer::with_growable_in(&arena, |mut buffer| {
+    let buffer = Buffer::with_growable_in(&arena, |buffer| {
         buffer.reserve(4);
         buffer.extend([1usize, 2]);
         buffer.shrink_to_fit();
-        buffer.into()
     });
 
     assert_eq!(buffer.capacity(), 2);
+
+    // @TODO(George): Fix this soundness hole
+    if false {
+        use alloc::rc::Rc;
+        let arena = Rc::new(Arena::new());
+        let arena_2 = Rc::clone(&arena);
+
+        let buffer = Buffer::with_growable_in(arena.as_ref(), move |buffer| {
+            buffer.push(24);
+            buffer.push(51);
+            let handle = Handle::new_in(arena_2.as_ref(), 45);
+            buffer.push(64);
+            assert_eq!(handle, &45);
+            let _handle = Handle::new_in(arena_2.as_ref(), 62);
+        });
+
+        assert_eq!(buffer.as_slice(), &[24, 51, 64]);
+    }
 }
