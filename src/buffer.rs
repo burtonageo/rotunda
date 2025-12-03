@@ -39,6 +39,15 @@ macro_rules! buf {
     };
 }
 
+/// A `Buffer` is used to represent a contiguous array of `T`s allocated in an `Arena` block.
+///
+/// The buffer can be dynamically resized, but can only grow up to its [`capacity()`]. Beyond
+/// that,  new `Buffer` will have to be allocated with a larger given capacity.
+///
+/// See the [module documentation] for more informtion.
+/// 
+/// [`capacity()`]: ./struct.Buffer.html#method.capacity
+/// [module documentation]: ./index.html
 pub struct Buffer<'a, T> {
     handle: Handle<'a, [MaybeUninit<T>]>,
     len: usize,
@@ -52,6 +61,18 @@ unsafe impl<'a, T: Send> Send for Buffer<'a, T> {}
 unsafe impl<'a, T: Sync> Sync for Buffer<'a, T> {}
 
 impl<'a, T> Buffer<'a, T> {
+    /// Creates a new `Buffer` containing the contents of `iter`.
+    ///
+    /// # Examples
+    /// 
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    /// let buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// assert_eq!(buffer.as_slice(), &[1, 2, 3, 4, 5]);
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
