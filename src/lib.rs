@@ -842,6 +842,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// [`Arena::block_size()`]: ./struct.Arena.html#method.block_size
     /// [`handle_alloc_error()`]: https://doc.rust-lang.org/stable/alloc/alloc/fn.handle_alloc_error.html
+    #[track_caller]
     #[must_use]
     #[inline]
     pub fn alloc_raw_zeroed(&self, layout: Layout) -> NonNull<c_void> {
@@ -882,6 +883,7 @@ impl<A: Allocator> Arena<A> {
     /// [`Drop::drop()`]: https://doc.rust-lang.org/stable/core/ops/trait.Drop.html#tymethod.drop
     /// [`ManuallyDrop::drop()`]: https://doc.rust-lang.org/stable/core/mem/struct.ManuallyDrop.html#method.drop
     #[allow(clippy::mut_from_ref)]
+    #[track_caller]
     #[must_use]
     #[inline]
     pub fn alloc_ref<T>(&self, value: T) -> &mut ManuallyDrop<T> {
@@ -1153,3 +1155,5 @@ impl<'a, A: Allocator> fmt::Debug for AllBlocksMut<'a, A> {
         fmtr.debug_struct("AllBlocksMut").finish_non_exhaustive()
     }
 }
+
+pub(crate) type InvariantLifetime<'a, T> = PhantomData<fn(&'a T) -> &'a T>;

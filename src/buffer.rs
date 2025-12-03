@@ -2,7 +2,7 @@
 
 //! A contiguous, growable array of values allocated in an `Arena`.
 
-use crate::{Arena, blocks::lock::BlockLock, handle::Handle};
+use crate::{Arena, InvariantLifetime, blocks::lock::BlockLock, handle::Handle};
 use alloc::alloc::{Allocator, Layout};
 use core::{
     borrow::{Borrow, BorrowMut},
@@ -117,12 +117,11 @@ impl<'a, T> Buffer<'a, T> {
     pub fn try_with_growable_in<A, E, F>(arena: &'a Arena<A>, f: F) -> Result<Self, E>
     where
         A: Allocator,
-        F: 'static + for<'buf> FnOnce(&'buf mut GrowableBuffer<'a, T, A>) -> Result<(), E>,
+        F: for<'buf> FnOnce(&'buf mut GrowableBuffer<'a, T, A>) -> Result<(), E>,
     {
         let curr_block_cap = arena.curr_block_capacity();
-        match curr_block_cap {
-            None => arena.force_push_new_block(),
-            _ => (),
+        if curr_block_cap.is_none() {
+            arena.force_push_new_block();
         }
 
         let offset = arena.blocks.offset_to_align_for(&Layout::new::<T>());
@@ -140,13 +139,13 @@ impl<'a, T> Buffer<'a, T> {
             NonNull::new_unchecked(data)
         };
 
-        let lock = unsafe { BlockLock::lock(arena) };
+        let lock = BlockLock::lock(arena);
 
         let mut growable_buffer = GrowableBuffer {
             backing_storage,
-            arena,
             len: 0,
             cap: 0,
+            _boo: PhantomData,
         };
 
         let result = f(&mut growable_buffer);
@@ -156,7 +155,9 @@ impl<'a, T> Buffer<'a, T> {
         match result {
             Ok(_) => {
                 unsafe {
-                    arena.blocks.bump(offset + growable_buffer.cap * mem::size_of::<T>());
+                    arena
+                        .blocks
+                        .bump(offset + growable_buffer.cap * mem::size_of::<T>());
                 }
                 Ok(growable_buffer.into_buffer())
             }
@@ -169,7 +170,7 @@ impl<'a, T> Buffer<'a, T> {
     pub fn with_growable_in<A, F>(arena: &'a Arena<A>, f: F) -> Self
     where
         A: Allocator,
-        F: 'static + for<'buf> FnOnce(&'buf mut GrowableBuffer<'a, T, A>),
+        F: for<'buf> FnOnce(&'buf mut GrowableBuffer<'a, T, A>),
     {
         enum Never {}
         let result = Self::try_with_growable_in::<A, Never, _>(arena, |buffer| {
@@ -740,10 +741,9 @@ impl<'a, T> Drop for Buffer<'a, T> {
 
 pub struct GrowableBuffer<'a, T, A: Allocator> {
     backing_storage: NonNull<[MaybeUninit<T>]>,
-    #[allow(unused)]
-    arena: &'a Arena<A>,
     len: usize,
     cap: usize,
+    _boo: InvariantLifetime<'a, Arena<A>>,
 }
 
 impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
@@ -1126,7 +1126,6 @@ impl<'a, A: Allocator> Read for GrowableBuffer<'a, u8, A> {
         self.as_slice().read(buf)
     }
 }
-
 
 #[derive(Debug)]
 pub struct TryReserveError {

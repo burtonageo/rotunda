@@ -4,7 +4,7 @@
 //!
 //! The `LinkedList` allows pushing and popping elements at either end of the list in constant time.
 
-use crate::{Arena, handle::Handle};
+use crate::{Arena, InvariantLifetime, handle::Handle};
 use alloc::alloc::{Allocator, Global, Layout};
 use core::{
     fmt,
@@ -25,10 +25,8 @@ pub struct LinkedList<'a, T: 'a, A: Allocator = Global> {
     tail: NonNull<Node<T>>,
     len: usize,
     arena: &'a Arena<A>,
-    _boo: PhantomData<(T, CovariantLifetime<'a, Arena<A>>)>,
+    _boo: PhantomData<(T, InvariantLifetime<'a, Arena<A>>)>,
 }
-
-type CovariantLifetime<'a, T> = PhantomData<fn(&'a T) -> &'a T>;
 
 // A LinkedList can be sent to other threads if the type within is
 // thread-safe - it is guaranteed to drop before the arena is

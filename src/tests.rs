@@ -10,7 +10,7 @@ use core::{mem::ManuallyDrop, panic::AssertUnwindSafe, sync::atomic::AtomicUsize
 use std::{
     alloc::{Allocator, Layout, System},
     iter::Extend,
-    mem,
+    mem, panic,
     ptr::{self, NonNull},
     rc::Rc,
     sync::atomic::{AtomicU32, Ordering as AtomicOrdering},
@@ -806,11 +806,13 @@ fn test_growable_buffer() {
     let arena = Rc::new(Arena::new());
     let arena_2 = Rc::clone(&arena);
 
-    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
         Buffer::with_growable_in(arena.as_ref(), move |buffer| {
             buffer.push(24);
             buffer.push(51);
             let handle = Handle::new_in(arena_2.as_ref(), 45);
+
+            // None of this should be executed due to the above statement `panic`ing.
             buffer.push(64);
             assert_eq!(handle, &45);
             let _handle = Handle::new_in(arena_2.as_ref(), 62);
@@ -818,4 +820,17 @@ fn test_growable_buffer() {
     }));
 
     assert!(result.is_err());
+
+    let data = alloc::vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    let buffer = Buffer::with_growable_in(&arena, |buf| {
+        buf.extend(data.iter().take(5).copied());
+    });
+
+    let buffer_2 = Buffer::with_growable_in(&arena, |buf| {
+        buf.extend(data.iter().skip(5).take(5).copied());
+    });
+
+    assert_eq!(buffer.as_slice(), [1, 2, 3, 4, 5]);
+    assert_eq!(buffer_2.as_slice(), [6, 7, 8, 9, 10]);
 }

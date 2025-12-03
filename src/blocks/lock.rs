@@ -1,21 +1,36 @@
-use core::{ptr::{self, NonNull}, usize};
-use alloc::alloc::Allocator;
 use crate::{Arena, blocks::Block};
+use alloc::alloc::Allocator;
+use core::ptr::{self, NonNull};
 
-pub(crate) const LOCKED_PTR: NonNull<Block> = unsafe {
-    NonNull::new_unchecked(ptr::without_provenance_mut(usize::MAX))
-};
+pub(crate) const LOCKED_PTR: NonNull<Block> =
+    unsafe { NonNull::new_unchecked(ptr::without_provenance_mut(usize::MAX)) };
 
 pub(crate) struct BlockLock<'a, A: Allocator> {
     arena: &'a Arena<A>,
     old_free_blocks: Option<NonNull<Block>>,
     old_used_blocks: Option<NonNull<Block>>,
     prev_in_use: usize,
-} 
+}
 
 impl<'a, A: Allocator> BlockLock<'a, A> {
     #[inline]
-    pub(crate) unsafe fn lock(arena: &'a Arena<A>) -> Self {
+    pub(crate) fn lock(arena: &'a Arena<A>) -> Self {
+        arena.blocks.ensure_unlocked();
+        unsafe { Self::lock_unchecked(arena) }
+    }
+
+    #[allow(unused)]
+    #[inline]
+    pub(crate) fn try_lock(arena: &'a Arena<A>) -> Option<Self> {
+        if !arena.blocks.is_locked() {
+            unsafe { Some(Self::lock_unchecked(arena)) }
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    unsafe fn lock_unchecked(arena: &'a Arena<A>) -> Self {
         let old_free_blocks = arena.blocks.free_blocks.replace(Some(LOCKED_PTR));
         let old_used_blocks = arena.blocks.used_blocks.replace(Some(LOCKED_PTR));
         let prev_in_use = arena.blocks.curr_block_pos().get();
