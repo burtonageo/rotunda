@@ -955,6 +955,12 @@ impl<'a, T, A: Allocator> Extend<T> for LinkedList<'a, T, A> {
     }
 }
 
+/// Immutable iterator over a `LinkedList`.
+///
+/// This method is created by the [`iter()`] method on [`LinkedList`]
+///
+/// [`iter()`]: ./struct.LinkedList.html#method.iter
+/// [`LinkedList`]: ./struct.LinkedList.html
 pub struct Iter<'a, T> {
     iter: NodeIter<T>,
     _boo: PhantomData<&'a Node<T>>,
@@ -1008,6 +1014,12 @@ impl<'a, T: fmt::Debug> fmt::Debug for Iter<'a, T> {
     }
 }
 
+/// Mutable iterator over a `LinkedList`.
+///
+/// This method is created by the [`iter_mut()`] method on [`LinkedList`]
+///
+/// [`iter()`]: ./struct.LinkedList.html#method.iter_mut
+/// [`LinkedList`]: ./struct.LinkedList.html
 pub struct IterMut<'a, T> {
     iter: NodeIter<T>,
     _boo: PhantomData<&'a mut Node<T>>,
@@ -1053,6 +1065,9 @@ impl<'a, T: fmt::Debug> fmt::Debug for IterMut<'a, T> {
     }
 }
 
+/// A by-value iterator over a [`LinkedList`].
+///
+/// [`LinkedList`]: ./struct.LinkedList.html
 pub struct IntoIter<'a, T: 'a, A: Allocator> {
     list: LinkedList<'a, T, A>,
 }
