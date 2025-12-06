@@ -254,7 +254,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// If the list is empty, this method returns `None`.
     ///
     /// ```
-    ///  use rotunda::{Arena, handle::Handle, linked_list::LinkedList};
+    ///  use rotunda::{Arena, linked_list::LinkedList};
     ///
     /// let arena = Arena::new();
     /// let mut linked_list = LinkedList::new(&arena);
@@ -271,11 +271,53 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         self.remove(self.len.saturating_sub(1))
     }
 
+    /// Insert the given `value` into the `LinkedList` at position `index`.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if `index` is greater than or equal to `self.len()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::new_from_iter_in(&arena, [0, 2]);
+    ///
+    /// list.insert(1, 1);
+    ///
+    /// assert_eq!(&list, &[0, 1, 2]);
+    /// ```
+    #[track_caller]
     #[inline]
     pub fn insert(&mut self, index: usize, value: T) {
         let _ = self.insert_mut(index, value);
     }
 
+    /// Insert the given `value` into the `LinkedList` at position `index`.
+    ///
+    /// A mutable reference to the newly-inserted `value` is returned.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if `index` is greater than or equal to `self.len()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 3, 4]);
+    ///
+    /// let item = list.insert_mut(1, 1);
+    /// *item = 2;
+    ///
+    /// assert_eq!(&list, &[1, 2, 3, 4]);
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
@@ -297,12 +339,51 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         unsafe { &mut node_ptr.as_mut().data }
     }
 
+    /// Removes the element at `index` from the list.
+    ///
+    /// The removed element is returned as a `Handle` to its value in the `Arena`.
+    /// If the `index` is out of bounds, then this method will return `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    ///
+    /// let value = list.remove(1);
+    ///
+    /// assert_eq!(value.unwrap(), &2);
+    /// assert_eq!(&list, &[1, 3, 4]);
+    /// ```
     #[inline]
     pub fn remove(&'_ mut self, index: usize) -> Option<Handle<'a, T>> {
         self.remove_node_by_index(index)
             .map(|node| unsafe { Node::into_handle(node) })
     }
 
+    /// Swap the elements at `first_index` and `second_index` in the `LinkedList`.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if either `first_index` or `second_index` are greater than
+    /// or equal to `self.len()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    ///
+    /// list.swap(0, 3);
+    ///
+    /// assert_eq!(&list, &[4, 2, 3, 1]);
+    /// ```
     #[inline]
     pub fn swap(&mut self, mut first_index: usize, mut second_index: usize) {
         assert!(first_index < self.len, "index out of bounds");
@@ -326,6 +407,21 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    /// Reverse the elements in the `LinkedList`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    ///
+    /// list.reverse();
+    ///
+    /// assert_eq!(&list, &[4, 3, 2, 1]);
+    /// ```
     #[inline]
     pub fn reverse(&mut self) {
         let len = self.len();
@@ -352,6 +448,21 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    /// Remove all elements in the `LinkedList`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    ///
+    /// list.clear();
+    ///
+    /// assert_eq!(&list, &[]);
+    /// ```
     #[inline]
     pub fn clear(&mut self) {
         let arena = self.arena;
@@ -391,6 +502,23 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         list
     }
 
+    /// Returns a reference to the first element in the `LinkedList`, or `None` if the list is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    ///
+    /// assert_eq!(list.front(), Some(&1));
+    ///
+    /// let list = LinkedList::<i32>::new(&arena);
+    ///
+    /// assert_eq!(list.front(), None);
+    /// ```
     #[must_use]
     #[inline]
     pub fn front(&self) -> Option<&T> {
@@ -401,6 +529,27 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    /// Returns a mutable reference to the first element in the `LinkedList`, or `None` if the list is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    ///
+    /// let front = list.front_mut().unwrap();
+    /// assert_eq!(front, &1);
+    /// *front = 25;
+    ///
+    /// assert_eq!(&list, &[25, 2, 3, 4]);
+    ///
+    /// let mut list = LinkedList::<i32>::new(&arena);
+    ///
+    /// assert_eq!(list.front_mut(), None);
+    /// ```
     #[must_use]
     #[inline]
     pub fn front_mut(&mut self) -> Option<&mut T> {
@@ -411,6 +560,23 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    /// Returns a reference to the last element in the `LinkedList`, or `None` if the list is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    ///
+    /// assert_eq!(list.back(), Some(&4));
+    ///
+    /// let list = LinkedList::<i32>::new(&arena);
+    ///
+    /// assert_eq!(list.back(), None);
+    /// ```
     #[must_use]
     #[inline]
     pub fn back(&self) -> Option<&T> {
@@ -421,6 +587,27 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    /// Returns a mutable reference to the last element in the `LinkedList`, or `None` if the list is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    ///
+    /// let back = list.back_mut().unwrap();
+    /// assert_eq!(back, &4);
+    /// *back = 25;
+    ///
+    /// assert_eq!(&list, &[1, 2, 3, 25]);
+    ///
+    /// let mut list = LinkedList::<i32>::new(&arena);
+    ///
+    /// assert_eq!(list.back_mut(), None);
+    /// ```
     #[must_use]
     #[inline]
     pub fn back_mut(&mut self) -> Option<&mut T> {
