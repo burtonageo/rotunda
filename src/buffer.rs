@@ -45,7 +45,7 @@ macro_rules! buf {
 /// that,  new `Buffer` will have to be allocated with a larger given capacity.
 ///
 /// See the [module documentation] for more informtion.
-/// 
+///
 /// [`capacity()`]: ./struct.Buffer.html#method.capacity
 /// [module documentation]: ./index.html
 pub struct Buffer<'a, T> {
@@ -64,7 +64,7 @@ impl<'a, T> Buffer<'a, T> {
     /// Creates a new `Buffer` containing the contents of `iter`.
     ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use rotunda::{Arena, buffer::Buffer};
     ///
@@ -86,6 +86,20 @@ impl<'a, T> Buffer<'a, T> {
         buffer
     }
 
+    /// Create a new empty `Buffer` with the capacity to store up to `capacity` elements,
+    /// backed by the given `Arena`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let buffer = Buffer::<i32>::with_capacity_in(&arena, 10);
+    /// assert!(buffer.is_empty());
+    /// assert_eq!(buffer.capacity(), 10);
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
@@ -183,6 +197,18 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    /// Create a new empty `Buffer` not backed by any `Arena`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::buffer::Buffer;
+    ///
+    /// let buffer = Buffer::<u8>::new();
+    ///
+    /// assert_eq!(buffer.capacity(), 0);
+    /// assert_eq!(&buffer, &[]);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn new() -> Self {
@@ -209,6 +235,19 @@ impl<'a, T> Buffer<'a, T> {
         (handle, len)
     }
 
+    /// Access the contents of the `Buffer` as a slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// assert_eq!(buffer.as_slice(), &[1, 2, 3, 4, 5]);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn as_slice(&self) -> &[T] {
@@ -216,6 +255,25 @@ impl<'a, T> Buffer<'a, T> {
         unsafe { slice::from_raw_parts(ptr as *const T, self.len) }
     }
 
+    /// Access the contents of the `Buffer` as a mutable slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// {
+    ///     let slice = buffer.as_mut_slice();
+    ///     slice[0] = 6;
+    ///     slice[4] = 6;
+    /// }
+    ///
+    /// assert_eq!(buffer.as_slice(), &[6, 2, 3, 4, 6]);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn as_mut_slice(&mut self) -> &mut [T] {
@@ -223,6 +281,26 @@ impl<'a, T> Buffer<'a, T> {
         unsafe { slice::from_raw_parts_mut(ptr as *mut T, self.len) }
     }
 
+    /// Append the given `value` to the end of the `Buffer`.
+    ///
+    /// # Panics
+    ///
+    /// If the `Buffer` contains `capacity()` items, then this method will panic.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 10);
+    /// buffer.push(21);
+    /// buffer.push(512);
+    /// buffer.push(999);
+    ///
+    /// assert_eq!(&buffer, &[21, 512, 999]);
+    /// ```
     #[track_caller]
     #[inline]
     pub const fn push(&mut self, value: T) {
@@ -235,26 +313,27 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
-    #[inline]
-    pub fn try_extend<I: IntoIterator<Item = T>>(
-        &mut self,
-        iter: I,
-    ) -> Result<(), TryExtendError<I>> {
-        let mut iter = iter.into_iter();
-        while let Some(item) = iter.next() {
-            match self.try_push(item) {
-                Ok(()) => (),
-                Err(item) => {
-                    return Err(TryExtendError {
-                        curr: item,
-                        rest: iter,
-                    });
-                }
-            }
-        }
-        Ok(())
-    }
-
+    /// Attempt to push the given `value` to the end of the `Buffer`.
+    ///
+    /// If the `Buffer` already contains `capacity()` items, then the original
+    /// `value` will be returned as an error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 2);
+    ///
+    /// buffer.try_push(42).unwrap();
+    /// buffer.try_push(58).unwrap();
+    ///
+    /// assert_eq!(buffer.try_push(100), Err(100));
+    /// 
+    /// assert_eq!(&buffer, &[42, 58]);
+    /// ```
     #[inline]
     pub const fn try_push(&mut self, value: T) -> Result<(), T> {
         if self.is_full() {
@@ -282,6 +361,26 @@ impl<'a, T> Buffer<'a, T> {
         }
 
         self.len += 1;
+    }
+
+    #[inline]
+    pub fn try_extend<I: IntoIterator<Item = T>>(
+        &mut self,
+        iter: I,
+    ) -> Result<(), TryExtendError<I>> {
+        let mut iter = iter.into_iter();
+        while let Some(item) = iter.next() {
+            match self.try_push(item) {
+                Ok(()) => (),
+                Err(item) => {
+                    return Err(TryExtendError {
+                        curr: item,
+                        rest: iter,
+                    });
+                }
+            }
+        }
+        Ok(())
     }
 
     #[inline]
