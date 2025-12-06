@@ -845,9 +845,13 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
 impl<'a, T, A: Allocator> Drop for LinkedList<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
-        for item in self {
+        for node in NodeIter::new(self) {
             unsafe {
-                ptr::drop_in_place(item);
+                ptr::drop_in_place(
+                    node.map_addr(|addr| addr.saturating_add(offset_of!(Node<T>, data)))
+                        .cast::<T>()
+                        .as_ptr(),
+                );
             }
         }
     }
