@@ -842,7 +842,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     }
 }
 
-impl<'a, T: 'a, A: Allocator> Drop for LinkedList<'a, T, A> {
+impl<'a, T, A: Allocator> Drop for LinkedList<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
         for item in self {
@@ -1076,9 +1076,7 @@ impl<'a, T: 'a, A: Allocator> Iterator for IntoIter<'a, T, A> {
     type Item = Handle<'a, T>;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.list
-            .remove_node_by_index(0)
-            .map(|node| unsafe { Node::into_handle(node) })
+        self.list.pop_front()
     }
 
     #[inline]
@@ -1100,9 +1098,7 @@ impl<'a, T: 'a, A: Allocator> FusedIterator for IntoIter<'a, T, A> {}
 impl<'a, T: 'a, A: Allocator> DoubleEndedIterator for IntoIter<'a, T, A> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.list
-            .remove_node_by_index(self.list.len.saturating_sub(1))
-            .map(|node| unsafe { Node::into_handle(node) })
+        self.list.pop_back()
     }
 }
 
