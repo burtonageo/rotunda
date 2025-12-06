@@ -936,7 +936,7 @@ impl<'a, T, A: Allocator> IntoIterator for &'_ mut LinkedList<'a, T, A> {
     }
 }
 
-impl<'a, T: Unpin, A: Allocator> IntoIterator for LinkedList<'a, T, A> {
+impl<'a, T, A: Allocator> IntoIterator for LinkedList<'a, T, A> {
     type IntoIter = IntoIter<'a, T, A>;
     type Item = Handle<'a, T>;
     #[inline]
@@ -1183,6 +1183,8 @@ impl<T> DoubleEndedIterator for NodeIter<T> {
         Some(tail)
     }
 }
+
+impl<T> FusedIterator for NodeIter<T> {}
 
 impl<T: fmt::Debug> fmt::Debug for NodeIter<T> {
     #[inline]
