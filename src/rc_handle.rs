@@ -189,9 +189,7 @@ impl<'a, T: Copy> RcHandle<'a, [T]> {
         let mut hndl = RcHandle::new_slice_uninit_in(arena, slice_len);
         let slots = unsafe { RcHandle::get_mut_unchecked(&mut hndl) };
 
-        for slot in slots {
-            slot.write(value);
-        }
+        slots.fill(MaybeUninit::new(value));
 
         unsafe { RcHandle::assume_init_slice(hndl) }
     }
