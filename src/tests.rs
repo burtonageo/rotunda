@@ -708,7 +708,7 @@ fn test_list_split() {
     const LIST_LEN: usize = 25;
     for i in 0..=LIST_LEN {
         arena.with_scope(move |arena| {
-            let mut list = LinkedList::new_from_iter_in(arena, 1..=LIST_LEN);
+            let mut list = LinkedList::from_iter_in(arena, 1..=LIST_LEN);
             let end = list.split_off(i);
 
             if i > 0 {
@@ -739,7 +739,7 @@ fn test_list_pop() {
 fn test_list_retain() {
     let arena = Arena::new();
 
-    let mut list = LinkedList::new_from_iter_in(&arena, 0..10);
+    let mut list = LinkedList::from_iter_in(&arena, 0..10);
     list.retain(|elem| elem % 2 == 0);
 
     assert_eq!(list, [0, 2, 4, 6, 8]);

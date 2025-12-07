@@ -65,12 +65,12 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// use rotunda::{Arena, linked_list::LinkedList};
     /// let arena = Arena::new();
     ///
-    /// let linked_list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4, 5].into_iter());
+    /// let linked_list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4, 5].into_iter());
     /// assert_eq!(linked_list, &[1, 2, 3, 4, 5]);
     /// ```
     #[must_use]
     #[inline]
-    pub fn new_from_iter_in<I: IntoIterator<Item = T>>(arena: &'a Arena<A>, iter: I) -> Self {
+    pub fn from_iter_in<I: IntoIterator<Item = T>>(arena: &'a Arena<A>, iter: I) -> Self {
         let mut list = Self::new(arena);
         list.extend(iter);
         list
@@ -321,7 +321,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut list = LinkedList::new_from_iter_in(&arena, [0, 2]);
+    /// let mut list = LinkedList::from_iter_in(&arena, [0, 2]);
     ///
     /// list.insert(1, 1);
     ///
@@ -348,7 +348,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 3, 4]);
+    /// let mut list = LinkedList::from_iter_in(&arena, [1, 3, 4]);
     ///
     /// let item = list.insert_mut(1, 1);
     /// assert_eq!(*item, 1);
@@ -390,7 +390,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    /// let mut list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4]);
     ///
     /// let value = list.remove(1);
     ///
@@ -417,7 +417,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    /// let mut list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4]);
     ///
     /// list.swap(0, 3);
     ///
@@ -455,7 +455,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    /// let mut list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4]);
     ///
     /// list.reverse();
     ///
@@ -496,7 +496,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    /// let mut list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4]);
     ///
     /// list.clear();
     ///
@@ -574,7 +574,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    /// let list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4]);
     ///
     /// assert_eq!(list.front(), Some(&1));
     ///
@@ -601,7 +601,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    /// let mut list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4]);
     ///
     /// let front = list.front_mut().unwrap();
     /// assert_eq!(front, &1);
@@ -632,7 +632,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    /// let list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4]);
     ///
     /// assert_eq!(list.back(), Some(&4));
     ///
@@ -659,7 +659,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4]);
+    /// let mut list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4]);
     ///
     /// let back = list.back_mut().unwrap();
     /// assert_eq!(back, &4);
@@ -694,7 +694,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4, 5]);
+    /// let list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4, 5]);
     ///
     /// assert_eq!(list.get(2), Some(&3));
     /// assert_eq!(list.get(4), Some(&5));
@@ -720,7 +720,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4, 5]);
+    /// let mut list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4, 5]);
     ///
     /// assert_eq!(list.get_mut(2).unwrap(), &3);
     /// assert_eq!(list.get_mut(4).unwrap(), &5);
@@ -749,7 +749,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut list = LinkedList::new_from_iter_in(&arena, (0..=10usize));
+    /// let mut list = LinkedList::from_iter_in(&arena, (0..=10usize));
     ///
     /// assert_eq!(&list, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     ///
@@ -791,7 +791,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let list = LinkedList::new_from_iter_in(&arena, [5, 6, 7]);
+    /// let list = LinkedList::from_iter_in(&arena, [5, 6, 7]);
     ///
     /// let mut iter = list.iter();
     ///
@@ -818,7 +818,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut list = LinkedList::new_from_iter_in(&arena, [5, 6, 7]);
+    /// let mut list = LinkedList::from_iter_in(&arena, [5, 6, 7]);
     ///
     /// let mut iter = list.iter_mut();
     ///
@@ -1246,7 +1246,7 @@ impl<'a, T: 'a, A: Allocator> IntoIter<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4, 5]);
+    /// let list = LinkedList::from_iter_in(&arena, [1, 2, 3, 4, 5]);
     ///
     /// let mut iter = list.into_iter();
     ///
