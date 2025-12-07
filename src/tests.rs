@@ -6,11 +6,11 @@ use crate::{
     rc_handle::{RcHandle, WeakHandle},
     string_buffer::StringBuffer,
 };
-use core::{mem::ManuallyDrop, panic::AssertUnwindSafe, sync::atomic::AtomicUsize};
+use core::{mem::ManuallyDrop, sync::atomic::AtomicUsize};
 use std::{
     alloc::{Allocator, Layout, System},
     iter::Extend,
-    mem, panic,
+    mem,
     ptr::{self, NonNull},
     rc::Rc,
     sync::atomic::{AtomicU32, Ordering as AtomicOrdering},
@@ -803,24 +803,6 @@ fn test_growable_buffer() {
 
     assert_eq!(buffer.capacity(), 2);
 
-    let arena = Rc::new(Arena::new());
-    let arena_2 = Rc::clone(&arena);
-
-    let result = panic::catch_unwind(AssertUnwindSafe(|| {
-        Buffer::with_growable_in(arena.as_ref(), move |buffer| {
-            buffer.push(24);
-            buffer.push(51);
-            let handle = Handle::new_in(arena_2.as_ref(), 45);
-
-            // None of this should be executed due to the above statement `panic`ing.
-            buffer.push(64);
-            assert_eq!(handle, &45);
-            let _handle = Handle::new_in(arena_2.as_ref(), 62);
-        })
-    }));
-
-    assert!(result.is_err());
-
     let data = alloc::vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
     let buffer = Buffer::with_growable_in(&arena, |buf| {
@@ -833,4 +815,21 @@ fn test_growable_buffer() {
 
     assert_eq!(buffer.as_slice(), [1, 2, 3, 4, 5]);
     assert_eq!(buffer_2.as_slice(), [6, 7, 8, 9, 10]);
+
+#[test]
+#[should_panic]
+fn test_growable_buffer_modify_arena() {
+    let arena = Rc::new(Arena::new());
+    let arena_2 = Rc::clone(&arena);
+
+    let _buffer = Buffer::with_growable_in(arena.as_ref(), move |buffer| {
+        buffer.push(24);
+        buffer.push(51);
+        let handle = Handle::new_in(arena_2.as_ref(), 45);
+
+        // None of this should be executed due to the above statement `panic`ing.
+        buffer.push(64);
+        assert_eq!(handle, &45);
+        let _handle = Handle::new_in(arena_2.as_ref(), 62);
+    });
 }
