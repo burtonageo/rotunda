@@ -816,6 +816,14 @@ fn test_growable_buffer() {
     assert_eq!(buffer.as_slice(), [1, 2, 3, 4, 5]);
     assert_eq!(buffer_2.as_slice(), [6, 7, 8, 9, 10]);
 
+    let arena = Arena::with_block_size(400 * mem::size_of::<u32>());
+    let _buffer: Buffer<'_, u32> = Buffer::with_growable_in(&arena, |buf| {
+        assert!(!buf.is_full());
+        buf.extend(0..400);
+        assert!(buf.is_full());
+    });
+}
+
 #[test]
 #[should_panic]
 fn test_growable_buffer_modify_arena() {

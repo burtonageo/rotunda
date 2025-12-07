@@ -867,7 +867,7 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     #[inline]
     pub const fn has_capacity(&self, required_capacity: usize) -> bool {
         let cap = self.capacity();
-        cap - self.len > required_capacity
+        cap - self.len >= required_capacity
     }
 
     #[inline]
