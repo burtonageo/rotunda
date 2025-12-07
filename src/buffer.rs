@@ -108,6 +108,28 @@ impl<'a, T> Buffer<'a, T> {
         unsafe { Self::from_raw_parts(handle, 0) }
     }
 
+    /// Create a new `Buffer` from the given function.
+    ///
+    /// The function `f()` will be called `len` times with the index of each
+    /// element as the parameter, and the results will be collected into
+    /// the returned `Buffer`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle, buffer::Buffer};
+    /// let arena = Arena::new();
+    ///
+    /// let buffer = Buffer::from_fn_in(&arena, 5, |elem| {
+    ///     Handle::new_str_in(&arena, &format!("{}", elem))
+    /// });
+    ///
+    /// assert_eq!(&buffer[0], "0");
+    /// assert_eq!(&buffer[1], "1");
+    /// assert_eq!(&buffer[2], "2");
+    /// assert_eq!(&buffer[3], "3");
+    /// assert_eq!(&buffer[4], "4");
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
@@ -846,23 +868,100 @@ pub struct GrowableBuffer<'a, T, A: Allocator> {
 }
 
 impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
+    /// Returns the maximum capacity available in the `GrowableBuffer`.
+    ///
+    /// This is the total spare capacity available in the current block.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::with_block_size(400);
+    ///
+    /// let data = arena.alloc_ref::<[u8; 4]>([0; 4]);
+    ///
+    /// let buffer: Buffer<'_, u8> = Buffer::with_growable_in(&arena, |buf| {
+    ///     assert_eq!(buf.max_capacity(), 396);
+    ///     # buf.push(0u8);
+    /// });
+    /// # let _ = (data, buffer);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn max_capacity(&self) -> usize {
         self.backing_storage.len()
     }
 
+    /// Returns the current capacity availble in the `GrowableBuffer`.
+    ///
+    /// When the outer `Buffer` is initialized, it will have `capacity()` space
+    /// reserved for it in the `Arena`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::with_block_size(400);
+    ///
+    /// let buffer: Buffer<'_, u8> = Buffer::with_growable_in(&arena, |buf| {
+    ///     assert_eq!(buf.capacity(), 0);
+    ///     buf.reserve(21);
+    ///     assert_eq!(buf.capacity(), 21);
+    /// });
+    ///
+    /// assert_eq!(buffer.capacity(), 21);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn capacity(&self) -> usize {
         self.cap
     }
 
+    /// Returns `true` if the current [`len()`] is equal to [`max_capacity()`].
+    ///
+    /// If this is `true`, it means that no additional space can be reserved in the
+    /// `GrowableBuffer`, and no additional values can be pushed into it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::with_block_size(400);
+    ///
+    /// let buffer: Buffer<'_, u8> = Buffer::with_growable_in(&arena, |buf| {
+    ///     assert!(!buf.is_full());
+    ///     buf.extend_from_slice(&[0u8; 400]);
+    ///     assert_eq!(buf, &[0; 400]);
+    ///     assert!(buf.is_full());
+    /// });
+    /// # let _ = buffer;
+    /// ```
     #[inline]
     pub const fn is_full(&self) -> bool {
         self.len == self.max_capacity()
     }
 
+    /// Checks whether the `GrowableBuffer` has the capacity for an additional `required_capacity`
+    /// items.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::with_block_size(18);
+    ///
+    /// let buffer: Buffer<'_, u64> = Buffer::with_growable_in(&arena, |buf| {
+    ///     buf.reserve(2);
+    ///     assert!(buf.has_capacity(2));
+    ///     buf.push(21);
+    ///     assert!(!buf.has_capacity(2));
+    /// });
+    /// # assert_eq!(&buffer, &[21]);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn has_capacity(&self, required_capacity: usize) -> bool {
