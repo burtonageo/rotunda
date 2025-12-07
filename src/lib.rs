@@ -7,9 +7,12 @@
     derive_coerce_pointee,
     ptr_metadata
 )]
-#![warn(missing_docs, clippy::empty_line_after_doc_comments)]
+#![warn(
+    missing_docs,
+    clippy::empty_line_after_doc_comments,
+    clippy::missing_safety_doc
+)]
 #![deny(unsafe_attr_outside_unsafe, unsafe_op_in_unsafe_fn)]
-#![warn(clippy::missing_safety_doc)]
 
 //! This module contains types for using the arena allocation strategy. See the [`Arena`] type
 //! for more information on how to use arena allocation.
@@ -477,7 +480,7 @@ impl<A: Allocator> Arena<A> {
     /// arena.force_push_new_block();
     ///
     /// assert!(arena.has_block_capacity(24));
-    /// 
+    ///
     /// let layout = Layout::new::<[u8; 5]>();
     /// arena.alloc_raw(layout);
     ///
@@ -489,7 +492,9 @@ impl<A: Allocator> Arena<A> {
             return false;
         }
 
-        self.curr_block_capacity().map(|cap| cap >= block_capacity_bytes).unwrap_or_default()
+        self.curr_block_capacity()
+            .map(|cap| cap >= block_capacity_bytes)
+            .unwrap_or_default()
     }
 
     /// Checks whether the current block has the capacity to allocate up to `block_capacity_bytes`,
@@ -505,7 +510,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// let arena = Arena::with_block_size(25);
     /// assert_eq!(arena.curr_block_capacity(), None);
-    /// 
+    ///
     /// arena.ensure_block_capacity(20);
     /// assert_eq!(arena.curr_block_capacity(), Some(25));
     ///
@@ -520,7 +525,7 @@ impl<A: Allocator> Arena<A> {
         if self.block_size() < block_capacity_bytes {
             return;
         }
-        
+
         if !self.has_block_capacity(block_capacity_bytes) {
             self.force_push_new_block();
         }
