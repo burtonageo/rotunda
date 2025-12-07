@@ -1,4 +1,4 @@
-#![allow(missing_docs, clippy::missing_safety_doc)]
+#![warn(missing_docs, clippy::missing_safety_doc)]
 
 //! A doubly-linked owned list of nodes.
 //!
@@ -73,6 +73,43 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     pub fn new_from_iter_in<I: IntoIterator<Item = T>>(arena: &'a Arena<A>, iter: I) -> Self {
         let mut list = Self::new(arena);
         list.extend(iter);
+        list
+    }
+
+    /// Create a new `LinkedList` from the given function.
+    ///
+    /// The function `f()` will be called `len` times with the index of each
+    /// element as the parameter, and the results will be collected into
+    /// the returned `LinkedList`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle, linked_list::LinkedList};
+    /// let arena = Arena::new();
+    ///
+    /// let linked_list = LinkedList::from_fn_in(&arena, 5, |elem| {
+    ///     Handle::new_str_in(&arena, &format!("{}", elem))
+    /// });
+    ///
+    /// assert_eq!(linked_list.get(0).unwrap(), "0");
+    /// assert_eq!(linked_list.get(1).unwrap(), "1");
+    /// assert_eq!(linked_list.get(2).unwrap(), "2");
+    /// assert_eq!(linked_list.get(3).unwrap(), "3");
+    /// assert_eq!(linked_list.get(4).unwrap(), "4");
+    /// ```
+    #[track_caller]
+    #[must_use]
+    #[inline]
+    pub fn from_fn_in<F: FnMut(usize) -> T>(
+        arena: &'a Arena<A>,
+        len: usize,
+        mut f: F,
+    ) -> Self {
+        let mut list = LinkedList::new(arena);
+        for i in 0..len {
+            list.push_back(f(i));
+        }
         list
     }
 
@@ -314,6 +351,8 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 3, 4]);
     ///
     /// let item = list.insert_mut(1, 1);
+    /// assert_eq!(*item, 1);
+    ///
     /// *item = 2;
     ///
     /// assert_eq!(&list, &[1, 2, 3, 4]);
@@ -469,6 +508,30 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         let _ = mem::replace(self, Self::new(arena));
     }
 
+    /// Splits the list at `index`.
+    /// 
+    /// Elements after `index` are in the returned `LinkedList`,
+    /// while elements before `index` are retained in `self`.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if `index` is greater than or equal to
+    /// `self.len()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::from_fn_in(&arena, 5, |idx| idx * 2);
+    ///
+    /// let rhs = list.split_off(3);
+    ///
+    /// assert_eq!(&list, &[0, 2, 4]);
+    /// assert_eq!(&rhs, &[6, 8]);
+    /// ```
     #[inline]
     pub fn split_off(&mut self, index: usize) -> LinkedList<'a, T, A> {
         let len = self.len;
@@ -618,6 +681,25 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    /// Returns a reference to the `index`th node of the `LinkedList` if it exists,
+    /// or `None` if it is out of bounds.
+    ///
+    /// This method may iterate over the `LinkedList` from the end if `index` is in the second
+    /// half of the `LinkedList`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// assert_eq!(list.get(2), Some(&3));
+    /// assert_eq!(list.get(4), Some(&5));
+    /// assert_eq!(list.get(6), None);
+    /// ```
     #[must_use]
     #[inline]
     pub fn get(&'_ self, index: usize) -> Option<&'_ T> {
@@ -625,6 +707,29 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             .map(|node| unsafe { &node.as_ref().data })
     }
 
+    /// Returns a mutable reference to the `index`th node of the `LinkedList` if it exists,
+    /// or `None` if it is out of bounds.
+    ///
+    /// This method may iterate over the `LinkedList` from the end if `index` is in the second
+    /// half of the `LinkedList`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// assert_eq!(list.get_mut(2).unwrap(), &3);
+    /// assert_eq!(list.get_mut(4).unwrap(), &5);
+    /// assert_eq!(list.get_mut(6), None);
+    ///
+    /// *list.get_mut(0).unwrap() = 6;
+    ///
+    /// assert_eq!(&list, &[6, 2, 3, 4, 5]);
+    /// ```
     #[must_use]
     #[inline]
     pub fn get_mut(&'_ mut self, index: usize) -> Option<&'_ mut T> {
@@ -632,6 +737,25 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             .map(|mut node| unsafe { &mut node.as_mut().data })
     }
 
+    /// Retains only the elements specified by `pred`.
+    ///
+    /// Removes all elements where `pred(element)` returns `false`. This method
+    /// operates in-place, and preserves the order of the `LinkedList`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::new_from_iter_in(&arena, (0..=10usize));
+    ///
+    /// assert_eq!(&list, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    ///
+    /// list.retain(|elem| elem.is_multiple_of(2));
+    /// assert_eq!(&list, &[0, 2, 4, 6, 8, 10]);
+    /// ```
     #[track_caller]
     #[inline]
     pub fn retain<F: FnMut(&T) -> bool>(&mut self, mut pred: F) {
@@ -658,6 +782,24 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    /// Returns an immutable iterator over the elements of the `LinkedList`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let list = LinkedList::new_from_iter_in(&arena, [5, 6, 7]);
+    ///
+    /// let mut iter = list.iter();
+    ///
+    /// assert_eq!(iter.next(), Some(&5));
+    /// assert_eq!(iter.next_back(), Some(&7));
+    /// assert_eq!(iter.next(), Some(&6));
+    /// assert_eq!(iter.next(), None);
+    /// ```
     #[must_use]
     #[inline]
     pub fn iter(&self) -> Iter<'a, T> {
@@ -667,6 +809,26 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    /// Returns a mutable iterator over the elements of the `LinkedList`.
+    /// 
+    /// # Example
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::new_from_iter_in(&arena, [5, 6, 7]);
+    ///
+    /// let mut iter = list.iter_mut();
+    ///
+    /// assert_eq!(iter.next().unwrap(), &5);
+    /// assert_eq!(iter.next_back().unwrap(), &7);
+    /// *iter.next().unwrap() = 8;
+    /// assert_eq!(iter.next(), None);
+    ///
+    /// assert_eq!(&list, &[5, 8, 7]);
+    /// ```
     #[must_use]
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<'a, T> {
@@ -1075,6 +1237,27 @@ pub struct IntoIter<'a, T: 'a, A: Allocator> {
 }
 
 impl<'a, T: 'a, A: Allocator> IntoIter<'a, T, A> {
+    /// Consumes the `IntoIter`, returning the underlying `LinkedList`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let list = LinkedList::new_from_iter_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// let mut iter = list.into_iter();
+    ///
+    /// let _ = iter.next();
+    /// let _ = iter.next();
+    /// let _ = iter.next_back();
+    ///
+    /// let list = iter.into_list();
+    ///
+    /// assert_eq!(&list, &[3, 4]);
+    /// ```
     #[must_use]
     #[inline]
     pub fn into_list(self) -> LinkedList<'a, T, A> {
