@@ -39,6 +39,18 @@ const _: () = assert!(mem::size_of::<Option<RcHandle<()>>>() == mem::size_of::<H
 const _: () = assert!(mem::align_of::<RcHandle<()>>() == mem::align_of::<NonNull<()>>());
 
 impl<'a, T> RcHandle<'a, T> {
+    /// Create a new `RcHandle` containing the given `value`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc_handle = RcHandle::new_in(&arena, 25);
+    /// assert_eq!(&rc_handle, &25);
+    /// ```
     #[must_use]
     #[inline]
     pub fn new_in<A: Allocator>(arena: &'a Arena<A>, value: T) -> Self {
@@ -46,6 +58,18 @@ impl<'a, T> RcHandle<'a, T> {
         unsafe { RcHandle::init(handle, value) }
     }
 
+    /// Create a new `RcHandle` containing the return value of the given function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc_handle = RcHandle::new_with(&arena, || "Hello!");
+    /// assert_eq!(&rc_handle, &"Hello!");
+    /// ```
     #[must_use]
     #[inline]
     pub fn new_with<A: Allocator, F: FnOnce() -> T>(arena: &'a Arena<A>, f: F) -> Self {
