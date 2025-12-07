@@ -1025,6 +1025,39 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     }
 }
 
+impl<'a, T: Copy, A: Allocator> GrowableBuffer<'a, T, A> {
+    #[track_caller]
+    pub fn extend_from_slice_copy(&mut self, slice: &[T]) {
+        let len = slice.len();
+
+        self.ensure_capacity(len).expect("could not reserve");
+
+        let slice = unsafe {
+            let data = slice.as_ptr().cast::<MaybeUninit<T>>();
+            slice::from_raw_parts(data, len)
+        };
+
+        self.spare_capacity_mut()[..len].copy_from_slice(slice);
+
+        unsafe {
+            self.set_len(self.len() + len);
+        }
+    }
+}
+
+impl<'a, T: Clone, A: Allocator> GrowableBuffer<'a, T, A> {
+    #[track_caller]
+    pub fn extend_from_slice(&mut self, slice: &[T]) {
+        let len = slice.len();
+
+        self.ensure_capacity(len).expect("could not reserve");
+
+        for item in slice {
+            self.push(item.clone());
+        }
+    }
+}
+
 impl<'a, T, A: Allocator> Deref for GrowableBuffer<'a, T, A> {
     type Target = [T];
     #[inline]
