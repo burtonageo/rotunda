@@ -551,8 +551,9 @@ impl<'a, T> Buffer<'a, T> {
         unsafe {
             // Pre-set the length to `0` so that contents are inaccessible
             // if there is a `panic!()` while dropping.
+            let old_len = self.len;
             self.set_len(0);
-            self.drop_initialized_contents(..);
+            self.drop_initialized_contents(..old_len);
         }
     }
 
@@ -940,6 +941,9 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     /// });
     /// # let _ = buffer;
     /// ```
+    ///
+    /// [`len()`]: ./struct.GrowableBuffer.html#method.len
+    /// [`max_capacity()`]: ./struct.GrowableBuffer.html#method.max_capacity
     #[inline]
     pub const fn is_full(&self) -> bool {
         self.len == self.max_capacity()
