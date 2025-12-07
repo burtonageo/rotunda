@@ -846,12 +846,10 @@ impl<'a, T, A: Allocator> Drop for LinkedList<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
         for node in NodeIter::new(self) {
+            let data = Node::data_ptr(node).as_ptr();
+
             unsafe {
-                ptr::drop_in_place(
-                    node.map_addr(|addr| addr.saturating_add(offset_of!(Node<T>, data)))
-                        .cast::<T>()
-                        .as_ptr(),
-                );
+                ptr::drop_in_place(data);
             }
         }
     }
@@ -1239,6 +1237,13 @@ struct Node<T> {
 }
 
 impl<T> Node<T> {
+    #[must_use]
+    #[inline]
+    fn data_ptr(this: NonNull<Node<T>>) -> NonNull<T> {
+        this.map_addr(|addr| addr.saturating_add(offset_of!(Node<T>, data)))
+            .cast::<T>()
+    }
+
     #[must_use]
     #[inline]
     unsafe fn into_handle<'a>(node: NonNull<Node<T>>) -> Handle<'a, T> {
