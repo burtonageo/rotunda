@@ -223,7 +223,7 @@ impl<'a, T: Default> RcHandle<'a, T> {
     #[must_use]
     #[inline]
     pub fn new_default_in<A: Allocator>(arena: &'a Arena<A>) -> Self {
-        RcHandle::new_in(arena, Default::default())
+        RcHandle::new_with(arena, Default::default)
     }
 }
 

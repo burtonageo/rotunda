@@ -559,10 +559,11 @@ impl<'a, T> Buffer<'a, T> {
     #[track_caller]
     #[inline]
     pub fn truncate(&mut self, new_len: usize) {
-        if new_len < self.len() {
+        let old_len = self.len();
+        if new_len < old_len {
             unsafe {
                 self.set_len(new_len);
-                self.drop_initialized_contents(new_len..);
+                self.drop_initialized_contents(new_len..old_len);
             }
         }
     }
