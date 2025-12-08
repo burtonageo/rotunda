@@ -101,11 +101,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn from_fn_in<F: FnMut(usize) -> T>(
-        arena: &'a Arena<A>,
-        len: usize,
-        mut f: F,
-    ) -> Self {
+    pub fn from_fn_in<F: FnMut(usize) -> T>(arena: &'a Arena<A>, len: usize, mut f: F) -> Self {
         let mut list = LinkedList::new(arena);
         for i in 0..len {
             list.push_back(f(i));
@@ -509,7 +505,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     }
 
     /// Splits the list at `index`.
-    /// 
+    ///
     /// Elements after `index` are in the returned `LinkedList`,
     /// while elements before `index` are retained in `self`.
     ///
@@ -586,7 +582,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     pub fn front(&self) -> Option<&T> {
         if !self.is_empty() {
-            unsafe { Some(&self.head.as_ref().data) }
+            unsafe { Some(Node::data_ptr(self.head).as_ref()) }
         } else {
             None
         }
@@ -617,7 +613,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     pub fn front_mut(&mut self) -> Option<&mut T> {
         if !self.is_empty() {
-            unsafe { Some(&mut self.head.as_mut().data) }
+            unsafe { Some(Node::data_ptr(self.head).as_mut()) }
         } else {
             None
         }
@@ -644,7 +640,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     pub fn back(&self) -> Option<&T> {
         if !self.is_empty() {
-            unsafe { Some(&self.tail.as_ref().data) }
+            unsafe { Some(Node::data_ptr(self.tail).as_ref()) }
         } else {
             None
         }
@@ -675,7 +671,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     pub fn back_mut(&mut self) -> Option<&mut T> {
         if !self.is_empty() {
-            unsafe { Some(&mut self.tail.as_mut().data) }
+            unsafe { Some(Node::data_ptr(self.tail).as_mut()) }
         } else {
             None
         }
@@ -704,7 +700,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     pub fn get(&'_ self, index: usize) -> Option<&'_ T> {
         self.get_node(index)
-            .map(|node| unsafe { &node.as_ref().data })
+            .map(|node| unsafe { Node::data_ptr(node).as_ref() })
     }
 
     /// Returns a mutable reference to the `index`th node of the `LinkedList` if it exists,
@@ -810,7 +806,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     }
 
     /// Returns a mutable iterator over the elements of the `LinkedList`.
-    /// 
+    ///
     /// # Example
     ///
     /// ```
@@ -1134,7 +1130,9 @@ impl<'a, T> Iterator for Iter<'a, T> {
     type Item = &'a T;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|node| unsafe { &node.as_ref().data })
+        self.iter
+            .next()
+            .map(|node| unsafe { Node::data_ptr(node).as_ref() })
     }
 
     #[inline]
@@ -1157,7 +1155,7 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.iter
             .next_back()
-            .map(|node| unsafe { &node.as_ref().data })
+            .map(|node| unsafe { Node::data_ptr(node).as_ref() })
     }
 }
 
@@ -1182,7 +1180,7 @@ impl<'a, T: fmt::Debug> fmt::Debug for Iter<'a, T> {
 ///
 /// This method is created by the [`iter_mut()`] method on [`LinkedList`]
 ///
-/// [`iter()`]: ./struct.LinkedList.html#method.iter_mut
+/// [`iter_mut()`]: ./struct.LinkedList.html#method.iter_mut
 /// [`LinkedList`]: ./struct.LinkedList.html
 pub struct IterMut<'a, T> {
     iter: NodeIter<T>,
@@ -1195,7 +1193,7 @@ impl<'a, T> Iterator for IterMut<'a, T> {
     fn next(&mut self) -> Option<Self::Item> {
         self.iter
             .next()
-            .map(|mut node| unsafe { &mut node.as_mut().data })
+            .map(|node| unsafe { Node::data_ptr(node).as_mut() })
     }
 
     #[inline]
@@ -1218,7 +1216,7 @@ impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.iter
             .next_back()
-            .map(|mut node| unsafe { &mut node.as_mut().data })
+            .map(|node| unsafe { Node::data_ptr(node).as_mut() })
     }
 }
 
