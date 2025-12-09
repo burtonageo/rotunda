@@ -529,6 +529,15 @@ fn test_buffer() {
 
     let buffer = into_iter.into_buffer();
     assert_eq!(buffer.len(), 0);
+
+    let buffer = Buffer::new_in(&arena, [128; 8]);
+
+    let iter = buffer.into_iter();
+    assert_eq!(iter.len(), 8);
+
+    for item in iter {
+        assert_eq!(item, 128);
+    }
 }
 
 #[test]
