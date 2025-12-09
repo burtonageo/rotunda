@@ -1412,6 +1412,12 @@ impl<I: IntoIterator> fmt::Display for TryExtendError<I> {
 
 impl<I: IntoIterator> Error for TryExtendError<I> {}
 
+/// A by-value iterator over a [`Buffer`].
+///
+/// This type is returned by [`Buffer::into_iter`].
+///
+/// [`Buffer`]: ./struct.Buffer.html
+/// [`Buffer::into_iter`]: ./struct.Buffer.html#method.into_iter
 pub struct IntoIter<'a, T> {
     data: Handle<'a, [MaybeUninit<T>]>,
     front_idx: usize,
@@ -1419,18 +1425,74 @@ pub struct IntoIter<'a, T> {
 }
 
 impl<'a, T> IntoIter<'a, T> {
+    /// Access the elements yet to be iterated through an immutable slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    /// let buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// let mut iter = buffer.into_iter();
+    ///
+    /// let _ = iter.next().unwrap();
+    /// let _ = iter.next_back().unwrap();
+    ///
+    /// assert_eq!(iter.as_slice(), &[2, 3, 4]);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn as_slice(&self) -> &[T] {
         unsafe { slice::from_raw_parts(self.data_start(), self.len_const()) }
     }
 
+    /// Access the elements yet to be iterated through a mutable slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    /// let buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// let mut iter = buffer.into_iter();
+    ///
+    /// iter.as_mut_slice().fill(255);
+    ///
+    /// for item in iter {
+    ///     assert_eq!(item, 255);
+    /// }
+    /// ```
     #[must_use]
     #[inline]
     pub const fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { slice::from_raw_parts_mut(self.data_start_mut(), self.len_const()) }
     }
 
+    /// Consumes the iterator, returning a `Buffer` containing the unyielded values.
+    /// 
+    /// The returned `Buffer` will have the same capacity as the original `Buffer`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    /// let buffer = Buffer::new_in(&arena, [0, 1, 2, 3, 4]);
+    ///
+    /// let mut iter = buffer.into_iter();
+    ///
+    /// let _ = iter.next().unwrap();
+    /// let _ = iter.next().unwrap();
+    ///
+    /// let buffer = iter.into_buffer();
+    /// assert_eq!(&buffer, &[2, 3, 4]);
+    /// assert_eq!(buffer.capacity(), 5);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn into_buffer(self) -> Buffer<'a, T> {
@@ -1454,6 +1516,25 @@ impl<'a, T> IntoIter<'a, T> {
         buf
     }
 
+    /// Consumes the iterator, returning a `Handle<[T]>` containing the unyielded values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    /// let buffer = Buffer::new_in(&arena, [1024usize; 300]);
+    ///
+    /// let mut iter = buffer.into_iter();
+    ///
+    /// for item in (&mut iter).take(150) {
+    ///     let _ = item;
+    /// }
+    ///
+    /// let slice_handle = iter.into_slice_handle();
+    /// assert_eq!(slice_handle.as_ref(), &[1024; 150]);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn into_slice_handle(self) -> Handle<'a, [T]> {
@@ -1581,6 +1662,10 @@ impl<'a, T> Drop for IntoIter<'a, T> {
     #[inline]
     fn drop(&mut self) {
         let (front, back) = (self.front_idx, self.back_idx.saturating_sub(1));
+        if front >= back {
+            return;
+        }
+
         let slice = &mut self.as_mut_slice()[front..back];
         unsafe {
             ptr::drop_in_place(slice);

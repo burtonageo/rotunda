@@ -54,7 +54,8 @@ impl<'a, T> Handle<'a, T> {
     /// # Example
     ///
     /// ```
-    /// # use rotunda::{Arena, handle::Handle};
+    /// use rotunda::{Arena, handle::Handle};
+    ///
     /// let arena = Arena::new();
     /// let handle = Handle::new_in(&arena, 156);
     /// # let _ = handle;
@@ -67,6 +68,16 @@ impl<'a, T> Handle<'a, T> {
         Handle::init(handle, value)
     }
 
+    /// Create a new `Handle` containing the return value of the given function.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    /// let handle = Handle::new_with(&arena, || 23 + 45); 
+    /// ```
     #[must_use]
     #[inline]
     pub fn new_with<A: Allocator, F: FnOnce() -> T>(arena: &'a Arena<A>, f: F) -> Self {
@@ -74,6 +85,40 @@ impl<'a, T> Handle<'a, T> {
         Handle::init(handle, f())
     }
 
+    /// Create a new `Handle`, using the given function to initialize its contents.
+    ///
+    /// # Safety
+    ///
+    /// The function must fully initialize the allocated value, as this function will
+    /// assume that the value has been fully initialized when the given `f` is run.
+    ///
+    /// If this contract is not held, then this `Handle` may permit access to uninitialized
+    /// data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use core::ptr::{self, addr_of_mut};
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// struct Data {
+    ///     integer: u32,
+    ///     string: &'static str,
+    /// }
+    /// 
+    /// let arena = Arena::new();
+    /// let handle: Handle<'_, Data> = unsafe {
+    ///     Handle::init_with(&arena, |data| unsafe {
+    ///         let data_ptr: *mut Data = data.as_mut_ptr();
+    ///         ptr::write(addr_of_mut!((*data_ptr).integer), 25);
+    ///         ptr::write(addr_of_mut!((*data_ptr).string), "Default Data");
+    ///     })
+    /// };
+    ///
+    /// assert_eq!(handle.integer, 25);
+    /// assert_eq!(handle.string, "Default Data");
+    /// # let _ = handle;
+    /// ```
     #[must_use]
     #[inline]
     pub unsafe fn init_with<A: Allocator, F: FnOnce(&mut MaybeUninit<T>)>(
@@ -90,7 +135,8 @@ impl<'a, T> Handle<'a, T> {
     /// # Examples
     ///
     /// ```
-    /// # use rotunda::{Arena, handle::Handle};
+    /// use rotunda::{Arena, handle::Handle};
+    ///
     /// let arena = Arena::new();
     /// let handle = Handle::new_in(&arena, 'c');
     /// let slice_handle = Handle::into_slice(handle);
@@ -102,6 +148,19 @@ impl<'a, T> Handle<'a, T> {
         Handle::into_array(this)
     }
 
+    /// Converts the handle into a `Handle<[T; 1]>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    /// let handle = Handle::new_in(&arena, 266);
+    ///
+    /// let array_handle = Handle::into_array(handle);
+    /// assert_eq!(array_handle, [266; 1]);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn into_array(this: Self) -> Handle<'a, [T; 1]> {
@@ -111,6 +170,19 @@ impl<'a, T> Handle<'a, T> {
 }
 
 impl<'a, T> Handle<'a, [T; 1]> {
+    /// Create a `Handle<T>` from a handle to an array containing a single element.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    /// let array_handle = Handle::new_in(&arena, [25; 1]);
+    ///
+    /// let handle = Handle::from_array(array_handle);
+    /// assert_eq!(handle, 25);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn from_array(this: Self) -> Handle<'a, T> {
@@ -263,10 +335,39 @@ impl<'a, T, const N: usize> Handle<'a, [MaybeUninit<T>; N]> {
 }
 
 impl<'a, T: ?Sized> Handle<'a, T> {
+    /// Converts the `Handle` into a raw pointer, taking ownership of it.
+    ///
+    /// # Notes
+    /// 
+    /// Ownership of the resource managed by the `Handle` is transferred to
+    /// the caller. It is their responsibility to ensure that the contents
+    /// of the pointer are dropped when necessary.
+    ///
+    /// `Handle` has no drop logic - it is valid to use either [`Handle::from_raw`]
+    /// or [`core::ptr::drop_in_place`] to clean up the resource.
+    ///
+    /// The pointer returned by `Handle` should not be accessed if the memory backing
+    /// it in the `Arena` is dellocated.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use core::ptr;
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    /// let handle = Handle::new_in(&arena, 42);
+    ///
+    /// let ptr = Handle::into_raw(handle);
+    /// # ptr::drop_in_place(ptr);
+    /// ```
+    ///
+    /// [`Handle::from_raw`]: ./struct.Handle.html#method.from_raw
+    /// [`core::ptr::drop_in_place`]: ./https://doc.rust-lang.org/stable/core/ptr/fn.drop_in_place.html
     #[must_use]
     #[inline]
-    pub const fn into_raw(this: Self) -> *mut T {
-        let raw = this.ptr.as_ptr();
+    pub const fn into_raw(mut this: Self) -> *mut T {
+        let raw = Handle::as_mut_ptr(&mut this);
         let _this = ManuallyDrop::new(this);
         raw
     }
@@ -281,12 +382,40 @@ impl<'a, T: ?Sized> Handle<'a, T> {
         }
     }
 
+    /// Access the contained value through a const pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use core::ptr;
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    /// let handle = Handle::new_in(&arena, 42);
+    ///
+    /// let ptr = Handle::as_ptr(&handle);
+    /// # let _ = ptr;
+    /// ```
     #[inline]
     #[must_use]
     pub const fn as_ptr(this: &Self) -> *const T {
         this.ptr.as_ptr().cast_const()
     }
 
+    /// Access the contained value through a mutable pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use core::ptr;
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    /// let mut handle = Handle::new_in(&arena, 42);
+    ///
+    /// let ptr = Handle::as_mut_ptr(&mut handle);
+    /// # let _ = ptr;
+    /// ```
     #[inline]
     #[must_use]
     pub const fn as_mut_ptr(this: &mut Self) -> *mut T {
