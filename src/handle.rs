@@ -335,7 +335,7 @@ impl<'a, T, const N: usize> Handle<'a, [MaybeUninit<T>; N]> {
 }
 
 impl<'a, T: ?Sized> Handle<'a, T> {
-    /// Converts the `Handle` into a raw pointer, taking ownership of it.
+    /// Converts the `Handle` into a raw pointer.
     ///
     /// # Notes
     /// 
