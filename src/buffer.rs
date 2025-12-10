@@ -981,6 +981,21 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
         cap - self.len >= required_capacity
     }
 
+    /// Attempt to reserve the additionl bytes in the buffer, returning an error
+    /// when the arena capacity is exhausted.
+    ///
+    /// This method will try to eagerly reserve as much as possible. It is possible
+    /// to query the `TryReserveError` to see how much space is not available
+    /// in the `Buffer`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use core::mem;
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::with_block_size(8 * mem::size_of::<i32>());
+    /// ```
     #[inline]
     pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
         let cap = self.capacity();
