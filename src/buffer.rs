@@ -862,6 +862,13 @@ impl<'a, T> Drop for Buffer<'a, T> {
     }
 }
 
+/// Used to access a variable-sized `Buffer` allocation in an `Arena`.
+///
+/// This type is used in the [`Buffer::with_growable`] and [`Buffer::try_with_growable`]
+/// methods.
+///
+/// [`Buffer::with_growable`]: ./struct.Buffer.html#method.with_growable
+/// [`Buffer::try_with_growable`]: ./struct.Buffer.html#method.try_with_growable
 pub struct GrowableBuffer<'a, T, A: Allocator> {
     backing_storage: NonNull<[MaybeUninit<T>]>,
     len: usize,

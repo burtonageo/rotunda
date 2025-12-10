@@ -718,6 +718,15 @@ pub struct WeakHandle<'a, T: ?Sized> {
 impl<'a, T> WeakHandle<'a, T> {
     /// Constructs a new `WeakHandle<T>` without allocating any memory. Calling [`WeakHandle::upgrade()`]
     /// on the return value will always return `None`.
+    /// 
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::rc_handle::WeakHandle;
+    ///
+    /// let weak = WeakHandle::<'_, i32>::new();
+    /// # let _ = weak;
+    /// ```
     ///
     /// [`WeakHandle::upgrade()`]: ./struct.WeakHandle.html#method.upgrade
     #[inline]
@@ -735,6 +744,33 @@ impl<'a, T> WeakHandle<'a, T> {
 }
 
 impl<'a, T: ?Sized> WeakHandle<'a, T> {
+    /// Upgrade the `WeakHandle` to return a `RcHandle` to access the data.
+    ///
+    /// If the reference count is `0`, this method returns `None`.
+    ///
+    /// # Panics
+    ///
+    /// If the reference count overflows, this method will panic.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let weak;
+    ///
+    /// {
+    ///     let rc_handle = RcHandle::new_in(&arena, 25);
+    ///     weak = RcHandle::downgrade(&rc_handle);
+    ///
+    ///     let rc_handle_2 = WeakHandle::upgrade(&weak).unwrap();
+    ///     assert_eq!(*rc_handle_2, 25);
+    /// }
+    ///
+    /// assert!(WeakHandle::upgrade(&weak).is_none());
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
@@ -748,6 +784,27 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
         })
     }
 
+    /// Returns the number of active references to the shared value.
+    ///
+    /// If this method returns `0`, then the contained value has been dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = RcHandle::new_str_in(&arena, "Hello!");
+    ///
+    /// let weak = RcHandle::downgrade(&handle);
+    /// assert_eq!(weak.ref_count(), 1);
+    ///
+    /// let handle_2 = RcHandle::clone(&handle);
+    ///
+    /// let weak = RcHandle::downgrade(&handle);
+    /// assert_eq!(weak.ref_count(), 2);
+    /// ```
     #[must_use]
     #[inline]
     pub fn ref_count(&self) -> usize {
@@ -766,6 +823,28 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
         }
     }
 
+    /// Returns `true` if two `WeakHandle`-convertible types point to the same value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle_1 = RcHandle::new_in(&arena, 25);
+    /// let handle_2 = RcHandle::clone(&handle_1);
+    ///
+    /// let handle_3 = RcHandle::new_in(&arena, 25);
+    ///
+    /// {
+    ///     let weak_1 = RcHandle::downgrade(&handle_1);
+    ///     let weak_2 = RcHandle::downgrade(&handle_2);
+    ///
+    ///     assert!(WeakHandle::ptr_eq(&weak_1, &weak_2));
+    ///     assert!(!WeakHandle::ptr_eq(&weak_1, &handle_3));
+    /// }
+    /// ```
     #[must_use]
     #[inline]
     pub fn ptr_eq<Rhs: Into<WeakHandle<'a, T>>>(&self, rhs: Rhs) -> bool {
