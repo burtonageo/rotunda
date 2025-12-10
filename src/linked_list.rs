@@ -1428,12 +1428,6 @@ impl<T> Node<T> {
     #[must_use]
     #[inline]
     unsafe fn into_handle<'a>(node: NonNull<Node<T>>) -> Handle<'a, T> {
-        unsafe {
-            Handle::from_raw(
-                node.as_ptr()
-                    .map_addr(|addr| addr + offset_of!(Node<T>, data))
-                    .cast::<T>(),
-            )
-        }
+        unsafe { Handle::from_raw(Node::data_ptr(node).as_ptr()) }
     }
 }
