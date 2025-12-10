@@ -517,16 +517,25 @@ impl<'a> RcHandle<'a, str> {
     #[inline]
     pub fn new_str_in<A: Allocator>(arena: &'a Arena<A>, string: &'_ str) -> Self {
         let string_len = string.len();
-        let mut rc_handle = RcHandle::<'a, [u8]>::new_splat(&arena, string_len, 0u8);
+        let mut rc_handle = RcHandle::<'a, [MaybeUninit<u8>]>::new_slice_uninit_in(&arena, string_len);
 
         unsafe {
             let slice = RcHandle::get_mut_unchecked(&mut rc_handle);
-            slice.copy_from_slice(string.as_bytes());
+            let string_bytes = {
+                let data = string.as_bytes().as_ptr().cast::<MaybeUninit<u8>>();
+                slice::from_raw_parts(data, string_len)
+            };
+
+            slice.copy_from_slice(string_bytes);
         }
 
-        unsafe {
-            let data = RcHandle::into_raw(rc_handle) as *const u8;
-            RcHandle::from_raw_parts(data, string_len)
+        
+        let ptr = rc_handle.ptr.as_ptr() as *mut RcHandleInner<str>;
+        let ptr = unsafe { NonNull::new_unchecked(ptr) };
+        mem::forget(rc_handle);
+        RcHandle {
+            ptr,
+            _boo: PhantomData,
         }
     }
 }
