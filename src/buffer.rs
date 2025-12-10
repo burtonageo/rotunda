@@ -10,7 +10,7 @@ use core::{
     fmt,
     hash::{Hash, Hasher},
     hint::assert_unchecked,
-    iter::FusedIterator,
+    iter::{Fuse, FusedIterator},
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut, Index, IndexMut},
@@ -237,6 +237,34 @@ impl<'a, T> Buffer<'a, T> {
         unsafe { Self::from_raw_parts(Handle::empty(), 0) }
     }
 
+    /// Compose a `Buffer` from its constituent parts.
+    ///
+    /// # Safety
+    ///
+    /// `Handle` must be a valid `Handle` pointing to a live memory allocation
+    /// in an `Arena`. Additionally, `len` must be less than `handle.len()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use core::{ptr, mem::MaybeUninit};
+    /// use rotunda::{Arena, buffer::Buffer, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut storage = Handle::new_slice_uninit_in(&arena, 15);
+    ///
+    /// unsafe {
+    ///     let storage_ptr = storage.as_mut_ptr();
+    ///     for i in 0..3 {
+    ///         ptr::write(storage_ptr.add(i), MaybeUninit::new(i));
+    ///     }
+    /// }
+    ///
+    /// let buffer = unsafe { Buffer::from_raw_parts(storage, 3) };
+    ///
+    /// assert_eq!(buffer.as_ref(), &[0, 1, 2]);
+    /// ```
     #[must_use]
     #[inline]
     pub const unsafe fn from_raw_parts(handle: Handle<'a, [MaybeUninit<T>]>, len: usize) -> Self {
@@ -247,6 +275,27 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    /// Decompose a `Buffer` into its constituent parts.
+    ///
+    /// Ownership of the data is relinquished to the developer. It is the developer's responsibility
+    /// to ensure that the initialized elements are dropped, otherwise this method will lead to a memory leak.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 300);
+    /// buffer.extend([1, 2, 3, 4, 5]);
+    ///
+    /// let (storage, len) = Buffer::into_raw_parts(buffer);
+    ///
+    /// assert_eq!(storage.len(), 300);
+    /// assert_eq!(len, 5);
+    /// # let _ = unsafe { Buffer::from_raw_parts(storage, len) };
+    /// ```
     #[must_use]
     #[inline]
     pub const fn into_raw_parts(self) -> (Handle<'a, [MaybeUninit<T>]>, usize) {
@@ -353,7 +402,7 @@ impl<'a, T> Buffer<'a, T> {
     /// buffer.try_push(58).unwrap();
     ///
     /// assert_eq!(buffer.try_push(100), Err(100));
-    /// 
+    ///
     /// assert_eq!(&buffer, &[42, 58]);
     /// ```
     #[inline]
@@ -368,29 +417,29 @@ impl<'a, T> Buffer<'a, T> {
         Ok(())
     }
 
-    #[inline]
-    pub(super) const unsafe fn push_unchecked(&mut self, value: T) {
-        // @SAFETY: Invariant upheld by caller
-        unsafe {
-            assert_unchecked(!self.is_full());
-        }
-
-        unsafe {
-            Handle::as_nonnull(&self.handle)
-                .as_mut()
-                .get_unchecked_mut(self.len)
-                .write(value);
-        }
-
-        self.len += 1;
-    }
-
+    /// Attempt to extend the `Buffer` with the contents of the given `iter`.
+    ///
+    /// If the `Buffer`'s capacity is exhausted before the iterator is finished,
+    /// this method will return an error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 8);
+    ///
+    /// assert!(matches!(buffer.try_extend(1..5), Ok(())));
+    /// 
+    /// ```
     #[inline]
     pub fn try_extend<I: IntoIterator<Item = T>>(
         &mut self,
         iter: I,
     ) -> Result<(), TryExtendError<I>> {
-        let mut iter = iter.into_iter();
+        let mut iter = iter.into_iter().fuse();
         while let Some(item) = iter.next() {
             match self.try_push(item) {
                 Ok(()) => (),
@@ -405,6 +454,23 @@ impl<'a, T> Buffer<'a, T> {
         Ok(())
     }
 
+    /// Remove the last element from the `Buffer`.
+    ///
+    /// If the `Buffer` is empty, this method returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::new_in(&arena, ["Data 1", "Data 2"]);
+    /// 
+    /// assert_eq!(buffer.pop(), Some("Data 2"));
+    /// assert_eq!(buffer.pop(), Some("Data 1"));
+    /// assert_eq!(buffer.pop(), None);
+    /// ```
     #[inline]
     pub const fn pop(&mut self) -> Option<T> {
         if self.len == 0 {
@@ -422,6 +488,26 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    /// Removes the item at `idx` from the `Buffer`.
+    /// 
+    /// The order of the remaining elements are preserved.
+    ///
+    /// # Panics
+    ///
+    /// If the given `idx` is out of bounds, this method will panic.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::new_in(&arena, [2, 3, 4, 5, 6]);
+    ///
+    /// assert_eq!(buffer.remove(1), 3);
+    /// assert_eq!(&buffer, &[2, 4, 5, 6]);
+    /// ```
     #[track_caller]
     #[inline]
     pub fn remove(&mut self, idx: usize) -> T {
@@ -435,6 +521,26 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    /// Attempt to remove the item at `idx` from the `Buffer`.
+    /// 
+    /// The order of the remaining elements are preserved.
+    ///
+    /// If `idx` is out of bounds, this method returns `None`.
+    ///
+    /// # Examples
+    /// 
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::new_in(&arena, [1, 3, 5, 7, 9]);
+    ///
+    /// assert_eq!(buffer.try_remove(5), None);
+    /// assert_eq!(buffer.try_remove(0), Some(1));
+    ///
+    /// assert_eq!(&buffer, &[3, 5, 7, 9]);
+    /// ```
     #[inline]
     pub fn try_remove(&mut self, idx: usize) -> Option<T> {
         let len = self.len();
@@ -443,18 +549,6 @@ impl<'a, T> Buffer<'a, T> {
         } else {
             None
         }
-    }
-
-    #[inline]
-    unsafe fn remove_unchecked(&mut self, idx: usize) -> T {
-        let value = unsafe { ptr::read(self.as_ptr().add(idx)) };
-        let len = self.len();
-        unsafe {
-            self.shift_down(idx);
-            self.set_len(len - 1);
-        }
-
-        value
     }
 
     #[inline]
@@ -468,6 +562,24 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    /// Convert the `Buffer` into a `Handle<[T]>`.
+    ///
+    /// The excess of the `Buffer` is truncated.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 10);
+    /// buffer.extend(1..=5);
+    ///
+    /// let handle = Buffer::into_slice_handle(buffer);
+    ///
+    /// assert_eq!(handle.as_ref(), &[1, 2, 3, 4, 5]);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn into_slice_handle(mut self) -> Handle<'a, [T]> {
@@ -478,6 +590,25 @@ impl<'a, T> Buffer<'a, T> {
         unsafe { Handle::from_raw(ptr) }
     }
 
+    /// Create a `Buffer` from the given `Handle`.
+    ///
+    /// The `Buffer` will have a capacity equal to the `handle`'s [`len()`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// let buffer = Buffer::from_slice_handle(handle);
+    ///
+    /// assert_eq!(&buffer, &[1, 2, 3, 4, 5]);
+    /// ```
+    ///
+    /// [`len()`]: ./struct.Handle.html#method.len
     #[must_use]
     #[inline]
     pub const fn from_slice_handle(mut handle: Handle<'a, [T]>) -> Self {
@@ -506,8 +637,37 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
-    #[inline]
+    /// Access the spare capacity of the `Buffer` as a mutable slice.
+    ///
+    /// The returned slice will have a length of `self.capacity() - self.len()`.
+    ///
+    /// Values written to this slice may be overwritten if the `Buffer` is modified
+    /// without calling [`Buffer::set_len`] to ensure that the values are logically
+    /// initialized in the buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 25);
+    ///
+    /// let capacity = buffer.spare_capacity_mut();
+    /// capacity[0].write("Hello");
+    /// capacity[1].write("World");
+    ///
+    /// unsafe {
+    ///     buffer.set_len(2);
+    /// }
+    ///
+    /// assert_eq!(&buffer, &["Hello", "World"]);
+    /// ```
+    ///
+    /// [`Buffer::set_len`]: ./struct.Buffer.html#method.set_len
     #[must_use]
+    #[inline]
     pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
         unsafe { self.handle.as_mut().get_unchecked_mut(self.len..) }
     }
@@ -524,6 +684,27 @@ impl<'a, T> Buffer<'a, T> {
         (self.capacity() - self.len) >= num_elems
     }
 
+    /// Returns the total capacity of the `Buffer`.
+    ///
+    /// This represents the total number of items which can be stored in the `Buffer`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5, 6]);
+    ///
+    /// assert_eq!(buffer.capacity(), 6);
+    ///
+    /// for _ in 0..2 {
+    ///     let _ = buffer.pop();
+    /// }
+    ///
+    /// assert_eq!(buffer.capacity(), 6);
+    /// ```
     #[inline]
     #[must_use]
     pub const fn capacity(&self) -> usize {
@@ -545,6 +726,26 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    /// Removes all elements from the `Buffer`.
+    ///
+    /// The elements are dropped in order. If a panic occurs while
+    /// dropping the elements, then the undropped elements will be leaked.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::new_in(&arena, [1, 2, 3, 4 ,5]);
+    ///
+    /// assert_eq!(&buffer, &[1, 2, 3, 4, 5]);
+    ///
+    /// buffer.clear();
+    ///
+    /// assert_eq!(&buffer, &[]);
+    /// ```
     #[track_caller]
     #[inline]
     pub fn clear(&mut self) {
@@ -557,6 +758,28 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    /// Truncates the `Buffer` so that it has a length of `new_len`.
+    ///
+    /// Removed elements are dropped.
+    ///
+    /// If the given `new_len` is larger than the current length, this method does
+    /// nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    ///
+    /// buffer.truncate(11);
+    /// assert_eq!(&buffer, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    ///
+    /// buffer.truncate(3);
+    /// assert_eq!(&buffer, &[1, 2, 3]);
+    /// ```
     #[track_caller]
     #[inline]
     pub fn truncate(&mut self, new_len: usize) {
@@ -589,6 +812,36 @@ impl<'a, T> Buffer<'a, T> {
             let count = self.len().unchecked_sub(idx + 1);
             ptr::copy(ptr.add(1), ptr, count);
         }
+    }
+
+    #[must_use]
+    #[inline]
+    unsafe fn remove_unchecked(&mut self, idx: usize) -> T {
+        let value = unsafe { ptr::read(self.as_ptr().add(idx)) };
+        let len = self.len();
+        unsafe {
+            self.shift_down(idx);
+            self.set_len(len - 1);
+        }
+
+        value
+    }
+
+    #[inline]
+    pub(super) const unsafe fn push_unchecked(&mut self, value: T) {
+        // @SAFETY: Invariant upheld by caller
+        unsafe {
+            assert_unchecked(!self.is_full());
+        }
+
+        unsafe {
+            Handle::as_nonnull(&self.handle)
+                .as_mut()
+                .get_unchecked_mut(self.len)
+                .write(value);
+        }
+
+        self.len += 1;
     }
 }
 
@@ -1406,13 +1659,13 @@ impl error::Error for TryReserveError {}
 
 pub struct TryExtendError<I: IntoIterator> {
     curr: I::Item,
-    rest: I::IntoIter,
+    rest: Fuse<I::IntoIter>,
 }
 
 impl<I: IntoIterator> TryExtendError<I> {
     #[must_use]
     #[inline]
-    pub fn into_inner(self) -> (I::Item, I::IntoIter) {
+    pub fn into_inner(self) -> (I::Item, Fuse<I::IntoIter>) {
         let TryExtendError { curr, rest } = self;
         (curr, rest)
     }
@@ -1495,7 +1748,7 @@ impl<'a, T> IntoIter<'a, T> {
     }
 
     /// Consumes the iterator, returning a `Buffer` containing the unyielded values.
-    /// 
+    ///
     /// The returned `Buffer` will have the same capacity as the original `Buffer`.
     ///
     /// # Examples
