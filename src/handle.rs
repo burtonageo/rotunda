@@ -674,11 +674,7 @@ impl<'a, T: Copy> Handle<'a, [T]> {
         value: T,
     ) -> Self {
         let mut buf = Buffer::with_capacity_in(arena, slice_len);
-        for _ in 0..slice_len {
-            unsafe {
-                buf.push_unchecked(value);
-            }
-        }
+        buf.extend((0..slice_len).map(|_| value));
         buf.into_slice_handle()
     }
 }
