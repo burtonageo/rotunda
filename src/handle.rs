@@ -352,14 +352,13 @@ impl<'a, T: ?Sized> Handle<'a, T> {
     /// # Examples
     ///
     /// ```
-    /// # use core::ptr;
     /// use rotunda::{Arena, handle::Handle};
     ///
     /// let arena = Arena::new();
     /// let handle = Handle::new_in(&arena, 42);
     ///
     /// let ptr = Handle::into_raw(handle);
-    /// # ptr::drop_in_place(ptr);
+    /// # unsafe { core::ptr::drop_in_place(ptr); }
     /// ```
     ///
     /// [`Handle::from_raw`]: ./struct.Handle.html#method.from_raw
