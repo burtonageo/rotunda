@@ -2,7 +2,7 @@
 
 //! A singly-owned mutable pointer backed by an `Arena`.
 
-use crate::{Arena, buf, buffer::Buffer, rc_handle::RcHandle, string_buffer::StringBuffer};
+use crate::{Arena, buffer::Buffer, rc_handle::RcHandle, string_buffer::StringBuffer};
 use alloc::alloc::{Allocator, Layout};
 use core::{
     any::Any,
@@ -76,7 +76,7 @@ impl<'a, T> Handle<'a, T> {
     /// use rotunda::{Arena, handle::Handle};
     ///
     /// let arena = Arena::new();
-    /// let handle = Handle::new_with(&arena, || 23 + 45); 
+    /// let handle = Handle::new_with(&arena, || 23 + 45);
     /// ```
     #[must_use]
     #[inline]
@@ -105,7 +105,7 @@ impl<'a, T> Handle<'a, T> {
     ///     integer: u32,
     ///     string: &'static str,
     /// }
-    /// 
+    ///
     /// let arena = Arena::new();
     /// let handle: Handle<'_, Data> = unsafe {
     ///     Handle::init_with(&arena, |data| unsafe {
@@ -290,6 +290,7 @@ impl<'a, T> Handle<'a, [MaybeUninit<T>]> {
 }
 
 impl<'a, T, const N: usize> Handle<'a, [T; N]> {
+    /// Create a new `Handle` array.
     #[track_caller]
     #[must_use]
     #[inline]
@@ -298,16 +299,6 @@ impl<'a, T, const N: usize> Handle<'a, [T; N]> {
         f: F,
     ) -> Self {
         let buffer = Buffer::from_fn_in(arena, N, f);
-        unsafe { Handle::into_array_unchecked::<N>(buffer.into_slice_handle()) }
-    }
-}
-
-impl<'a, T: Copy, const N: usize> Handle<'a, [T; N]> {
-    #[track_caller]
-    #[must_use]
-    #[inline]
-    pub fn new_array_splat_in<A: Allocator>(arena: &'a Arena<A>, value: T) -> Self {
-        let buffer = buf!([value; N] in arena);
         unsafe { Handle::into_array_unchecked::<N>(buffer.into_slice_handle()) }
     }
 }
@@ -338,7 +329,7 @@ impl<'a, T: ?Sized> Handle<'a, T> {
     /// Converts the `Handle` into a raw pointer.
     ///
     /// # Notes
-    /// 
+    ///
     /// Ownership of the resource managed by the `Handle` is transferred to
     /// the caller. It is their responsibility to ensure that the contents
     /// of the pointer are dropped when necessary.
@@ -371,6 +362,34 @@ impl<'a, T: ?Sized> Handle<'a, T> {
         raw
     }
 
+    /// Take ownership of the given `raw` pointer.
+    ///
+    /// # Safety
+    ///
+    /// It is the caller's responsibiity to ensure that `raw` has been created from
+    /// a previous call to [`Handle::into_raw`], and that the `Arena` backing it's
+    /// allocation has not cleared the block in use by the allocation.
+    ///
+    /// If this precondition is not held, then the `Handle` may point to dangling
+    /// memory.
+    /// 
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    /// let handle = Handle::new_in(&arena, 42u8);
+    ///
+    /// let raw = Handle::into_raw(handle);
+    ///
+    /// unsafe {
+    ///     *&mut (*raw) = 255;
+    /// }
+    ///
+    /// let handle = unsafe { Handle::from_raw(raw) };
+    /// assert_eq!(handle, 255);
+    /// ```
+    ///
+    /// [`Handle::into_raw`]: ./struct.Handle.html#method.into_raw
     #[inline]
     pub const unsafe fn from_raw(raw: *mut T) -> Self {
         let ptr = unsafe { NonNull::new_unchecked(raw) };
@@ -421,6 +440,20 @@ impl<'a, T: ?Sized> Handle<'a, T> {
         this.ptr.as_ptr()
     }
 
+    /// Wrap the `Handle` in a `Pin`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use core::ptr;
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    /// let handle = Handle::new_in(&arena, 42);
+    ///
+    /// let pinned = Handle::into_pin(handle);
+    /// # let _ = pinned;
+    /// ```
     #[inline]
     #[must_use]
     pub const fn into_pin(this: Self) -> Pin<Self> {
@@ -533,24 +566,53 @@ impl<'a, T: ?Sized + Pointee> Handle<'a, T> {
 }
 
 impl<'a, T> Handle<'a, [T]> {
+    /// Create a `Handle` slice of length `slice_len`, where each element is initialized by `f`.
+    ///
+    /// The function `f` is called with the index of each item in the `Handle`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_slice_with_fn_in(&arena, 5, |i| i * 2);
+    ///
+    /// assert_eq!(handle.as_ref(), &[0, 2, 4, 6, 8]);
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
     pub fn new_slice_with_fn_in<A: Allocator, F: FnMut(usize) -> T>(
         arena: &'a Arena<A>,
         slice_len: usize,
-        mut f: F,
+        f: F,
     ) -> Self {
-        let mut buf = Buffer::with_capacity_in(arena, slice_len);
-        for i in 0..slice_len {
-            unsafe {
-                buf.push_unchecked(f(i));
-            }
-        }
-
+        let buf = Buffer::from_fn_in(arena, slice_len, f);
         buf.into_slice_handle()
     }
 
+    /// Create a `Handle` slice containing the contents of the given iterator.
+    ///
+    /// # Panics
+    ///
+    /// If there is not enough room in the current `Block` to move all items from
+    /// the `iter` into the `Handle`, this method will panic.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_slice_from_iter_in(
+    ///     &arena,
+    ///     [0, 1, 2, 3, 4]);
+    ///
+    /// assert_eq!(handle.as_ref(), &[0, 1, 2, 3, 4]);
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
@@ -564,11 +626,28 @@ impl<'a, T> Handle<'a, [T]> {
         Buffer::new_in(arena, iter).into_slice_handle()
     }
 
+    /// Create an empty `Handle`.
+    ///
+    /// The returned handle is not backed by any memory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::handle::Handle;
+    ///
+    /// let handle = Handle::<[i32]>::empty();
+    /// assert_eq!(handle.as_ref(), &[]);
+    /// ```
     #[inline]
     pub const fn empty() -> Self {
         unsafe { Handle::from_raw_parts(ptr::dangling_mut::<T>(), 0) }
     }
 
+    /// Create a `Buffer` from this `Handle`.
+    ///
+    /// See [`Buffer::from_slice_handle`] for more details.
+    ///
+    /// [`Buffer::from_slice_handle`]: ../buffer/struct.Buffer.html#method.from_slice_handle
     #[must_use]
     #[inline]
     pub const fn into_buffer(this: Self) -> Buffer<'a, T> {
@@ -591,7 +670,7 @@ impl<'a, T> Handle<'a, [T]> {
     /// sides of the array.
     ///
     /// # Panics
-    /// 
+    ///
     /// This method will panic if `mid` is greater than or equal to `self.len()`.
     ///
     /// # Examples
@@ -624,7 +703,7 @@ impl<'a, T> Handle<'a, [T]> {
     ///
     /// If `mid` is greater than or equal to `self.len()`, then the original
     /// `Handle` is returned in the `Err` variant.
-    /// 
+    ///
     /// # Examples
     ///
     /// ```
@@ -637,7 +716,7 @@ impl<'a, T> Handle<'a, [T]> {
     /// let Err(handle) = Handle::split_at_checked(handle, 7) else {
     ///     unreachable!();
     /// };
-    /// 
+    ///
     /// let (lhs, rhs) = Handle::split_at_checked(handle, 3).unwrap();
     ///
     /// assert_eq!(lhs.as_ref(), &[1, 2, 3]);
@@ -656,6 +735,28 @@ impl<'a, T> Handle<'a, [T]> {
         }
     }
 
+    /// Split the `Handle` at the given `mid`, returning the left and right
+    /// sides of the array.
+    ///
+    /// # Safety
+    ///
+    /// The given `mid` must be less than the length of the `Buffer`, otherwise this
+    /// method will trigger undefined behavior.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_in(&arena, [1, 2, 3, 4, 5, 6, 7]);
+    ///
+    /// let (lhs, rhs) = unsafe { Handle::split_at_unchecked(handle, 1) };
+    ///
+    /// assert_eq!(lhs.as_ref(), &[1]);
+    /// assert_eq!(rhs.as_ref(), &[2, 3, 4, 5, 6, 7]);
+    /// ```
     #[must_use]
     #[inline]
     pub const unsafe fn split_at_unchecked(
@@ -849,7 +950,7 @@ impl<'a> Handle<'a, str> {
     /// This method does not allocate.
     ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use rotunda::handle::Handle;
     ///
