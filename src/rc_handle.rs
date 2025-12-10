@@ -511,6 +511,26 @@ impl<'a, T> RcHandle<'a, [MaybeUninit<T>]> {
     }
 }
 
+impl<'a> RcHandle<'a, str> {
+    #[track_caller]
+    #[must_use]
+    #[inline]
+    pub fn new_str_in<A: Allocator>(arena: &'a Arena<A>, string: &'_ str) -> Self {
+        let string_len = string.len();
+        let mut rc_handle = RcHandle::<'a, [u8]>::new_splat(&arena, string_len, 0u8);
+
+        unsafe {
+            let slice = RcHandle::get_mut_unchecked(&mut rc_handle);
+            slice.copy_from_slice(string.as_bytes());
+        }
+
+        unsafe {
+            let data = RcHandle::into_raw(rc_handle) as *const u8;
+            RcHandle::from_raw_parts(data, string_len)
+        }
+    }
+}
+
 impl<'a, T: ?Sized + Pointee> RcHandle<'a, T> {
     #[must_use]
     #[inline]
