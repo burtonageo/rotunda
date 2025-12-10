@@ -587,6 +587,27 @@ impl<'a, T> Handle<'a, [T]> {
         rhs
     }
 
+    /// Split the `Handle` at the given `mid`, returning the left and right
+    /// sides of the array.
+    ///
+    /// # Panics
+    /// 
+    /// This method will panic if `mid` is greater than or equal to `self.len()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_in(&arena, [1, 2, 3, 4, 5, 6]);
+    ///
+    /// let (lhs, rhs) = Handle::split_at(handle, 3);
+    ///
+    /// assert_eq!(lhs.as_ref(), &[1, 2, 3]);
+    /// assert_eq!(rhs.as_ref(), &[4, 5, 6]);
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
@@ -598,6 +619,30 @@ impl<'a, T> Handle<'a, [T]> {
         }
     }
 
+    /// Split the `Handle` at the given `mid`, returning the left and right
+    /// sides of the array.
+    ///
+    /// If `mid` is greater than or equal to `self.len()`, then the original
+    /// `Handle` is returned in the `Err` variant.
+    /// 
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_in(&arena, [1, 2, 3, 4, 5, 6]);
+    ///
+    /// let Err(handle) = Handle::split_at_checked(handle, 7) else {
+    ///     unreachable!();
+    /// };
+    /// 
+    /// let (lhs, rhs) = Handle::split_at_checked(handle, 3).unwrap();
+    ///
+    /// assert_eq!(lhs.as_ref(), &[1, 2, 3]);
+    /// assert_eq!(rhs.as_ref(), &[4, 5, 6]);
+    /// ```
     #[allow(clippy::type_complexity)]
     #[inline]
     pub const fn split_at_checked(
@@ -665,6 +710,18 @@ impl<'a, T> Handle<'a, [T]> {
 }
 
 impl<'a, T: Copy> Handle<'a, [T]> {
+    /// Create a new slice handle `slice_len` long, filled with `value`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    /// let handle = Handle::new_slice_splat_in(&arena, 255, 123);
+    ///
+    /// assert_eq!(handle.as_ref(), &[123; 255]);
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
@@ -680,6 +737,29 @@ impl<'a, T: Copy> Handle<'a, [T]> {
 }
 
 impl<'a, T> Handle<'a, MaybeUninit<T>> {
+    /// Consumes the `Handle`, returning a new `Handle` which treats its contents
+    /// as fully initialized.
+    ///
+    /// # Safety
+    ///
+    /// This method must be called on a `Handle` which has had its contents fully
+    /// initialized, otherwise it may permit access to uninitialized memory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = unsafe {
+    ///     let mut handle = Handle::new_uninit_in(&arena);
+    ///     handle.as_mut().write(28);
+    ///     Handle::assume_init(handle)
+    /// };
+    ///
+    /// assert_eq!(*handle, 28);
+    /// ```
     #[inline]
     pub const unsafe fn assume_init(this: Self) -> Handle<'a, T> {
         let ptr = this.ptr.cast();
@@ -690,6 +770,23 @@ impl<'a, T> Handle<'a, MaybeUninit<T>> {
         }
     }
 
+    /// Writes the `value` into the `Handle` and initilizes it.
+    ///
+    /// Owership over `value` is transferred into the `Handle`. Any
+    /// data previously written to the `Handle` is overwritten.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_uninit_in(&arena);
+    /// let handle = Handle::init(handle, 25);
+    ///
+    /// assert_eq!(*handle, 25);
+    /// ```
     #[inline]
     pub const fn init(this: Self, value: T) -> Handle<'a, T> {
         unsafe {
@@ -711,6 +808,19 @@ impl<'a, T> Handle<'a, [MaybeUninit<T>]> {
 }
 
 impl<'a> Handle<'a, str> {
+    /// Create a new `Handle` containing the given `string`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_str_in(&arena, "Some Data");
+    ///
+    /// assert_eq!(&handle, "Some Data");
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
@@ -734,6 +844,18 @@ impl<'a> Handle<'a, str> {
         inner(arena, string.as_ref())
     }
 
+    /// Create a `Handle` containing an empty `str`.
+    ///
+    /// This method does not allocate.
+    ///
+    /// # Examples
+    /// 
+    /// ```
+    /// use rotunda::handle::Handle;
+    ///
+    /// let handle = Handle::empty_str();
+    /// assert_eq!(&handle, "");
+    /// ```
     #[must_use]
     #[inline]
     pub const fn empty_str() -> Self {

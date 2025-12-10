@@ -512,6 +512,19 @@ impl<'a, T> RcHandle<'a, [MaybeUninit<T>]> {
 }
 
 impl<'a> RcHandle<'a, str> {
+    /// Create a new `RcHandle` containing the given `string`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = RcHandle::new_str_in(&arena, "Some Data");
+    ///
+    /// assert_eq!(&handle, "Some Data");
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
@@ -853,6 +866,7 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
         ptr::eq(lhs, rhs)
     }
 
+    /// Hashes the pointer value of this `WeakHandle` into the given `hasher`.
     #[inline]
     pub fn ptr_hash<H: Hasher>(this: &Self, hasher: &mut H) {
         ptr::hash(WeakHandle::as_ptr(this), hasher);
