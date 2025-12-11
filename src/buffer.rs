@@ -921,7 +921,6 @@ impl<'a, T: Copy> Buffer<'a, T> {
     #[inline]
     pub fn new_slice_copied_in<A: Allocator>(arena: &'a Arena<A>, slice: &'_ [T]) -> Self {
         let mut buf = Buffer::with_capacity_in(arena, slice.len());
-        assert!(buf.capacity() >= slice.len(), "not enough space for slice contents");
         buf.extend_from_slice_copy(slice);
         buf
     }
