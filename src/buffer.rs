@@ -705,8 +705,8 @@ impl<'a, T> Buffer<'a, T> {
     ///
     /// assert_eq!(buffer.capacity(), 6);
     /// ```
-    #[inline]
     #[must_use]
+    #[inline]
     pub const fn capacity(&self) -> usize {
         Handle::as_ptr(&self.handle).len()
     }
@@ -846,6 +846,27 @@ impl<'a, T> Buffer<'a, T> {
 }
 
 impl<'a, T: Clone> Buffer<'a, T> {
+    /// Resize the `Buffer` to the given `new_len`.
+    ///
+    /// If `new_len` is smaller than the current length, elements are dropped.
+    /// If `new_len` is larger than the current length, then the buffer is
+    /// extended by cloning `value`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::new_in(&arena, [1, 2, 3, 4]);
+    /// buffer.resize(2, 0);
+    ///
+    /// assert_eq!(&buffer, &[1, 2]);
+    ///
+    /// buffer.resize(4, 8);
+    /// assert_eq!(&buffer, &[1, 2, 8, 8]);
+    /// ```
     #[track_caller]
     #[inline]
     pub fn resize(&mut self, new_len: usize, value: T) {
@@ -878,15 +899,53 @@ impl<'a, T: Clone> Buffer<'a, T> {
 }
 
 impl<'a, T: Copy> Buffer<'a, T> {
-    #[must_use]
+    /// Create a new `Buffer` containing the contents of `slice`.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if there is not enough space in the `Arena`
+    /// to store the contents of `slice`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let buffer = Buffer::new_slice_copied_in(&arena, [1, 2, 3, 4]);
+    /// assert_eq!(&buffer, &[1, 2, 3, 4]);
+    /// ```
     #[track_caller]
+    #[must_use]
     #[inline]
     pub fn new_slice_copied_in<A: Allocator>(arena: &'a Arena<A>, slice: &'_ [T]) -> Self {
         let mut buf = Buffer::with_capacity_in(arena, slice.len());
+        assert!(buf.capacity() >= slice.len(), "not enough space for slice contents");
         buf.extend_from_slice_copy(slice);
         buf
     }
 
+    /// Extend the `Buffer` with the contents of `slice`.
+    ///
+    /// If there isn't enough space in the `Buffer` to store the `slice`, then
+    /// it will only copy enough values to fill the spare capacity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 5);
+    ///
+    /// buffer.extend_from_slice_copy(&[1, 2, 3]);
+    /// assert_eq!(&buffer, &[1, 2, 3]);
+    /// 
+    /// buffer.extend_from_slice_copy(&[4, 5, 6]);
+    /// assert_eq!(&buffer, &[1, 2, 3, 4, 5]);
+    /// ```
     #[inline]
     pub const fn extend_from_slice_copy(&mut self, slice: &[T]) {
         let spare_cap = self.capacity() - self.len;
