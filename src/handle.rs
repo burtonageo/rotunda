@@ -468,6 +468,20 @@ impl<'a, T: ?Sized> Handle<'a, T> {
 }
 
 impl<'a, T: Unpin> Handle<'a, T> {
+    /// Returns the inner value of the `Handle`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_in(&arena, vec![1, 2, 3, 4]);
+    ///
+    /// let data = Handle::into_inner(handle);
+    /// assert_eq!(&data, &[1, 2, 3, 4]);
+    /// ```
     #[inline]
     pub const fn into_inner(this: Self) -> T {
         let inner = unsafe { this.ptr.read() };
@@ -475,6 +489,23 @@ impl<'a, T: Unpin> Handle<'a, T> {
         inner
     }
 
+    /// Extracts the inner value of the `Handle`, returning the value and the empty `Handle`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut handle = Handle::new_in(&arena, 1024);
+    /// let (data, empty_handle) = Handle::extract_inner(handle);
+    ///
+    /// assert_eq!(data, 1024);
+    ///
+    /// let new_handle = Handle::init(empty_handle, 2048);
+    /// # let _ = new_handle;
+    /// ```
     #[inline]
     pub const fn extract_inner(this: Self) -> (T, Handle<'a, MaybeUninit<T>>) {
         let inner = unsafe { this.ptr.read() };
@@ -484,6 +515,23 @@ impl<'a, T: Unpin> Handle<'a, T> {
         (inner, handle)
     }
 
+    /// Replace the contents of this `Handle` with the given `value`.
+    ///
+    /// The previous contents of the `Handle` are returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut handle = Handle::new_in(&arena, 25);
+    /// let prev = Handle::replace(&mut handle, 42);
+    ///
+    /// assert_eq!(*handle, 42);
+    /// assert_eq!(prev, 25);
+    /// ```
     #[inline]
     pub const fn replace(this: &mut Self, mut value: T) -> T {
         unsafe {
