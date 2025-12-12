@@ -201,6 +201,30 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    /// Create a new `Buffer` with a growable initial capacity.
+    ///
+    /// See [`Buffer::try_with_growable_in`] for more info.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let buffer = Buffer::with_growable_in(&arena, |buf| {
+    ///     buf.push("Hello");
+    ///     buf.push("World");
+    ///     buf.reserve(25);
+    /// });
+    ///
+    /// assert_eq!(buffer[0], "Hello");
+    /// assert_eq!(buffer[1], "World");
+    ///
+    /// assert_eq!(buffer.capacity(), 27);
+    /// ```
+    /// 
+    /// [`Buffer::try_with_growable_in`]: ./struct.Buffer.html#method.try_with_growable_in
     #[track_caller]
     #[inline]
     pub fn with_growable_in<A, F>(arena: &'a Arena<A>, f: F) -> Self
@@ -431,8 +455,13 @@ impl<'a, T> Buffer<'a, T> {
     ///
     /// let mut buffer = Buffer::with_capacity_in(&arena, 8);
     ///
-    /// assert!(matches!(buffer.try_extend(1..5), Ok(())));
-    /// 
+    /// let _ = buffer.try_extend(1..5).unwrap();
+    ///
+    /// let err = buffer.try_extend(0..130).unwrap_err();
+    ///
+    /// let (elem, iter) = err.into_inner();
+    /// assert_eq!(elem, 4);
+    /// assert_eq!(iter.count(), 125);
     /// ```
     #[inline]
     pub fn try_extend<I: IntoIterator<Item = T>>(
@@ -466,7 +495,7 @@ impl<'a, T> Buffer<'a, T> {
     /// let arena = Arena::new();
     ///
     /// let mut buffer = Buffer::new_in(&arena, ["Data 1", "Data 2"]);
-    /// 
+    ///
     /// assert_eq!(buffer.pop(), Some("Data 2"));
     /// assert_eq!(buffer.pop(), Some("Data 1"));
     /// assert_eq!(buffer.pop(), None);
@@ -489,7 +518,7 @@ impl<'a, T> Buffer<'a, T> {
     }
 
     /// Removes the item at `idx` from the `Buffer`.
-    /// 
+    ///
     /// The order of the remaining elements are preserved.
     ///
     /// # Panics
@@ -522,13 +551,13 @@ impl<'a, T> Buffer<'a, T> {
     }
 
     /// Attempt to remove the item at `idx` from the `Buffer`.
-    /// 
+    ///
     /// The order of the remaining elements are preserved.
     ///
     /// If `idx` is out of bounds, this method returns `None`.
     ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use rotunda::{Arena, buffer::Buffer};
     ///
@@ -551,6 +580,25 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    /// Swap the element at `idx` with the last element in the list and removes it.
+    ///
+    /// The removed element is returned. If `idx` is greater than `self.len()`, this
+    /// method returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::new_in(&arena, [1, 3, 5, 7, 9]);
+    ///
+    /// let element = buffer.swap_remove(1);
+    ///
+    /// assert_eq!(element, Some(3));
+    /// assert_eq!(&buffer, &[1, 9, 5, 7]);
+    /// ```
     #[inline]
     pub fn swap_remove(&mut self, idx: usize) -> Option<T> {
         match self.len.checked_sub(1) {
@@ -672,6 +720,26 @@ impl<'a, T> Buffer<'a, T> {
         unsafe { self.handle.as_mut().get_unchecked_mut(self.len..) }
     }
 
+    /// Returns `true` if the current `Buffer` is at capacity.
+    ///
+    /// If this is `true`, then pushing any more elements into the `Buffer`
+    /// will fail.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 5); 
+    /// 
+    /// buffer.extend_from_slice_copy(&[1, 2, 3]);
+    /// assert!(!buffer.is_full());
+    /// 
+    /// buffer.extend_from_slice_copy(&[4, 5]);
+    /// assert!(buffer.is_full());
+    /// ```
     #[must_use]
     #[inline]
     pub const fn is_full(&self) -> bool {
@@ -711,6 +779,41 @@ impl<'a, T> Buffer<'a, T> {
         Handle::as_ptr(&self.handle).len()
     }
 
+    /// Sets the length of the `Buffer` to `new_len` without modifying
+    /// the contents of the `Buffer`.
+    ///
+    /// If `set_len()` is called with a smaller length than the current `Buffer`'s
+    /// length, then the items between the previous length and the new length
+    /// will be leaked when the `Buffer` is dropped.
+    ///
+    /// # Safety
+    ///
+    /// You must ensure that all of the items contained in the `Buffer` up to `new_len`
+    /// are fully initialized. If this does not happen, then it may be possible to access
+    /// uninitialized memory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use core::ptr;
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 5);
+    ///
+    /// let data = &[1, 2, 3, 4, 5];
+    ///
+    /// unsafe {
+    ///     // Copy some data into the uninitialized part of the `Buffer`
+    ///     ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr(), 5);
+    ///
+    ///     // Then call `set_len()` to initialize the `Buffer` with the newly copied data.
+    ///     buffer.set_len(5);
+    /// }
+    ///
+    /// assert_eq!(&buffer, &[1, 2, 3, 4, 5]);
+    /// ```
     #[inline]
     pub const unsafe fn set_len(&mut self, new_len: usize) {
         unsafe {
@@ -805,6 +908,14 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    /// Shift the elements from `idx` to the end of the `Buffer` down to the start
+    /// of the `Buffer`, overwriting the elements from `0` up to `idx`.
+    ///
+    /// No contained elements are dropped in this function.
+    ///
+    /// # Safety
+    ///
+    /// `idx` must be in range of the `Buffer`.
     #[inline]
     unsafe fn shift_down(&mut self, idx: usize) {
         unsafe {
@@ -941,7 +1052,7 @@ impl<'a, T: Copy> Buffer<'a, T> {
     ///
     /// buffer.extend_from_slice_copy(&[1, 2, 3]);
     /// assert_eq!(&buffer, &[1, 2, 3]);
-    /// 
+    ///
     /// buffer.extend_from_slice_copy(&[4, 5, 6]);
     /// assert_eq!(&buffer, &[1, 2, 3, 4, 5]);
     /// ```
@@ -1358,6 +1469,27 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
         Ok(())
     }
 
+    /// Append the given `value` to the end of the `GrowableBuffer`.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if there is no space in the `GrowableBuffer`
+    /// for the `value`, and no additional capacity can be reserved.
+    ///
+    /// # Examples
+    /// 
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::with_block_size(18);
+    ///
+    /// let buffer = Buffer::with_growable_in(&arena, |buf| {
+    ///     buf.push(99);
+    ///     assert_eq!(buf, &[99]);
+    /// });
+    /// # assert_eq!(&buffer, &[99]);
+    /// ```
+    #[track_caller]
     #[inline]
     pub fn push(&mut self, value: T) {
         match self.try_push(value) {
@@ -1366,6 +1498,25 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
         }
     }
 
+    /// Remove the last element of the `GrowableBuffer` and return it.
+    ///
+    /// If the `GrowableBuffer` is empty, this method returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::with_block_size(18);
+    ///
+    /// let buffer = Buffer::with_growable_in(&arena, |buf| {
+    ///     buf.extend([1, 2]);
+    ///     assert_eq!(buf.pop().unwrap(), 2);
+    ///     assert_eq!(buf.pop().unwrap(), 1);
+    ///     assert_eq!(buf.pop(), None);
+    /// });
+    /// # assert_eq!(&buffer, &[]);
+    /// ```
     #[must_use]
     #[inline]
     pub fn pop(&mut self) -> Option<T> {
