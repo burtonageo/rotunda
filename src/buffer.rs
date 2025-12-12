@@ -376,6 +376,16 @@ impl<'a, T> Buffer<'a, T> {
         unsafe { slice::from_raw_parts_mut(ptr as *mut T, self.len) }
     }
 
+    #[inline]
+    pub fn iter(&'_ self) -> <&'_ [T] as IntoIterator>::IntoIter {
+        self.as_slice().iter()
+    }
+
+    #[inline]
+    pub fn iter_mut(&'_ mut self) -> <&'_ mut [T] as IntoIterator>::IntoIter {
+        self.as_mut_slice().iter_mut()
+    }
+
     /// Append the given `value` to the end of the `Buffer`.
     ///
     /// # Panics
