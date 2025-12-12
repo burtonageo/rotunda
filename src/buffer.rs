@@ -376,11 +376,13 @@ impl<'a, T> Buffer<'a, T> {
         unsafe { slice::from_raw_parts_mut(ptr as *mut T, self.len) }
     }
 
+    #[must_use]
     #[inline]
     pub fn iter(&'_ self) -> <&'_ [T] as IntoIterator>::IntoIter {
         self.as_slice().iter()
     }
 
+    #[must_use]
     #[inline]
     pub fn iter_mut(&'_ mut self) -> <&'_ mut [T] as IntoIterator>::IntoIter {
         self.as_mut_slice().iter_mut()
@@ -1587,11 +1589,13 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
         }
     }
 
+    #[must_use]
     #[inline]
     pub fn iter(&'_ self) -> <&'_ [T] as IntoIterator>::IntoIter {
         self.as_slice().iter()
     }
 
+    #[must_use]
     #[inline]
     pub fn iter_mut(&'_ mut self) -> <&'_ mut [T] as IntoIterator>::IntoIter {
         self.as_mut_slice().iter_mut()
