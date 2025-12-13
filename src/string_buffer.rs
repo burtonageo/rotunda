@@ -16,6 +16,8 @@ use core::{
     ops::{Deref, DerefMut},
     ptr, str,
 };
+#[cfg(feature = "serde")]
+use serde_core::{Serialize, Serializer};
 
 #[derive(Default)]
 pub struct StringBuffer<'a> {
@@ -285,5 +287,12 @@ impl<'a> Ord for StringBuffer<'a> {
     #[inline]
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.as_str().cmp(other.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'a> Serialize for StringBuffer<'a> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        <str as Serialize>::serialize(self.as_ref(), serializer)
     }
 }

@@ -6,7 +6,11 @@ description = "Memory arena and associated smart pointers"
 license = "MIT/Apache-2.0"
 readme = "./Readme.md"
 
-[dependencies]
+[dependencies.serde_core]
+version = "1"
+optional = true
 
 [features]
+default = []
 std = []
+serde = ["dep:serde_core"]

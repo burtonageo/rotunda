@@ -18,6 +18,8 @@ use core::{
     ptr::{self, NonNull, Pointee, Thin},
     slice,
 };
+#[cfg(feature = "serde")]
+use serde_core::ser::{Serialize, Serializer};
 
 /// A reference-counted pointer to some memory backed by an [`Arena`],
 /// analogous to [`Rc<T>`].
@@ -701,6 +703,13 @@ impl<'rc: 'a, 'a, T: 'a> IntoIterator for &'rc RcHandle<'a, [T]> {
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
         AsRef::<[T]>::as_ref(self).iter()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'a, T: ?Sized + Serialize> Serialize for RcHandle<'a, T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_ref().serialize(serializer)
     }
 }
 

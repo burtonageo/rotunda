@@ -17,6 +17,8 @@ use core::{
     ptr::{self, NonNull},
     slice::{self, SliceIndex},
 };
+#[cfg(feature = "serde")]
+use serde_core::{Serialize, Serializer};
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
@@ -115,7 +117,7 @@ impl<'a, T> Buffer<'a, T> {
     /// the returned `Buffer`.
     ///
     /// If allocating `len` elements fails, then `f` is not run.
-    /// 
+    ///
     /// # Examples
     ///
     /// ```
@@ -1300,6 +1302,13 @@ impl<'a> Read for Buffer<'a, u8> {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.as_slice().read(buf)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'a, T: Serialize> Serialize for Buffer<'a, T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.iter())
     }
 }
 

@@ -20,6 +20,8 @@ use core::{
     slice::SliceIndex,
     str,
 };
+#[cfg(feature = "serde")]
+use serde_core::ser::{Serialize, Serializer};
 #[cfg(feature = "std")]
 use std::io::{self, BufRead, Read, Write};
 
@@ -372,7 +374,7 @@ impl<'a, T: ?Sized> Handle<'a, T> {
     ///
     /// If this precondition is not held, then the `Handle` may point to dangling
     /// memory.
-    /// 
+    ///
     /// ```
     /// use rotunda::{Arena, handle::Handle};
     ///
@@ -1294,5 +1296,12 @@ impl<'a, W: ?Sized + Write> Write for Handle<'a, W> {
     #[inline]
     fn flush(&mut self) -> io::Result<()> {
         self.as_mut().flush()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'a, T: Serialize> Serialize for Handle<'a, T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_ref().serialize(serializer)
     }
 }

@@ -13,6 +13,8 @@ use core::{
     mem::{self, offset_of},
     ptr::{self, NonNull},
 };
+#[cfg(feature = "serde")]
+use serde_core::{Serialize, Serializer};
 
 /// A doubly-linked list type, backed by an [`Arena`].
 ///
@@ -1112,6 +1114,13 @@ impl<'a, T, A: Allocator> Extend<T> for LinkedList<'a, T, A> {
         for item in iter {
             self.push_back(item);
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'a, T: Serialize> Serialize for LinkedList<'a, T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.iter())
     }
 }
 
