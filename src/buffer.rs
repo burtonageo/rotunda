@@ -1415,7 +1415,7 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
         cap - self.len >= required_capacity
     }
 
-    /// Attempt to reserve the additionl bytes in the buffer, returning an error
+    /// Attempt to reserve space for `additional` items in the buffer, returning an error
     /// when the arena capacity is exhausted.
     ///
     /// This method will try to eagerly reserve as much as possible. It is possible
