@@ -826,6 +826,20 @@ impl<'a, T> Handle<'a, [T]> {
         unsafe { (Handle::from_raw(lhs), Handle::from_raw(rhs)) }
     }
 
+    /// Transpose a `Handle` of slice `T` into a slice of `Uninit<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = Handle::new_in(&arena, [1, 2, 3, 4, 5, 6, 7]);
+    ///
+    /// let handle = Handle::transpose_into_uninit(handle);
+    /// # let _ = handle;
+    /// ```
     #[must_use]
     #[inline]
     pub const fn transpose_into_uninit(this: Self) -> Handle<'a, [MaybeUninit<T>]> {
