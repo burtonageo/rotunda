@@ -1036,7 +1036,7 @@ impl<'a, T: Copy> Buffer<'a, T> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let buffer = Buffer::new_slice_copied_in(&arena, [1, 2, 3, 4]);
+    /// let buffer = Buffer::new_slice_copied_in(&arena, &[1, 2, 3, 4]);
     /// assert_eq!(&buffer, &[1, 2, 3, 4]);
     /// ```
     #[track_caller]
