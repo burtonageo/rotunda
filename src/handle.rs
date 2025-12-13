@@ -21,7 +21,7 @@ use core::{
     str,
 };
 #[cfg(feature = "serde")]
-use serde_core::ser::{Serialize, Serializer};
+use serde_core::{Serialize, Serializer};
 #[cfg(feature = "std")]
 use std::io::{self, BufRead, Read, Write};
 
@@ -1301,6 +1301,7 @@ impl<'a, W: ?Sized + Write> Write for Handle<'a, W> {
 
 #[cfg(feature = "serde")]
 impl<'a, T: Serialize> Serialize for Handle<'a, T> {
+    #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.as_ref().serialize(serializer)
     }

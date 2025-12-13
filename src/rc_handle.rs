@@ -708,6 +708,7 @@ impl<'rc: 'a, 'a, T: 'a> IntoIterator for &'rc RcHandle<'a, [T]> {
 
 #[cfg(feature = "serde")]
 impl<'a, T: ?Sized + Serialize> Serialize for RcHandle<'a, T> {
+    #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.as_ref().serialize(serializer)
     }

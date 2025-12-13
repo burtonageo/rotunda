@@ -1307,6 +1307,7 @@ impl<'a> Read for Buffer<'a, u8> {
 
 #[cfg(feature = "serde")]
 impl<'a, T: Serialize> Serialize for Buffer<'a, T> {
+    #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_seq(self.iter())
     }
