@@ -388,6 +388,18 @@ impl<'a, T> Buffer<'a, T> {
         self.as_mut_slice().iter_mut()
     }
 
+    #[must_use]
+    #[inline]
+    pub const fn as_ptr(&self) -> *const T {
+        Handle::<[MaybeUninit<T>]>::as_ptr(&self.handle).cast::<T>()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn as_mut_ptr(&mut self) -> *mut T {
+        Handle::<[MaybeUninit<T>]>::as_mut_ptr(&mut self.handle).cast::<T>()
+    }
+
     /// Append the given `value` to the end of the `Buffer`.
     ///
     /// # Panics
@@ -695,18 +707,6 @@ impl<'a, T> Buffer<'a, T> {
             let (init, uninit) = Handle::split_at_unchecked(handle, len - 1);
             (Handle::assume_init_slice(init), uninit)
         }
-    }
-
-    #[must_use]
-    #[inline]
-    pub fn as_ptr(&self) -> *const T {
-        self.handle.as_ptr().cast::<T>()
-    }
-
-    #[must_use]
-    #[inline]
-    pub fn as_mut_ptr(&mut self) -> *mut T {
-        self.handle.as_mut_ptr().cast::<T>()
     }
 
     /// Access the spare capacity of the `Buffer` as a mutable slice.
@@ -1577,15 +1577,27 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn as_slice(&self) -> &[T] {
-        let data = self.backing_storage.cast::<T>().as_ptr();
+        let data = self.as_ptr();
         unsafe { slice::from_raw_parts(data, self.len) }
     }
 
     #[must_use]
     #[inline]
     pub const fn as_mut_slice(&mut self) -> &mut [T] {
-        let data = self.backing_storage.cast::<T>().as_ptr();
+        let data = self.as_mut_ptr();
         unsafe { slice::from_raw_parts_mut(data, self.len) }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn as_ptr(&self) -> *const T {
+        self.backing_storage.as_ptr().cast::<T>()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn as_mut_ptr(&mut self) -> *mut T {
+        self.backing_storage.as_ptr().cast::<T>()
     }
 
     #[must_use]
