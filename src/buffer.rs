@@ -114,6 +114,8 @@ impl<'a, T> Buffer<'a, T> {
     /// element as the parameter, and the results will be collected into
     /// the returned `Buffer`.
     ///
+    /// If allocating `len` elements fails, then `f` is not run.
+    /// 
     /// # Examples
     ///
     /// ```
@@ -139,12 +141,7 @@ impl<'a, T> Buffer<'a, T> {
         mut f: F,
     ) -> Self {
         let mut buf = Buffer::with_capacity_in(arena, len);
-        for i in 0..len {
-            unsafe {
-                buf.push_unchecked(f(i));
-            }
-        }
-
+        buf.extend((0..len).map(|i| f(i)));
         buf
     }
 
