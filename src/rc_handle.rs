@@ -246,7 +246,8 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     #[inline]
     pub unsafe fn from_raw(raw: *const T) -> Self {
         unsafe {
-            let ptr = raw.map_addr(|addr| addr - SIZE_OF_RC_HEADER) as *const RcHandleInner<T>;
+            let ptr = raw.map_addr(|addr| addr - offset_of!(RcHandleInner<()>, data))
+                as *const RcHandleInner<T>;
             Self::from_raw_inner(ptr)
         }
     }
@@ -299,7 +300,11 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
             // `WeakHandle`s which point here.
             Self::inner(&this).decrement_refcount();
 
-            let raw = this.ptr.as_ptr().map_addr(|addr| addr + SIZE_OF_RC_HEADER) as *mut T;
+            let raw = this
+                .ptr
+                .as_ptr()
+                .map_addr(|addr| addr + offset_of!(RcHandleInner<()>, data))
+                as *mut T;
 
             let _this = ManuallyDrop::new(this);
             unsafe { Ok(Handle::from_raw(raw)) }
@@ -530,7 +535,8 @@ impl<'a> RcHandle<'a, str> {
     #[inline]
     pub fn new_str_in<A: Allocator>(arena: &'a Arena<A>, string: &'_ str) -> Self {
         let string_len = string.len();
-        let mut rc_handle = RcHandle::<'a, [MaybeUninit<u8>]>::new_slice_uninit_in(&arena, string_len);
+        let mut rc_handle =
+            RcHandle::<'a, [MaybeUninit<u8>]>::new_slice_uninit_in(&arena, string_len);
 
         unsafe {
             let slice = RcHandle::get_mut_unchecked(&mut rc_handle);
@@ -542,7 +548,6 @@ impl<'a> RcHandle<'a, str> {
             slice.copy_from_slice(string_bytes);
         }
 
-        
         let ptr = rc_handle.ptr.as_ptr() as *mut RcHandleInner<str>;
         let ptr = unsafe { NonNull::new_unchecked(ptr) };
         mem::forget(rc_handle);
@@ -731,7 +736,7 @@ pub struct WeakHandle<'a, T: ?Sized> {
 impl<'a, T> WeakHandle<'a, T> {
     /// Constructs a new `WeakHandle<T>` without allocating any memory. Calling [`WeakHandle::upgrade()`]
     /// on the return value will always return `None`.
-    /// 
+    ///
     /// # Examples
     ///
     /// ```
@@ -832,7 +837,9 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
         if self.is_dangling() {
             self.ptr.as_ptr() as *const _
         } else {
-            self.ptr.as_ptr().map_addr(|addr| addr + SIZE_OF_RC_HEADER) as *const _
+            self.ptr
+                .as_ptr()
+                .map_addr(|addr| addr + offset_of!(RcHandleInner<()>, data)) as *const _
         }
     }
 
@@ -885,7 +892,7 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
         let ptr = if is_dangling(raw) {
             raw.with_addr(DANGLING_SENTINEL)
         } else {
-            raw.map_addr(|addr| addr - SIZE_OF_RC_HEADER)
+            raw.map_addr(|addr| addr - offset_of!(RcHandleInner<()>, data))
         };
 
         let ptr = unsafe { NonNull::new_unchecked(ptr.cast_mut() as *mut RcHandleInner<T>) };
@@ -1033,13 +1040,14 @@ impl<T> RcHandleInner<T> {
         this: *mut RcHandleInner<T>,
         slice_len: usize,
     ) -> *mut RcHandleInner<[T]> {
-        let data_ptr: *mut T = this.map_addr(|addr| addr + SIZE_OF_RC_HEADER).cast::<T>();
+        let data_ptr: *mut T = this
+            .map_addr(|addr| addr + offset_of!(RcHandleInner<()>, data))
+            .cast::<T>();
         let ptr = ptr::from_raw_parts_mut::<[T]>(data_ptr, slice_len);
-        ptr.map_addr(|addr| addr - SIZE_OF_RC_HEADER) as *mut RcHandleInner<[T]>
+        ptr.map_addr(|addr| addr - offset_of!(RcHandleInner<()>, data)) as *mut RcHandleInner<[T]>
     }
 }
 
-const SIZE_OF_RC_HEADER: usize = mem::size_of::<RcHandleInner<()>>();
 const DANGLING_SENTINEL: usize = usize::MAX;
 
 #[must_use]
