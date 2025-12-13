@@ -223,7 +223,7 @@ impl<'a, T> Buffer<'a, T> {
     ///
     /// assert_eq!(buffer.capacity(), 27);
     /// ```
-    /// 
+    ///
     /// [`Buffer::try_with_growable_in`]: ./struct.Buffer.html#method.try_with_growable_in
     #[track_caller]
     #[inline]
@@ -756,11 +756,11 @@ impl<'a, T> Buffer<'a, T> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut buffer = Buffer::with_capacity_in(&arena, 5); 
-    /// 
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 5);
+    ///
     /// buffer.extend_from_slice_copy(&[1, 2, 3]);
     /// assert!(!buffer.is_full());
-    /// 
+    ///
     /// buffer.extend_from_slice_copy(&[4, 5]);
     /// assert!(buffer.is_full());
     /// ```
@@ -824,19 +824,26 @@ impl<'a, T> Buffer<'a, T> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut buffer = Buffer::with_capacity_in(&arena, 5);
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 10);
+    /// buffer.push(0);
     ///
     /// let data = &[1, 2, 3, 4, 5];
     ///
     /// unsafe {
+    ///     assert!(data.len() <= buffer.capacity() - buffer.len());
+    ///
     ///     // Copy some data into the uninitialized part of the `Buffer`
-    ///     ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr(), data.len());
+    ///     ptr::copy_nonoverlapping(
+    ///         data.as_ptr(),
+    ///         buffer.as_mut_ptr().add(buffer.len()),
+    ///         data.len(),
+    ///     );
     ///
     ///     // Then call `set_len()` to initialize the `Buffer` with the newly copied data.
-    ///     buffer.set_len(5);
+    ///     buffer.set_len(buffer.len() + data.len());
     /// }
     ///
-    /// assert_eq!(&buffer, &[1, 2, 3, 4, 5]);
+    /// assert_eq!(&buffer, &[0, 1, 2, 3, 4, 5]);
     /// ```
     #[inline]
     pub const unsafe fn set_len(&mut self, new_len: usize) {
@@ -1501,7 +1508,7 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     /// for the `value`, and no additional capacity can be reserved.
     ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use rotunda::{Arena, buffer::Buffer};
     ///
