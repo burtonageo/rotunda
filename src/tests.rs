@@ -825,12 +825,28 @@ fn test_growable_buffer() {
     assert_eq!(buffer.as_slice(), [1, 2, 3, 4, 5]);
     assert_eq!(buffer_2.as_slice(), [6, 7, 8, 9, 10]);
 
+    let handle = RcHandle::new_in(&arena, 25u32);
+    let handle_clone = RcHandle::clone(&handle);
+
+    let buffer = Buffer::with_growable_in(&arena, |buf| {
+        buf.extend((0..130).map(|i| i + *handle_clone));
+    });
+
+    for (i, elem) in (0..130).map(|i| i + *handle).enumerate() {
+        assert_eq!(*&buffer[i], elem);
+    }
+
     let arena = Arena::with_block_size(400 * mem::size_of::<u32>());
-    let _buffer: Buffer<'_, u32> = Buffer::with_growable_in(&arena, |buf| {
+
+    let buffer: Buffer<'_, u32> = Buffer::with_growable_in(&arena, move |buf| {
         assert!(!buf.is_full());
         buf.extend(0..400);
         assert!(buf.is_full());
     });
+
+    for i in 0..400 {
+        assert_eq!(*&buffer[i], i as u32);
+    }
 }
 
 #[test]
