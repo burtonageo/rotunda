@@ -697,6 +697,18 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    #[must_use]
+    #[inline]
+    pub fn as_ptr(&self) -> *const T {
+        self.handle.as_ptr().cast::<T>()
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn as_mut_ptr(&mut self) -> *mut T {
+        self.handle.as_mut_ptr().cast::<T>()
+    }
+
     /// Access the spare capacity of the `Buffer` as a mutable slice.
     ///
     /// The returned slice will have a length of `self.capacity() - self.len()`.
@@ -818,7 +830,7 @@ impl<'a, T> Buffer<'a, T> {
     ///
     /// unsafe {
     ///     // Copy some data into the uninitialized part of the `Buffer`
-    ///     ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr(), 5);
+    ///     ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr(), data.len());
     ///
     ///     // Then call `set_len()` to initialize the `Buffer` with the newly copied data.
     ///     buffer.set_len(5);
