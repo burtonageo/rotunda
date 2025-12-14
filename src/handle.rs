@@ -1093,6 +1093,7 @@ impl<'a, T: ?Sized> BorrowMut<T> for Handle<'a, T> {
 
 impl<'a, T, I: SliceIndex<[T]>> Index<I> for Handle<'a, [T]> {
     type Output = <[T] as Index<I>>::Output;
+    #[track_caller]
     #[inline]
     fn index(&self, index: I) -> &Self::Output {
         self.as_ref().index(index)
@@ -1100,6 +1101,7 @@ impl<'a, T, I: SliceIndex<[T]>> Index<I> for Handle<'a, [T]> {
 }
 
 impl<'a, T, I: SliceIndex<[T]>> IndexMut<I> for Handle<'a, [T]> {
+    #[track_caller]
     #[inline]
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
         self.as_mut().index_mut(index)

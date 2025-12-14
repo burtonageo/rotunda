@@ -1228,6 +1228,7 @@ impl<'a, T> DerefMut for Buffer<'a, T> {
 
 impl<'a, T, I: SliceIndex<[T]>> Index<I> for Buffer<'a, T> {
     type Output = <[T] as Index<I>>::Output;
+    #[track_caller]
     #[inline]
     fn index(&self, index: I) -> &Self::Output {
         self.as_slice().index(index)
@@ -1235,6 +1236,7 @@ impl<'a, T, I: SliceIndex<[T]>> Index<I> for Buffer<'a, T> {
 }
 
 impl<'a, T, I: SliceIndex<[T]>> IndexMut<I> for Buffer<'a, T> {
+    #[track_caller]
     #[inline]
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
         self.as_mut_slice().index_mut(index)
@@ -1715,6 +1717,7 @@ impl<'a, T, A: Allocator> DerefMut for GrowableBuffer<'a, T, A> {
 
 impl<'a, T, A: Allocator, Idx: SliceIndex<[T]>> Index<Idx> for GrowableBuffer<'a, T, A> {
     type Output = <[T] as Index<Idx>>::Output;
+    #[track_caller]
     #[inline]
     fn index(&self, index: Idx) -> &Self::Output {
         self.as_slice().index(index)
@@ -1722,6 +1725,7 @@ impl<'a, T, A: Allocator, Idx: SliceIndex<[T]>> Index<Idx> for GrowableBuffer<'a
 }
 
 impl<'a, T, A: Allocator, Idx: SliceIndex<[T]>> IndexMut<Idx> for GrowableBuffer<'a, T, A> {
+    #[track_caller]
     #[inline]
     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
         self.as_mut_slice().index_mut(index)

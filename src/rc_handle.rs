@@ -53,6 +53,7 @@ impl<'a, T> RcHandle<'a, T> {
     /// let rc_handle = RcHandle::new_in(&arena, 25);
     /// assert_eq!(&rc_handle, &25);
     /// ```
+    #[track_caller]
     #[must_use]
     #[inline]
     pub fn new_in<A: Allocator>(arena: &'a Arena<A>, value: T) -> Self {
@@ -72,6 +73,7 @@ impl<'a, T> RcHandle<'a, T> {
     /// let rc_handle = RcHandle::new_with(&arena, || "Hello!");
     /// assert_eq!(&rc_handle, &"Hello!");
     /// ```
+    #[track_caller]
     #[must_use]
     #[inline]
     pub fn new_with<A: Allocator, F: FnOnce() -> T>(arena: &'a Arena<A>, f: F) -> Self {
@@ -79,6 +81,7 @@ impl<'a, T> RcHandle<'a, T> {
         unsafe { RcHandle::init(handle, f()) }
     }
 
+    #[track_caller]
     #[must_use]
     #[inline]
     pub unsafe fn init_with<A: Allocator, F: FnOnce(&mut MaybeUninit<T>)>(
@@ -94,6 +97,7 @@ impl<'a, T> RcHandle<'a, T> {
 }
 
 impl<'a, T> RcHandle<'a, [T]> {
+    #[track_caller]
     #[must_use]
     #[inline]
     pub fn new_slice_from_fn_in<A: Allocator, F: FnMut(usize) -> T>(
@@ -400,6 +404,7 @@ impl<'a> RcHandle<'a, dyn Any> {
 }
 
 impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
+    #[track_caller]
     #[must_use]
     #[inline]
     pub fn new_uninit_in<A: Allocator>(arena: &'a Arena<A>) -> RcHandle<'a, MaybeUninit<T>> {
@@ -420,6 +425,7 @@ impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
         }
     }
 
+    #[track_caller]
     #[must_use]
     #[inline]
     pub fn new_uninit_zeroed_in<A: Allocator>(arena: &'a Arena<A>) -> RcHandle<'a, MaybeUninit<T>> {
@@ -1069,6 +1075,7 @@ impl<T> RcHandleInner<T> {
 
 const DANGLING_SENTINEL: usize = usize::MAX;
 
+#[track_caller]
 #[must_use]
 #[inline]
 const fn rc_inner_layout_for_value_layout(layout: Layout) -> Layout {
