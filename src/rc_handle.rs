@@ -14,9 +14,9 @@ use core::{
     iter::IntoIterator,
     marker::{CoercePointee, PhantomData, PhantomPinned},
     mem::{self, ManuallyDrop, MaybeUninit, offset_of},
-    ops::Deref,
+    ops::{Deref, Index},
     ptr::{self, NonNull, Pointee, Thin},
-    slice,
+    slice::{self, SliceIndex},
 };
 #[cfg(feature = "serde")]
 use serde_core::ser::{Serialize, Serializer};
@@ -612,6 +612,15 @@ impl<'a, T: ?Sized> Deref for RcHandle<'a, T> {
     #[inline]
     fn deref(&self) -> &Self::Target {
         &Self::inner(self).data
+    }
+}
+
+impl<'a, T, I: SliceIndex<[T]>> Index<I> for RcHandle<'a, [T]> {
+    type Output = <[T] as Index<I>>::Output;
+    #[track_caller]
+    #[inline]
+    fn index(&self, index: I) -> &Self::Output {
+        self.as_ref().index(index)
     }
 }
 
