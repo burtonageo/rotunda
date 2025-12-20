@@ -2,7 +2,6 @@
 #![feature(
     alloc_layout_extra,
     allocator_api,
-    const_index,
     const_trait_impl,
     derive_coerce_pointee,
     ptr_metadata

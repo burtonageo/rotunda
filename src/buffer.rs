@@ -532,8 +532,9 @@ impl<'a, T> Buffer<'a, T> {
         unsafe {
             self.set_len(self.len - 1);
             let value = Handle::as_nonnull(&self.handle)
+                .cast::<MaybeUninit<T>>()
+                .add(self.len)
                 .as_ref()
-                .get_unchecked(self.len)
                 .assume_init_read();
 
             Some(value)
@@ -977,8 +978,9 @@ impl<'a, T> Buffer<'a, T> {
 
         unsafe {
             Handle::as_nonnull(&self.handle)
+                .cast::<MaybeUninit<T>>()
+                .add(self.len)
                 .as_mut()
-                .get_unchecked_mut(self.len)
                 .write(value);
         }
 
