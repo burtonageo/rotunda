@@ -234,6 +234,23 @@ impl<'a, T: Default> RcHandle<'a, T> {
 }
 
 impl<'a, T: ?Sized> RcHandle<'a, T> {
+    /// Returns a raw pointer to the contents of this `RcHandle`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    /// 
+    /// let arena = Arena::new();
+    ///
+    /// let handle = RcHandle::new_in(&arena, 1902usize);
+    ///
+    /// let ptr: *const usize = RcHandle::as_ptr(&handle);
+    ///
+    /// unsafe {
+    ///     assert_eq!(ptr.as_ref(), Some(&1902));
+    /// }
+    /// ```
     #[must_use]
     #[inline]
     pub const fn as_ptr(this: &Self) -> *const T {
@@ -274,6 +291,22 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
         }
     }
 
+    /// Create a new `WeakHandle` from this `RcHandle`.
+    ///
+    /// Upgrading the returned `WeakHandle` will increment this `RcHandle`'s refcount.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    /// 
+    /// let rc = RcHandle::new_in(&arena, 25);
+    ///
+    /// let weak = RcHandle::downgrade(&rc);
+    /// # assert!(RcHandle::ptr_eq(&rc, &weak));
+    /// ```
     #[must_use]
     #[inline]
     pub const fn downgrade(this: &Self) -> WeakHandle<'a, T> {
@@ -283,6 +316,31 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
         }
     }
 
+    /// Returns a mutable reference to the contents of this `RcHandle` if
+    /// it uniquely owns its contents.
+    ///
+    /// If there are other live `RcHandle`s to the shared inner value,
+    /// this method returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    /// 
+    /// let mut rc = RcHandle::new_in(&arena, 25);
+    ///
+    /// if let Some(inner) = RcHandle::get_mut(&mut rc) {
+    ///     *inner = 42;
+    /// }
+    ///
+    /// assert_eq!(*rc, 42);
+    ///
+    /// let rc_2 = RcHandle::clone(&rc);
+    ///
+    /// assert!(RcHandle::get_mut(&mut rc).is_none());
+    /// ```
     #[must_use]
     #[inline]
     pub const fn get_mut(this: &mut Self) -> Option<&mut T> {
@@ -293,12 +351,64 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
         }
     }
 
+    /// Returns a mutable reference to the contents of this `RcHandle`.
+    ///
+    /// # Safety
+    ///
+    /// You should only call this method if you are sure that the `RcHandle`
+    /// is the only live handle to the shared value, otherwise it is possible
+    /// to mutably alias the shared value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let string = "This message";
+    /// 
+    /// let mut rc_handle = RcHandle::new_splat(&arena, 20, 0u8);
+    ///
+    /// unsafe {
+    ///     let contents = RcHandle::get_mut_unchecked(&mut rc_handle);
+    ///     core::ptr::copy_nonoverlapping(string.as_bytes().as_ptr(), contents.as_mut_ptr(), string.len());
+    /// }
+    ///
+    /// assert_eq!(*&rc_handle[..string.len()], *"This message".as_bytes());
+    /// assert_eq!(rc_handle.len(), 20);
+    /// ```
     #[must_use]
     #[inline]
     pub const unsafe fn get_mut_unchecked(this: &mut Self) -> &mut T {
         unsafe { &mut this.ptr.as_mut().data }
     }
 
+    /// Attempt to convert the `RcHandle` into a uniquely owned `Handle`.
+    ///
+    /// If there are other live `RcHandle`s to the shared value, then
+    /// the original `RcHandle` is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = RcHandle::new_in(&arena, 25);
+    /// let weak = RcHandle::downgrade(&handle);
+    ///
+    /// {
+    ///     let handle_2 = RcHandle::clone(&handle);
+    ///     let result = RcHandle::try_into_handle(handle_2);
+    ///     assert!(result.is_err());
+    /// }
+    ///
+    /// let handle = RcHandle::try_into_handle(handle).unwrap();
+    /// assert_eq!(*handle, 25);
+    /// assert!(WeakHandle::upgrade(&weak).is_none());
+    /// ```
     #[inline]
     pub fn try_into_handle(this: Self) -> Result<Handle<'a, T>, Self> {
         if Self::is_unique(&this) {
@@ -319,12 +429,34 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
         }
     }
 
+    /// Converts this `RcHandle` into a uniquely owned `Handle`.
+    ///
+    /// If there are other live `RcHandle`s to the shared value, this method
+    /// returns `None`.
     #[must_use]
     #[inline]
     pub fn into_handle(this: Self) -> Option<Handle<'a, T>> {
         Self::try_into_handle(this).ok()
     }
 
+    /// Returns the number of strong references to the shared value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = RcHandle::new_in(&arena, ());
+    ///
+    /// assert_eq!(RcHandle::ref_count(&handle), 1);
+    ///
+    /// let handle_2 = RcHandle::clone(&handle);
+    /// 
+    /// assert_eq!(RcHandle::ref_count(&handle), 2);
+    /// # let _ = handle_2;
+    /// ```
     #[must_use]
     #[inline]
     pub const fn ref_count(this: &Self) -> usize {
