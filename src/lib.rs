@@ -899,6 +899,43 @@ impl<A: Allocator> Arena<A> {
         }
     }
 
+    /// Allocate the given `string` into the `Arena`, returning a exclusive reference to the string
+    /// in the arena.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if the string cannot be allocated in the `Arena`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::Arena;
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let message = arena.alloc_str("hello ❤️");
+    ///
+    /// message.make_ascii_uppercase();
+    ///
+    /// assert_eq!(message, "HELLO ❤️");
+    /// ```
+    #[track_caller]
+    #[must_use]
+    #[inline]
+    pub fn alloc_str<S: ?Sized + AsRef<str>>(&self, string: &S) -> &mut str {
+        let string = string.as_ref();
+        let len = string.len();
+
+        unsafe {
+            // @SAFETY: It is always safe to create a layout for any number of bytes.
+            let slot = self.alloc_raw(Layout::array::<u8>(len).unwrap_unchecked());
+
+            let slot = slot.as_ptr().cast::<u8>();
+            ptr::copy(string.as_ptr(), slot, len);
+            &mut *ptr::from_raw_parts_mut::<str>(slot, len)
+        }
+    }
+
     /// Returns a reference to the currently in-use block, if it is available.
     ///
     /// This method requires exclusive access to the `Arena`, so there
