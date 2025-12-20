@@ -1,10 +1,5 @@
 #![no_std]
-#![feature(
-    alloc_layout_extra,
-    allocator_api,
-    derive_coerce_pointee,
-    ptr_metadata
-)]
+#![feature(alloc_layout_extra, allocator_api, derive_coerce_pointee, ptr_metadata)]
 #![warn(
     missing_docs,
     clippy::empty_line_after_doc_comments,
@@ -468,7 +463,10 @@ impl<A: Allocator> Arena<A> {
     #[track_caller]
     #[inline]
     pub fn force_push_new_block(&self) {
-        let _ = unsafe { self.get_free_block().map_err(|_| handle_alloc_error(self.blocks.block_layout())) };
+        let _ = unsafe {
+            self.get_free_block()
+                .map_err(|_| handle_alloc_error(self.blocks.block_layout()))
+        };
     }
 
     /// Forces the `Arena` to push all allocations into a new block of memory.
