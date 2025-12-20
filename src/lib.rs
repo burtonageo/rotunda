@@ -162,14 +162,16 @@ extern crate alloc;
 extern crate std;
 
 use crate::blocks::{Block, Blocks, ScopedRestore};
-use alloc::alloc::{AllocError, Allocator, Global, Layout};
+use alloc::alloc::{AllocError, Allocator, Global, Layout, LayoutError, handle_alloc_error};
 use core::{
+    error::Error as ErrorTrait,
     ffi::c_void,
     fmt,
     iter::FusedIterator,
     marker::PhantomData,
     mem::{ManuallyDrop, MaybeUninit},
     ptr::{self, NonNull},
+    str,
 };
 
 pub mod buffer;
@@ -352,6 +354,41 @@ impl<A: Allocator> Arena<A> {
         }
     }
 
+    /// Tries to reserve the given number of `num_blocks` into the `Arena`, placing them in the free list.
+    ///
+    /// Should the current block overflow while servicing allocation requests, the free blocks
+    /// can be used without needing to call the allocator.
+    ///
+    /// # Errors
+    ///
+    /// If the allocator cannot allocate a `Block`, then `AllocError` is returned. If other blocks were allocated
+    /// as part of this call, then they will remain in the `Arena`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # #![feature(allocator_api)]
+    /// use rotunda::Arena;
+    /// # extern crate alloc;
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// # fn inner(arena: &Arena) -> Result<(), alloc::alloc::AllocError> {
+    /// arena.try_reserve_blocks(3)?;
+    /// # Ok(())
+    /// # }
+    /// # inner(&arena);
+    /// ```
+    #[inline]
+    pub fn try_reserve_blocks(&self, num_blocks: usize) -> Result<(), AllocError> {
+        let (layout, alloc) = (self.blocks.block_layout(), self.allocator());
+        for _ in 0..num_blocks {
+            let block = Block::try_alloc(layout, alloc)?;
+            self.blocks.push_free_block(block);
+        }
+        Ok(())
+    }
+
     /// Returns a pointer into the head of the current block.
     ///
     /// The available space in the current block is returned as the slice length.
@@ -395,41 +432,6 @@ impl<A: Allocator> Arena<A> {
         Some(NonNull::from_raw_parts(data, block_size - block_pos))
     }
 
-    /// Tries to reserve the given number of `num_blocks` into the `Arena`, placing them in the free list.
-    ///
-    /// Should the current block overflow while servicing allocation requests, the free blocks
-    /// can be used without needing to call the allocator.
-    ///
-    /// # Errors
-    ///
-    /// If the allocator cannot allocate a `Block`, then `AllocError` is returned. If other blocks were allocated
-    /// as part of this call, then they will remain in the `Arena`.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # #![feature(allocator_api)]
-    /// use rotunda::Arena;
-    /// # extern crate alloc;
-    ///
-    /// let arena = Arena::new();
-    ///
-    /// # fn inner(arena: &Arena) -> Result<(), alloc::alloc::AllocError> {
-    /// arena.try_reserve_blocks(3)?;
-    /// # Ok(())
-    /// # }
-    /// # inner(&arena);
-    /// ```
-    #[inline]
-    pub fn try_reserve_blocks(&self, num_blocks: usize) -> Result<(), AllocError> {
-        let (layout, alloc) = (self.blocks.block_layout(), self.allocator());
-        for _ in 0..num_blocks {
-            let block = Block::try_alloc(layout, alloc)?;
-            self.blocks.push_free_block(block);
-        }
-        Ok(())
-    }
-
     /// Forces the `Arena` to push all allocations into a new block of memory.
     ///
     /// The current block of memory will be moved to the used list, and will be
@@ -437,6 +439,10 @@ impl<A: Allocator> Arena<A> {
     ///
     /// This function will take a block from the free list if it is available, or allocate
     /// a new one otherwise.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if the global allocator is unable to allocate a new block.
     ///
     /// # Examples
     ///
@@ -464,7 +470,23 @@ impl<A: Allocator> Arena<A> {
     #[track_caller]
     #[inline]
     pub fn force_push_new_block(&self) {
-        let _ = unsafe { self.get_free_block() };
+        let _ = unsafe { self.get_free_block().map_err(|_| handle_alloc_error(self.blocks.block_layout())) };
+    }
+
+    /// Forces the `Arena` to push all allocations into a new block of memory.
+    ///
+    /// The current block of memory will be moved to the used list, and will be
+    /// inaccessible until the `Arena` is cleared.
+    ///
+    /// This function will take a block from the free list if it is available, or allocate
+    /// a new one otherwise.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the global allocator is unable to allocate a new block.
+    #[inline]
+    pub fn try_force_push_new_block(&self) -> Result<(), AllocError> {
+        unsafe { self.get_free_block().map(|_| ()) }
     }
 
     /// Checks whether the current block has the capacity to allocate up to `block_capacity_bytes`.
@@ -589,6 +611,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// assert_eq!(arena.free_blocks().count(), 3);
     /// ```
+    #[track_caller]
     #[inline]
     pub fn trim_n(&self, n: usize) {
         self.blocks.trim_n(n, self.allocator());
@@ -774,7 +797,7 @@ impl<A: Allocator> Arena<A> {
         self.blocks.block_size()
     }
 
-    /// Returns a new allocation from the current block in the `Arena`.
+    /// Returns a new allocation matching `layout` from the current block in the `Arena`.
     ///
     /// # Panics
     ///
@@ -789,48 +812,73 @@ impl<A: Allocator> Arena<A> {
     #[must_use]
     pub fn alloc_raw(&self, layout: Layout) -> NonNull<c_void> {
         if layout.size() == 0 {
-            let mut ptr = NonNull::dangling();
-            let offset = ptr.align_offset(layout.align());
-
-            if offset != 0 || offset != usize::MAX {
-                ptr = ptr.map_addr(|addr| addr.saturating_add(offset));
-            }
-
-            return ptr;
+            return self.alloc_zst(layout.align());
         }
 
-        let block = self
-            .blocks
-            .curr_block()
-            .get()
-            .filter(|_| self.blocks.can_write_layout(&layout))
-            .unwrap_or_else(|| {
-                #[cold]
-                #[track_caller]
-                #[inline(never)]
-                fn insert_fresh_block_fail(layout: &Layout) -> ! {
-                    panic!(
-                        "can never insert a type with layout `Layout (size = {}, align = {})` into arena",
-                        layout.size(),
-                        layout.align()
-                    );
-                }
+        #[cold]
+        #[track_caller]
+        #[inline(never)]
+        fn insert_fresh_block_fail(layout: &Layout) -> ! {
+            panic!(
+                "can never insert a type with layout `Layout (size = {}, align = {})` into arena",
+                layout.size(),
+                layout.align()
+            );
+        }
 
-                let block = unsafe { self.get_free_block() };
-                if !self.blocks.can_write_layout(&layout) {
-                    insert_fresh_block_fail(&layout);
-                }
+        if let Err(e) = self.get_block_for_layout(layout) {
+            match e {
+                Error::AllocErr(_) => handle_alloc_error(layout),
+                _ => insert_fresh_block_fail(&layout),
+            }
+        }
 
-                block
-            });
-
-        let offset = self.blocks.offset_to_align_for(&layout);
         unsafe {
-            let start = self.blocks.bump(offset);
-            let slot = Block::data_start(block).add(start).cast::<c_void>();
-            self.blocks.bump(layout.size());
-
+            let slot = self.blocks.bump_layout(layout);
             NonNull::new_unchecked(slot.as_ptr())
+        }
+    }
+
+    /// Returns a new allocation matching `layout` in the `Arena`.
+    ///
+    /// # Errors
+    ///
+    /// If the underlying allocator could not service a request, then
+    /// an `Error::AllocErr` is returned.
+    ///
+    /// If the given `layout` could not fit in an empty block, then
+    /// `Error::BadLayout` is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate alloc;
+    /// # use alloc::alloc::Layout;
+    /// # use rotunda::Error;
+    /// use rotunda::Arena;
+    ///
+    /// let arena = Arena::with_block_size(4);
+    ///
+    /// # fn inner(arena: &Arena) -> Result<(), rotunda::Error> {
+    /// let data = arena.try_alloc_raw(Layout::new::<u16>()).expect("Will succeed");
+    /// let will_error = arena.try_alloc_raw(Layout::new::<u64>())?;
+    /// # Ok(())
+    /// # }
+    /// # let result = inner(&arena);
+    /// # let layout = match result.unwrap_err() { Error::BadLayout(l) => l, _ => unreachable!() };
+    /// # assert_eq!(layout, Layout::new::<u64>());
+    /// ```
+    #[inline]
+    pub fn try_alloc_raw(&self, layout: Layout) -> Result<NonNull<c_void>, Error> {
+        if layout.size() == 0 {
+            return Ok(self.alloc_zst(layout.align()));
+        }
+
+        self.get_block_for_layout(layout)?;
+
+        unsafe {
+            let slot = self.blocks.bump_layout(layout);
+            Ok(NonNull::new_unchecked(slot.as_ptr()))
         }
     }
 
@@ -872,7 +920,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// ```
     /// use core::mem::ManuallyDrop;
-    /// use rotunda::{Arena, handle::Handle};
+    /// use rotunda::Arena;
     ///
     /// let mut arena = Arena::new();
     ///
@@ -1019,7 +1067,7 @@ impl<A: Allocator> Arena<A> {
 
     #[must_use]
     #[inline]
-    unsafe fn get_free_block(&self) -> NonNull<Block> {
+    unsafe fn get_free_block(&self) -> Result<NonNull<Block>, AllocError> {
         let block = match self.blocks.free_blocks().get() {
             // If we have a free block, grab it
             Some(block) => unsafe {
@@ -1030,7 +1078,7 @@ impl<A: Allocator> Arena<A> {
                 block
             },
             // otherwise, alloc another one
-            _ => self.alloc_block(),
+            _ => self.alloc_block()?,
         };
 
         self.blocks.curr_block_pos().set(0);
@@ -1039,14 +1087,57 @@ impl<A: Allocator> Arena<A> {
         }
 
         self.blocks.curr_block().set(Some(block));
-        block
+        Ok(block)
     }
 
     #[must_use]
     #[inline]
-    fn alloc_block(&self) -> NonNull<Block> {
+    fn alloc_block(&self) -> Result<NonNull<Block>, AllocError> {
         let layout = self.blocks.block_layout();
-        Block::alloc(layout, self.allocator())
+        Block::try_alloc(layout, self.allocator())
+    }
+
+    #[must_use]
+    fn get_block_for_layout(&self, layout: Layout) -> Result<NonNull<Block>, Error> {
+        let block = self
+            .blocks
+            .curr_block()
+            .get()
+            .filter(|_| self.blocks.can_write_layout(&layout))
+            .map(Ok)
+            .unwrap_or_else(|| {
+                let block = unsafe { self.get_free_block()? };
+                if !self.blocks.can_write_layout(&layout) {
+                    return Err(Error::BadLayout(layout));
+                }
+
+                Ok(block)
+            });
+
+        if let Ok(block) = block {
+            debug_assert!(ptr::eq(
+                block.as_ptr(),
+                self.blocks
+                    .curr_block()
+                    .get()
+                    .map(|p| p.as_ptr())
+                    .unwrap_or(ptr::null_mut())
+            ));
+        }
+
+        block
+    }
+
+    #[must_use]
+    fn alloc_zst(&self, align: usize) -> NonNull<c_void> {
+        let mut ptr = NonNull::dangling();
+        let offset = ptr.align_offset(align);
+
+        if offset != 0 || offset != usize::MAX {
+            ptr = ptr.map_addr(|addr| addr.saturating_add(offset));
+        }
+
+        return ptr;
     }
 }
 
@@ -1195,6 +1286,58 @@ impl<'a, A: Allocator> fmt::Debug for AllBlocksMut<'a, A> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmtr.debug_struct("AllBlocksMut").finish_non_exhaustive()
+    }
+}
+
+/// Represents error types which may be returned while using an `Arena`.
+#[derive(Debug)]
+pub enum Error {
+    /// A `Layout` could not be constructed for a particular type.
+    LayoutErr(LayoutError),
+    /// The underlying allocator could not service the request.
+    AllocErr(AllocError),
+    /// The allocation request with the given `Layout` could not be serviced.
+    BadLayout(Layout),
+}
+
+impl From<LayoutError> for Error {
+    #[inline]
+    fn from(value: LayoutError) -> Self {
+        Self::LayoutErr(value)
+    }
+}
+
+impl From<AllocError> for Error {
+    #[inline]
+    fn from(value: AllocError) -> Self {
+        Self::AllocErr(value)
+    }
+}
+
+impl fmt::Display for Error {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::AllocErr(ref e) => fmt::Display::fmt(e, fmtr),
+            Self::LayoutErr(ref e) => fmt::Display::fmt(e, fmtr),
+            Self::BadLayout(layout) => write!(
+                fmtr,
+                "Arena cannot allocate a value of size {}, alignment {}",
+                layout.size(),
+                layout.align()
+            ),
+        }
+    }
+}
+
+impl ErrorTrait for Error {
+    #[inline]
+    fn source(&self) -> Option<&(dyn ErrorTrait + 'static)> {
+        match *self {
+            Self::AllocErr(ref e) => e.source(),
+            Self::LayoutErr(ref e) => e.source(),
+            Self::BadLayout(_) => None,
+        }
     }
 }
 

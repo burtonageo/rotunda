@@ -179,6 +179,19 @@ impl Blocks {
         self.curr_block_pos.get()
     }
 
+    pub(super) unsafe fn bump_layout(&self, layout: Layout) -> NonNull<c_void> {
+        let block = self.curr_block.get().unwrap_or(NonNull::dangling());
+        let offset = self.offset_to_align_for(&layout);
+
+        unsafe {
+            let start = self.bump(offset);
+            let slot = Block::data_start(block).add(start).cast::<c_void>();
+            self.bump(layout.size());
+
+            slot
+        }
+    }
+
     #[allow(unused)]
     #[track_caller]
     #[inline]
@@ -357,6 +370,7 @@ pub(super) unsafe fn dealloc_blocks(
     }
 }
 
+#[track_caller]
 pub(super) unsafe fn dealloc_blocks_n(
     n: usize,
     block_layout: Layout,
