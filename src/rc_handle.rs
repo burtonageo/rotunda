@@ -588,8 +588,8 @@ impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
     #[inline]
     pub const unsafe fn init(mut this: Self, value: T) -> RcHandle<'a, T> {
         unsafe {
-            let inner = this.ptr.as_mut();
-            ptr::write(&raw mut inner.data, MaybeUninit::new(value));
+            let inner = RcHandle::get_mut_unchecked(&mut this);
+            let _ = inner.write(value);
 
             RcHandle::assume_init(this)
         }
