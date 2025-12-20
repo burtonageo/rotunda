@@ -17,7 +17,7 @@ use core::{
     ops::{Deref, DerefMut, Index, IndexMut},
     pin::Pin,
     ptr::{self, NonNull, Pointee, Thin},
-    slice::SliceIndex,
+    slice::{self, SliceIndex},
     str,
 };
 #[cfg(feature = "serde")]
@@ -147,7 +147,12 @@ impl<'a, T> Handle<'a, T> {
     #[must_use]
     #[inline]
     pub const fn into_slice(this: Self) -> Handle<'a, [T]> {
-        Handle::into_array(this)
+        let ptr = Handle::into_raw(this);
+        unsafe {
+            let slice =  slice::from_raw_parts_mut(ptr, 1) as *mut [T];
+            Handle::from_raw(slice)
+        }
+
     }
 
     /// Converts the handle into a `Handle<[T; 1]>`.
