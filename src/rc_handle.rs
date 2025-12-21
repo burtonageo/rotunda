@@ -240,7 +240,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     ///
     /// ```
     /// use rotunda::{Arena, rc_handle::RcHandle};
-    /// 
+    ///
     /// let arena = Arena::new();
     ///
     /// let handle = RcHandle::new_in(&arena, 1902usize);
@@ -301,7 +301,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     /// use rotunda::{Arena, rc_handle::RcHandle};
     ///
     /// let arena = Arena::new();
-    /// 
+    ///
     /// let rc = RcHandle::new_in(&arena, 25);
     ///
     /// let weak = RcHandle::downgrade(&rc);
@@ -328,7 +328,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     /// use rotunda::{Arena, rc_handle::RcHandle};
     ///
     /// let arena = Arena::new();
-    /// 
+    ///
     /// let mut rc = RcHandle::new_in(&arena, 25);
     ///
     /// if let Some(inner) = RcHandle::get_mut(&mut rc) {
@@ -367,7 +367,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     /// let arena = Arena::new();
     ///
     /// let string = "This message";
-    /// 
+    ///
     /// let mut rc_handle = RcHandle::new_splat(&arena, 20, 0u8);
     ///
     /// unsafe {
@@ -453,7 +453,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     /// assert_eq!(RcHandle::ref_count(&handle), 1);
     ///
     /// let handle_2 = RcHandle::clone(&handle);
-    /// 
+    ///
     /// assert_eq!(RcHandle::ref_count(&handle), 2);
     /// # let _ = handle_2;
     /// ```
@@ -988,6 +988,30 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
             .unwrap_or_default()
     }
 
+    /// Access a pointer to the shared value.
+    ///
+    /// # Safety
+    ///
+    /// It is not valid to dereference this pointer unless you are certain that
+    /// the shared value is still valid. If this `WeakHandle` is pointing to
+    /// a value whose `ref_count()` is `0`, this method will return a dangling pointer.
+    ///
+    /// To check that the pointer is still valid, it is recommended to upgrade the
+    /// `WeakHandle` to an `RcHandle`, and call `RcHandle::get_ptr()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc = RcHandle::new_in(&arena, 17);
+    ///
+    /// let weak = RcHandle::downgrade(&rc);
+    ///
+    /// let ptr: *const i32 = WeakHandle::as_ptr(&weak);
+    /// ```
     #[must_use]
     #[inline]
     pub fn as_ptr(&self) -> *const T {
@@ -1031,6 +1055,19 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
     }
 
     /// Hashes the pointer value of this `WeakHandle` into the given `hasher`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::hash::{Hasher, DefaultHasher};
+    /// use rotunda::rc_handle::WeakHandle;
+    ///
+    /// let weak = WeakHandle::<i32>::new();
+    /// let mut hasher = DefaultHasher::new();
+    ///
+    /// WeakHandle::ptr_hash(&weak, &mut hasher);
+    /// let code = hasher.finish();
+    /// ```
     #[inline]
     pub fn ptr_hash<H: Hasher>(this: &Self, hasher: &mut H) {
         ptr::hash(WeakHandle::as_ptr(this), hasher);
