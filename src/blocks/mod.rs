@@ -6,7 +6,7 @@ use core::{
     marker::{PhantomData, PhantomPinned},
     mem::{self, MaybeUninit, offset_of},
     ptr::{self, NonNull},
-    slice, str,
+    str,
 };
 
 pub(super) mod lock;
@@ -316,7 +316,7 @@ impl Block {
         let ptr = this
             .map_addr(|addr| addr.saturating_add(offset_of!(Block, data)))
             .cast::<MaybeUninit<u8>>();
-        unsafe { NonNull::new_unchecked(slice::from_raw_parts_mut(ptr.as_ptr(), len)) }
+        unsafe { NonNull::new_unchecked(ptr::slice_from_raw_parts_mut(ptr.as_ptr(), len)) }
     }
 
     #[track_caller]
