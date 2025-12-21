@@ -772,7 +772,7 @@ impl<'a, T> Buffer<'a, T> {
 
     #[must_use]
     #[inline]
-    pub const fn has_space_for_elems(&self, num_elems: usize) -> bool {
+    pub const fn has_capacity_for_additional(&self, num_elems: usize) -> bool {
         (self.capacity() - self.len) >= num_elems
     }
 
