@@ -419,6 +419,23 @@ fn test_rc() {
 
         assert!(weak.upgrade().is_none());
     });
+
+    arena.with_scope(|arena| {
+        let weak;
+
+        {
+            let rc_handle = RcHandle::new_in(&arena, 99);
+            weak = RcHandle::downgrade(&rc_handle);
+        }
+
+        let strong = WeakHandle::try_resurrect(&weak, 42).unwrap();
+        assert_eq!(*strong, 42);
+
+        assert_eq!(WeakHandle::ref_count(&weak), 1);
+
+        let thirteen = WeakHandle::try_resurrect(&weak, 13).unwrap_err();
+        assert_eq!(thirteen, 13);
+    });
 }
 
 #[test]

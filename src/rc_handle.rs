@@ -916,6 +916,58 @@ impl<'a, T> WeakHandle<'a, T> {
             _boo: PhantomData,
         }
     }
+
+    /// Reinitializes the shared slot with the given `value` if it has
+    /// been destroyed.
+    ///
+    /// # Errors
+    ///
+    /// This method will return the `value` parameter as an `Err` if there
+    /// are still live `RcHandle`s to this shared value, or if the
+    /// `WeakHandle` was created through [`WeakHandle::new()`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut weak_handle = WeakHandle::new();
+    ///
+    /// assert_eq!(WeakHandle::try_resurrect(&weak_handle, 124).unwrap_err(), 124);
+    ///
+    /// {
+    ///     let rc_handle = RcHandle::new_in(&arena, 99);
+    ///     weak_handle = RcHandle::downgrade(&rc_handle);
+    /// }
+    ///
+    /// let strong = WeakHandle::try_resurrect(&weak_handle, 42).unwrap();
+    /// assert_eq!(*strong, 42);
+    ///
+    /// let thirteen = WeakHandle::try_resurrect(&weak_handle, 13).unwrap_err();
+    /// assert_eq!(thirteen, 13);
+    /// ```
+    #[inline]
+    pub fn try_resurrect(&self, value: T) -> Result<RcHandle<'a, T>, T> {
+        if WeakHandle::ref_count(&self) > 0 || is_dangling(self.ptr.as_ptr()) {
+            return Err(value);
+        }
+
+        unsafe {
+            let inner = self.ptr.as_ptr();
+            let dst = inner
+                .map_addr(|addr| addr + offset_of!(RcHandleInner<T>, data))
+                .cast::<T>();
+            ptr::write(dst, value);
+            (&*inner).increment_refcount();
+        }
+
+        Ok(RcHandle {
+            ptr: self.ptr,
+            _boo: PhantomData,
+        })
+    }
 }
 
 impl<'a, T: ?Sized> WeakHandle<'a, T> {
