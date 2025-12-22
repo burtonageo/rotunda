@@ -502,8 +502,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// ```
     #[inline]
     pub fn clear(&mut self) {
-        let arena = self.arena;
-        let _ = mem::replace(self, Self::new(arena));
+        let _ = self.split_off(0);
     }
 
     /// Splits the list at `index`.
