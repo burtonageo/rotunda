@@ -301,10 +301,9 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
 
     #[must_use]
     #[inline]
-    pub unsafe fn from_raw(raw: *const T) -> Self {
+    pub const unsafe fn from_raw(raw: *const T) -> Self {
         unsafe {
-            let ptr = raw.map_addr(|addr| addr - offset_of!(RcHandleInner<()>, data))
-                as *const RcHandleInner<T>;
+            let ptr = raw.byte_sub(offset_of!(RcHandleInner<()>, data)) as *const RcHandleInner<T>;
             Self::from_raw_inner(ptr)
         }
     }
