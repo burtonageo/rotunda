@@ -492,6 +492,24 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     ///
     /// If there are other live `RcHandle`s to the shared value, this method
     /// returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    /// 
+    /// let rc = RcHandle::new_str_in(&arena, "Hello!");
+    ///
+    /// {
+    ///     let rc2 = RcHandle::clone(&rc);
+    ///     assert_eq!(RcHandle::into_handle(rc2), None);
+    /// }
+    ///
+    /// let handle = RcHandle::into_handle(rc).unwrap();
+    /// assert_eq!(handle, "Hello!");
+    /// ```
     #[must_use]
     #[inline]
     pub fn into_handle(this: Self) -> Option<Handle<'a, T>> {
