@@ -503,7 +503,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     /// use rotunda::{Arena, rc_handle::RcHandle};
     ///
     /// let arena = Arena::new();
-    /// 
+    ///
     /// let rc = RcHandle::new_str_in(&arena, "Hello!");
     ///
     /// {
@@ -1351,18 +1351,33 @@ impl<'a, T: ?Sized + Pointee> WeakHandle<'a, T> {
 impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for WeakHandle<'a, T> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(strong) = WeakHandle::upgrade(self) {
-            fmt::Debug::fmt(strong.as_ref(), fmtr)
+        if let Some(inner) = WeakHandle::inner(self) {
+            fmt::Debug::fmt(&inner.data, fmtr)
         } else {
-            struct Destroyed;
-            impl fmt::Debug for Destroyed {
-                fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    fmtr.write_str("<Destroyed>")
+            let payload: &'_ dyn fmt::Debug = if self.is_dangling() {
+                struct Dangling;
+                impl fmt::Debug for Dangling {
+                    #[inline]
+                    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        fmtr.write_str("<Dangling>")
+                    }
                 }
-            }
+
+                &Dangling
+            } else {
+                struct Destroyed;
+                impl fmt::Debug for Destroyed {
+                    #[inline]
+                    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        fmtr.write_str("<Destroyed>")
+                    }
+                }
+
+                &Destroyed
+            };
 
             let mut debug_tuple = fmtr.debug_tuple("WeakHandle");
-            debug_tuple.field(&Destroyed).finish()
+            debug_tuple.field(payload).finish()
         }
     }
 }
@@ -1391,14 +1406,14 @@ impl<'a, T: ?Sized> Clone for WeakHandle<'a, T> {
     }
 }
 
-impl<'h, 'a: 'h, T: ?Sized> From<&'h RcHandle<'a, T>> for WeakHandle<'a, T> {
+impl<'h, 'a, T: ?Sized> From<&'h RcHandle<'a, T>> for WeakHandle<'a, T> {
     #[inline]
     fn from(value: &'h RcHandle<'a, T>) -> Self {
         RcHandle::downgrade(value)
     }
 }
 
-impl<'h, 'a: 'h, T: ?Sized> From<&'h WeakHandle<'a, T>> for WeakHandle<'a, T> {
+impl<'h, 'a, T: ?Sized> From<&'h WeakHandle<'a, T>> for WeakHandle<'a, T> {
     #[inline]
     fn from(value: &'h WeakHandle<'a, T>) -> Self {
         value.clone()
