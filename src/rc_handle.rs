@@ -790,6 +790,13 @@ impl<'a, T: ?Sized + PartialEq> PartialEq<T> for RcHandle<'a, T> {
     }
 }
 
+impl<'a, T: PartialEq<U>, U, const N: usize> PartialEq<[U; N]> for RcHandle<'a, [T]> {
+    #[inline]
+    fn eq(&self, other: &[U; N]) -> bool {
+        PartialEq::eq(self.as_ref(), &other[..])
+    }
+}
+
 impl<'a, T: ?Sized + Eq> Eq for RcHandle<'a, T> {}
 
 impl<'a, T: ?Sized + PartialOrd> PartialOrd for RcHandle<'a, T> {
