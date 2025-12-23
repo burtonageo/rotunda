@@ -266,7 +266,12 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     #[must_use]
     #[inline]
     pub const fn as_ptr(this: &Self) -> *const T {
-        &Self::inner(this).data
+        unsafe {
+            this.ptr
+                .byte_add(offset_of!(RcHandleInner<()>, data))
+                .as_ptr()
+                .cast_const() as *const _
+        }
     }
 
     /// Consumes the `RcHandle`, returning the underlying wrapped pointer.
@@ -540,7 +545,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     #[must_use]
     #[inline]
     const unsafe fn from_raw_inner(raw: *const RcHandleInner<T>) -> Self {
-        let ptr = unsafe { NonNull::new_unchecked(raw as *mut _) };
+        let ptr = unsafe { NonNull::new_unchecked(raw.cast_mut()) };
         let handle = Self {
             ptr,
             _boo: PhantomData,
