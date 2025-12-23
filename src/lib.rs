@@ -1,5 +1,7 @@
 #![no_std]
-#![feature(alloc_layout_extra, allocator_api, derive_coerce_pointee, ptr_metadata)]
+#![cfg_attr(feature = "nightly_ptr_metadata", feature(ptr_metadata))]
+#![cfg_attr(feature = "nightly_coerce_pointee", feature(derive_coerce_pointee))]
+#![feature(alloc_layout_extra, allocator_api)]
 #![warn(
     missing_docs,
     clippy::empty_line_after_doc_comments,
@@ -416,13 +418,13 @@ impl<A: Allocator> Arena<A> {
         let (block_size, block_pos) = (self.block_size(), self.blocks.curr_block_pos().get());
 
         let data = unsafe {
-            let data = Block::data_ptr(curr_block, block_size)
+            Block::data_ptr(curr_block, block_size)
                 .cast::<MaybeUninit<u8>>()
-                .as_ptr();
-            NonNull::new_unchecked(data.map_addr(|data| data + block_pos))
+                .as_ptr()
+                .map_addr(|data| data + block_pos)
         };
 
-        Some(NonNull::from_raw_parts(data, block_size - block_pos))
+        NonNull::new(ptr::slice_from_raw_parts_mut(data, block_size - block_pos))
     }
 
     /// Forces the `Arena` to push all allocations into a new block of memory.
@@ -976,7 +978,8 @@ impl<A: Allocator> Arena<A> {
 
             let slot = slot.as_ptr().cast::<u8>();
             ptr::copy(string.as_ptr(), slot, len);
-            &mut *ptr::from_raw_parts_mut::<str>(slot, len)
+            let bytes = ptr::slice_from_raw_parts_mut(slot, len);
+            &mut *(bytes as *mut str)
         }
     }
 

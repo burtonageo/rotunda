@@ -4,6 +4,10 @@
 
 use crate::{Arena, handle::Handle};
 use alloc::alloc::{Allocator, Layout};
+#[cfg(feature = "nightly_coerce_pointee")]
+use core::marker::CoercePointee;
+#[cfg(feature = "nightly_ptr_metadata")]
+use core::ptr::{Pointee, Thin};
 use core::{
     any::Any,
     borrow::Borrow,
@@ -12,10 +16,10 @@ use core::{
     fmt,
     hash::{Hash, Hasher},
     iter::IntoIterator,
-    marker::{CoercePointee, PhantomData, PhantomPinned},
+    marker::{PhantomData, PhantomPinned},
     mem::{self, ManuallyDrop, MaybeUninit, offset_of},
     ops::{Deref, Index},
-    ptr::{self, NonNull, Pointee, Thin},
+    ptr::{self, NonNull},
     slice::{self, SliceIndex},
 };
 #[cfg(feature = "serde")]
@@ -29,7 +33,7 @@ use serde_core::ser::{Serialize, Serializer};
 /// [`Arena`]: ../struct.Arena.html
 /// [`Rc<T>`]: https://doc.rust-lang.org/stable/std/rc/struct.Rc.html
 /// [module documentation]: ./index.html
-#[derive(CoercePointee)]
+#[cfg_attr(feature = "nightly_coerce_pointee", derive(CoercePointee))]
 #[repr(transparent)]
 pub struct RcHandle<'a, T: ?Sized> {
     ptr: NonNull<RcHandleInner<T>>,
@@ -775,6 +779,7 @@ impl<'a> RcHandle<'a, str> {
     }
 }
 
+#[cfg(feature = "nightly_ptr_metadata")]
 impl<'a, T: ?Sized + Pointee> RcHandle<'a, T> {
     #[must_use]
     #[inline]
@@ -967,7 +972,7 @@ impl<'a, T: ?Sized> Drop for RcHandle<'a, T> {
 ///
 /// [`Arena`]: ./struct.Arena.html
 /// [`Weak<T>`]: https://doc.rust-lang.org/stable/std/rc/struct.Weak.html
-#[derive(CoercePointee)]
+#[cfg_attr(feature = "nightly_coerce_pointee", derive(CoercePointee))]
 #[repr(transparent)]
 pub struct WeakHandle<'a, T: ?Sized> {
     ptr: NonNull<RcHandleInner<T>>,
@@ -1316,6 +1321,7 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
     }
 }
 
+#[cfg(feature = "nightly_ptr_metadata")]
 impl<'a, T: ?Sized + Pointee> WeakHandle<'a, T> {
     #[must_use]
     #[inline]
@@ -1430,10 +1436,10 @@ impl<T> RcHandleInner<T> {
         this: *mut RcHandleInner<T>,
         slice_len: usize,
     ) -> *mut RcHandleInner<[T]> {
-        let data_ptr: *mut T = this
+        let data_ptr = this
             .map_addr(|addr| addr + offset_of!(RcHandleInner<()>, data))
             .cast::<T>();
-        let ptr = ptr::from_raw_parts_mut::<[T]>(data_ptr, slice_len);
+        let ptr = ptr::slice_from_raw_parts_mut(data_ptr, slice_len);
         ptr.map_addr(|addr| addr - offset_of!(RcHandleInner<()>, data)) as *mut RcHandleInner<[T]>
     }
 }

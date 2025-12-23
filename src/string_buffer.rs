@@ -141,8 +141,8 @@ impl<'a> StringBuffer<'a> {
         let len = self.len();
         let handle = self.inner.into_slice_handle();
         let slice_ptr = Handle::into_raw(handle);
-        let string = ptr::from_raw_parts_mut(slice_ptr as *mut u8, len);
-        unsafe { Handle::from_raw(string) }
+        let bytes = ptr::slice_from_raw_parts_mut(slice_ptr as *mut u8, len);
+        unsafe { Handle::from_raw(bytes as *mut str) }
     }
 
     #[must_use]

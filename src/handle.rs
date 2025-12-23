@@ -4,6 +4,10 @@
 
 use crate::{Arena, buffer::Buffer, rc_handle::RcHandle, string_buffer::StringBuffer};
 use alloc::alloc::{Allocator, Layout};
+#[cfg(feature = "nightly_coerce_pointee")]
+use core::marker::CoercePointee;
+#[cfg(feature = "nightly_ptr_metadata")]
+use core::ptr::{Pointee, Thin};
 use core::{
     any::Any,
     borrow::{Borrow, BorrowMut},
@@ -12,11 +16,11 @@ use core::{
     hash::{Hash, Hasher},
     hint::assert_unchecked,
     iter::IntoIterator,
-    marker::{CoercePointee, PhantomData, Unpin},
+    marker::{PhantomData, Unpin},
     mem::{self, ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut, Index, IndexMut},
     pin::Pin,
-    ptr::{self, NonNull, Pointee, Thin},
+    ptr::{self, NonNull},
     slice::{self, SliceIndex},
     str,
 };
@@ -34,7 +38,7 @@ use std::io::{self, BufRead, Read, Write};
 /// [`Box<T>`]: https://doc.rust-lang.org/stable/std/boxed/struct.Box.html
 /// [module documentation]: ./index.html
 #[repr(transparent)]
-#[derive(CoercePointee)]
+#[cfg_attr(feature = "nightly_coerce_pointee", derive(CoercePointee))]
 pub struct Handle<'a, T: ?Sized> {
     ptr: NonNull<T>,
     _boo: PhantomData<(&'a Arena, T)>,
@@ -149,10 +153,9 @@ impl<'a, T> Handle<'a, T> {
     pub const fn into_slice(this: Self) -> Handle<'a, [T]> {
         let ptr = Handle::into_raw(this);
         unsafe {
-            let slice =  slice::from_raw_parts_mut(ptr, 1) as *mut [T];
+            let slice = slice::from_raw_parts_mut(ptr, 1) as *mut [T];
             Handle::from_raw(slice)
         }
-
     }
 
     /// Converts the handle into a `Handle<[T; 1]>`.
@@ -608,6 +611,7 @@ impl<'a> Handle<'a, dyn Any + Send + Sync> {
     }
 }
 
+#[cfg(feature = "nightly_ptr_metadata")]
 impl<'a, T: ?Sized + Pointee> Handle<'a, T> {
     #[must_use]
     #[inline]
@@ -621,6 +625,13 @@ impl<'a, T: ?Sized + Pointee> Handle<'a, T> {
 }
 
 impl<'a, T> Handle<'a, [T]> {
+    #[must_use]
+    #[inline]
+    pub const unsafe fn slice_from_raw_parts(data: *mut T, len: usize) -> Self {
+        let slice = ptr::slice_from_raw_parts_mut(data, len);
+        unsafe { Self::from_raw(slice) }
+    }
+
     /// Create a `Handle` slice of length `slice_len`, where each element is initialized by `f`.
     ///
     /// The function `f` is called with the index of each item in the `Handle`.
@@ -695,7 +706,7 @@ impl<'a, T> Handle<'a, [T]> {
     /// ```
     #[inline]
     pub const fn empty() -> Self {
-        unsafe { Handle::from_raw_parts(ptr::dangling_mut::<T>(), 0) }
+        unsafe { Handle::slice_from_raw_parts(ptr::dangling_mut::<T>(), 0) }
     }
 
     /// Create a `Buffer` from this `Handle`.
@@ -735,7 +746,7 @@ impl<'a, T> Handle<'a, [T]> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let handle = Handle::new_in(&arena, [1, 2, 3, 4, 5, 6]);
+    /// let handle = Handle::new_slice_from_iter_in(&arena, [1, 2, 3, 4, 5, 6]);
     ///
     /// let (lhs, rhs) = Handle::split_at(handle, 3);
     ///
@@ -766,7 +777,7 @@ impl<'a, T> Handle<'a, [T]> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let handle = Handle::new_in(&arena, [1, 2, 3, 4, 5, 6]);
+    /// let handle = Handle::new_slice_from_iter_in(&arena, [1, 2, 3, 4, 5, 6]);
     ///
     /// let Err(handle) = Handle::split_at_checked(handle, 7) else {
     ///     unreachable!();
@@ -805,7 +816,7 @@ impl<'a, T> Handle<'a, [T]> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let handle = Handle::new_in(&arena, [1, 2, 3, 4, 5, 6, 7]);
+    /// let handle = Handle::new_slice_from_iter_in(&arena, [1, 2, 3, 4, 5, 6, 7]);
     ///
     /// let (lhs, rhs) = unsafe { Handle::split_at_unchecked(handle, 1) };
     ///
@@ -840,7 +851,7 @@ impl<'a, T> Handle<'a, [T]> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let handle = Handle::new_in(&arena, [1, 2, 3, 4, 5, 6, 7]);
+    /// let handle = Handle::new_slice_from_iter_in(&arena, [1, 2, 3, 4, 5, 6, 7]);
     ///
     /// let handle = Handle::transpose_into_uninit(handle);
     /// # let _ = handle;
@@ -866,7 +877,7 @@ impl<'a, T> Handle<'a, [T]> {
     #[inline]
     pub(crate) const unsafe fn set_len(this: &mut Self, new_len: usize) {
         let ptr = this.ptr.as_ptr() as *mut T;
-        let ptr = unsafe { NonNull::new_unchecked(ptr::from_raw_parts_mut(ptr, new_len)) };
+        let ptr = unsafe { NonNull::new_unchecked(ptr::slice_from_raw_parts_mut(ptr, new_len)) };
 
         this.ptr = ptr;
     }
@@ -971,7 +982,7 @@ impl<'a, T> Handle<'a, [MaybeUninit<T>]> {
     pub const unsafe fn assume_init_slice(this: Self) -> Handle<'a, [T]> {
         let ptr = Handle::into_raw(this);
         let len = ptr.len();
-        let ptr = ptr::from_raw_parts_mut(ptr as *mut T, len);
+        let ptr = ptr::slice_from_raw_parts_mut(ptr as *mut T, len);
 
         unsafe { Handle::from_raw(ptr) }
     }
@@ -1006,8 +1017,8 @@ impl<'a> Handle<'a, str> {
             unsafe {
                 ptr::copy_nonoverlapping(string.as_ptr(), data, string.len());
 
-                let ptr = ptr::from_raw_parts_mut(data, len);
-                Handle::from_raw(ptr)
+                let ptr = ptr::slice_from_raw_parts_mut(data, len);
+                Handle::from_raw(ptr as *mut str)
             }
         }
 
@@ -1029,7 +1040,10 @@ impl<'a> Handle<'a, str> {
     #[must_use]
     #[inline]
     pub const fn empty_str() -> Self {
-        unsafe { Handle::from_raw_parts(ptr::dangling_mut::<u8>(), 0) }
+        unsafe {
+            let empty_bytes = ptr::slice_from_raw_parts_mut(ptr::dangling_mut::<u8>(), 0);
+            Handle::from_raw(empty_bytes as *mut str)
+        }
     }
 }
 

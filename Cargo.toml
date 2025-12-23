@@ -12,5 +12,7 @@ optional = true
 
 [features]
 default = []
+nightly_ptr_metadata = []
+nightly_coerce_pointee = []
 std = []
 serde = ["dep:serde_core"]

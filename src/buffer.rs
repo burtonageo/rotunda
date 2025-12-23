@@ -5,7 +5,7 @@
 //! A `Buffer` can store multiple instances of `T` contiguously in memory allocated
 //! by an `Arena` (bounded by the capacity it was constructed with). Iteration and
 //! random access are fast due to this characteristic.
-//! 
+//!
 //! Unlike a [`Vec<T>`], a `Buffer` has a fixed capacity, as it cannot guarantee
 //! that it has exclusive access to the underlying `Arena` from which it is
 //! allocated.
@@ -180,7 +180,7 @@ impl<'a, T> Buffer<'a, T> {
         let backing_storage = unsafe {
             let data = head.unwrap_unchecked().as_ptr();
             let len = data.len() / mem::size_of::<T>();
-            let data = ptr::from_raw_parts_mut(data.cast::<T>(), len);
+            let data = ptr::slice_from_raw_parts_mut::<MaybeUninit<T>>(data.cast::<_>(), len);
             NonNull::new_unchecked(data)
         };
 
@@ -683,7 +683,7 @@ impl<'a, T> Buffer<'a, T> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let handle = Handle::new_in(&arena, [1, 2, 3, 4, 5]);
+    /// let handle = Handle::new_slice_from_iter_in(&arena, [1, 2, 3, 4, 5]);
     ///
     /// let buffer = Buffer::from_slice_handle(handle);
     ///
@@ -1669,7 +1669,7 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     #[inline]
     fn into_buffer(self) -> Buffer<'a, T> {
         let data = self.backing_storage.as_ptr().cast::<MaybeUninit<T>>();
-        let handle = unsafe { Handle::from_raw_parts(data, self.cap) };
+        let handle = unsafe { Handle::slice_from_raw_parts(data, self.cap) };
 
         let len = self.len;
 

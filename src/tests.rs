@@ -438,6 +438,7 @@ fn test_rc() {
     });
 }
 
+#[cfg(feature = "nightly_coerce_pointee")]
 #[test]
 fn test_dyn() {
     use std::{fmt::Display, string::ToString};
