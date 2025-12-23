@@ -18,6 +18,7 @@ use core::{
     iter::IntoIterator,
     marker::{PhantomData, PhantomPinned},
     mem::{self, ManuallyDrop, MaybeUninit, offset_of},
+    num::NonZero,
     ops::{Deref, Index},
     ptr::{self, NonNull},
     slice::{self, SliceIndex},
@@ -544,6 +545,29 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
         let count = Self::inner(this).count.get();
         debug_assert!(count > 0);
         count
+    }
+
+    /// Returns the number of strong references to the shared value.
+    ///
+    /// As there must be at least one `RcHandle` owner of the shared value,
+    /// it is always valid to represent the count as a `NonZero<usize>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    /// use core::cell::Cell;
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = RcHandle::new_in(&arena, Cell::new(1u32));
+    ///
+    /// assert_eq!(RcHandle::non_zero_ref_count(&handle).get(), 1);
+    /// ```
+    #[must_use]
+    #[inline]
+    pub const fn non_zero_ref_count(this: &Self) -> NonZero<usize> {
+        unsafe { NonZero::new_unchecked(Self::ref_count(this)) }
     }
 
     #[must_use]
