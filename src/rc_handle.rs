@@ -1233,6 +1233,24 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
         ptr::hash(WeakHandle::as_ptr(this), hasher);
     }
 
+    /// Consumes the `WeakHandle`, returning the underlying wrapped pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc = RcHandle::new_in(&arena, 128i8);
+    ///
+    /// let weak = RcHandle::downgrade(&rc);
+    ///
+    /// let weak_raw = WeakHandle::into_raw(weak);
+    /// unsafe { assert_eq!(*weak_raw, 128); }
+    ///
+    /// # let _ = unsafe { WeakHandle::from_raw(weak_raw) };
+    /// ```
     #[must_use]
     #[inline]
     pub fn into_raw(self) -> *const T {
