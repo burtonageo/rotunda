@@ -722,7 +722,7 @@ impl<A: Allocator> Arena<A> {
     /// let arena = Arena::new();
     /// let handle = unsafe {
     ///     arena.with_scope_dynamic(|| {
-    ///         Handle::new_in(&arena, 23)
+    ///         Handle::new_in(&arena, vec![1, 2, 3, 4, 5])
     ///     })
     /// };
     ///
@@ -740,13 +740,14 @@ impl<A: Allocator> Arena<A> {
     /// let mut buffer = Buffer::with_capacity_in(&arena, 5);
     /// unsafe {
     ///     arena.with_scope_dynamic(|| {
-    ///         let handle = Handle::new_in(&arena, 21);
+    ///         let handle = Handle::new_in(&arena, String::from("This is a message!"));
     ///         buffer.push(handle);
     ///     });
     /// };
     ///
     /// // Warning ⚠️: `buffer[0]` points to uninitialised memory here. It is undefined behaviour
     /// // to dereference it in any way (including via non-trivial drop).
+    /// # core::mem::forget(buffer.remove(0));
     /// ```
     ///
     /// [`Arena::with_scope()`]: ./struct.Arena.html#method.with_scope
