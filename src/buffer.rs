@@ -1,6 +1,16 @@
 #![allow(missing_docs, clippy::missing_safety_doc)]
 
 //! A contiguous, growable array of values allocated in an `Arena`.
+//!
+//! A `Buffer` can store multiple instances of `T` contiguously in memory allocated
+//! by an `Arena` (bounded by the capacity it was constructed with). Iteration and
+//! random access are fast due to this characteristic.
+//! 
+//! Unlike a [`Vec<T>`], a `Buffer` has a fixed capacity, as it cannot guarantee
+//! that it has exclusive access to the underlying `Arena` from which it is
+//! allocated.
+//!
+//! [`Vec<T>`]: https://doc.rust-lang.org/stable/std/vec/struct.Vec.html
 
 use crate::{Arena, InvariantLifetime, blocks::lock::BlockLock, handle::Handle};
 use alloc::alloc::{Allocator, Layout};

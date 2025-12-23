@@ -1,6 +1,6 @@
 #![warn(missing_docs, clippy::missing_safety_doc)]
 
-//! A doubly-linked owned list of nodes.
+//! A doubly-linked owned list of nodes, backed by an `Arena`.
 //!
 //! The `LinkedList` allows pushing and popping elements at either end of the list in constant time.
 
@@ -113,6 +113,9 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
 
     /// Returns the number of elements in the `LinkedList`.
     ///
+    /// Note that a `LinkedList` stores its length as a field, so this
+    /// function returns in constant time.
+    ///
     /// # Examples
     ///
     /// ```
@@ -132,6 +135,9 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     }
 
     /// Returns `true` if there are no elements in the `LinkedList`.
+    ///
+    /// Note that a `LinkedList` stores its length as a field, so this
+    /// function returns in constant time.
     ///
     /// # Examples
     ///

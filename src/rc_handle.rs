@@ -226,6 +226,18 @@ impl<'a, T: Copy> RcHandle<'a, [T]> {
 }
 
 impl<'a, T: Default> RcHandle<'a, T> {
+    /// Create a new `RcHandle` containing the default value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = RcHandle::<bool>::new_default_in(&arena);
+    /// assert_eq!(*handle, false);
+    /// ```
     #[must_use]
     #[inline]
     pub fn new_default_in<A: Allocator>(arena: &'a Arena<A>) -> Self {
@@ -257,6 +269,23 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
         &Self::inner(this).data
     }
 
+    /// Consumes the `RcHandle`, returning the underlying wrapped pointer.
+    ///
+    /// To avoid a memory leak, the pointer should either be converted back using
+    /// [`RcHandle::from_raw()`], or by calling [`RcHandle::downgrade()`] on it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc = RcHandle::new_in(&arena, 85);
+    /// let raw = RcHandle::into_raw(rc);
+    /// unsafe { assert_eq!(*raw, 85); }
+    /// # let _ = unsafe { RcHandle::from_raw(raw) };
+    /// ```
     #[must_use]
     #[inline]
     pub const fn into_raw(self) -> *const T {
@@ -275,6 +304,19 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
         }
     }
 
+    /// Increment the reference count of a `RcHandle` pointer created from [`RcHandle::into_raw()`].
+    ///
+    /// # Safety
+    ///
+    /// The given pointer must have been created from a call to `RcHandle::into_raw()`. Additionally,
+    /// the underlying shared value must never have been deinitialized due to the reference count
+    /// being decremented to `0`.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if incrementing the refcount would overflow [`usize::MAX`]
+    ///
+    /// [`usize::MAX`]: https://doc.rust-lang.org/stable/std/primitive.usize.html#associatedconstant.MAX
     #[inline]
     pub unsafe fn increment_count(raw: *const T) {
         unsafe {
@@ -284,6 +326,18 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
         }
     }
 
+    /// Decrement the reference count of a `RcHandle` pointer created from [`RcHandle::into_raw()`].
+    ///
+    /// If the reference count is decremented to `0` by this function, then the shared value will
+    /// be dropped.
+    ///
+    /// # Safety
+    ///
+    /// The given pointer must have been created from a call to `RcHandle::into_raw()`.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if decrementing the refcount would cause an underflow.P
     #[inline]
     pub unsafe fn decrement_count(raw: *const T) {
         unsafe {
@@ -375,7 +429,8 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     ///     core::ptr::copy_nonoverlapping(string.as_bytes().as_ptr(), contents.as_mut_ptr(), string.len());
     /// }
     ///
-    /// assert_eq!(*&rc_handle[..string.len()], *"This message".as_bytes());
+    /// assert_eq!(&rc_handle[..string.len()], "This message".as_bytes());
+    /// assert_eq!(&rc_handle[string.len()..], &[0u8; 8]);
     /// assert_eq!(rc_handle.len(), 20);
     /// ```
     #[must_use]
