@@ -962,12 +962,16 @@ impl<'a, T> WeakHandle<'a, T> {
         }
 
         unsafe {
-            let inner = self.ptr.as_ptr();
-            let dst = inner
-                .map_addr(|addr| addr + offset_of!(RcHandleInner<T>, data))
-                .cast::<T>();
-            ptr::write(dst, value);
-            (&*inner).increment_refcount();
+            {
+                let inner = self.ptr.as_ptr();
+                let dst = inner
+                    .map_addr(|addr| addr + offset_of!(RcHandleInner<T>, data))
+                    .cast::<T>();
+
+                ptr::write(dst, value);
+            }
+
+            self.ptr.as_ref().increment_refcount();
         }
 
         Ok(RcHandle {
