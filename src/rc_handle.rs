@@ -1256,16 +1256,16 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
     /// # Examples
     ///
     /// ```
-    /// use rotunda::{Arena, rc_handle::RcHandle};
+    /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
     ///
     /// let arena = Arena::new();
     ///
-    /// let rc = RcHandle::new_in(&arena, 128i8);
+    /// let rc = RcHandle::new_in(&arena, 127i8);
     ///
     /// let weak = RcHandle::downgrade(&rc);
     ///
     /// let weak_raw = WeakHandle::into_raw(weak);
-    /// unsafe { assert_eq!(*weak_raw, 128); }
+    /// unsafe { assert_eq!(*weak_raw, 127); }
     ///
     /// # let _ = unsafe { WeakHandle::from_raw(weak_raw) };
     /// ```
