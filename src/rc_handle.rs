@@ -15,6 +15,7 @@ use core::{
     cmp::Ordering,
     fmt,
     hash::{Hash, Hasher},
+    hint::assert_unchecked,
     iter::IntoIterator,
     marker::{PhantomData, PhantomPinned},
     mem::{self, ManuallyDrop, MaybeUninit, offset_of},
@@ -1112,7 +1113,106 @@ impl<'a, T> WeakHandle<'a, T> {
             return Err(f);
         }
 
+        unsafe { Ok(Self::resurrect_unchecked_with(&self, f)) }
+    }
+
+    /// Attempt to upgrade the given `WeakHandle` to an `RcHandle`, otherwise reinitialize with `f`.
+    ///
+    /// If this `WeakHandle` was constructed with [`WeakHandle::new()`], this method will return `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer, rc_handle::{RcHandle, WeakHandle}};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut weak = WeakHandle::new();
+    ///
+    /// assert!(weak.try_upgrade_or_resurrect_with(|| Buffer::new()).is_none());
+    ///
+    /// {
+    ///     let buffer = Buffer::new_in(&arena, [1, 2, 3, 4]);
+    ///     let handle = RcHandle::new_in(&arena, buffer);
+    ///     weak = RcHandle::downgrade(&handle);
+    /// }
+    ///
+    /// let rc = weak.try_upgrade_or_resurrect_with(|| Buffer::new_in(&arena, [5, 6, 7, 8])).unwrap();
+    /// assert_eq!(*rc, &[5, 6, 7, 8]);
+    ///
+    /// let rc_2 = weak.try_upgrade_or_resurrect_with(|| Buffer::new()).unwrap();
+    /// assert_eq!(*rc_2, &[5, 6, 7, 8]);
+    ///
+    /// let mut weak_2 = WeakHandle::new();
+    /// let rc_3 = weak_2
+    ///     .try_upgrade_or_resurrect_with(|| Buffer::new_in(&arena, [1, 3, 5, 7]))
+    ///     .unwrap_or_else(|| RcHandle::new_in(&arena, Buffer::new_in(&arena, [2, 4, 6, 8])));
+    ///
+    /// assert_eq!(*rc_3, &[2, 4, 6, 8]);
+    /// weak_2 = RcHandle::downgrade(&rc_3);
+    /// ```
+    #[track_caller]
+    #[inline]
+    pub fn try_upgrade_or_resurrect_with<F: FnOnce() -> T>(&self, f: F) -> Option<RcHandle<'a, T>> {
+        if self.is_dangling() {
+            None
+        } else {
+            let rc = Self::upgrade(&self)
+                .unwrap_or_else(|| unsafe { Self::resurrect_unchecked_with(&self, f) });
+            Some(rc)
+        }
+    }
+
+    /// Attempt to upgrade the given `WeakHandle` to an `RcHandle`, otherwise reinitialize with `f`.
+    ///
+    /// Once this function has been called, the given `WeakHandle` will point to the value owned by
+    /// the returned `RcHandle`.
+    ///
+    /// If this `WeakHandle` was constructed with [`WeakHandle::new()`], a new `RcHandle` will be allocated
+    /// from the given `arena`.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if there is an allocation error in `Arena` while allocating a new `RcHandle`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer, rc_handle::{RcHandle, WeakHandle}};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut weak = WeakHandle::new();
+    ///
+    /// let rc = weak.upgrade_or_resurrect_with(&arena, || Buffer::new_in(&arena, [0, 1, 2, 3, 5]));
+    /// assert_eq!(*rc, &[0, 1, 2, 3, 5]);
+    /// assert!(WeakHandle::ptr_eq(&weak, &rc));
+    /// ```
+    #[track_caller]
+    #[inline]
+    pub fn upgrade_or_resurrect_with<A: Allocator, F: FnOnce() -> T>(
+        &mut self,
+        arena: &'a Arena<A>,
+        f: F,
+    ) -> RcHandle<'a, T> {
+        if self.is_dangling() {
+            let rc = RcHandle::new_with(arena, f);
+            *self = RcHandle::downgrade(&rc);
+            rc
+        } else {
+            Self::upgrade(&self)
+                .unwrap_or_else(|| unsafe { Self::resurrect_unchecked_with(&self, f) })
+        }
+    }
+
+    #[track_caller]
+    #[must_use]
+    #[inline]
+    unsafe fn resurrect_unchecked_with<F: FnOnce() -> T>(&self, f: F) -> RcHandle<'a, T> {
         unsafe {
+            assert_unchecked(!self.is_dangling());
+            assert_unchecked(WeakHandle::ref_count(&self) == 0);
+
             {
                 let inner = self.ptr.as_ptr();
                 let dst = inner
@@ -1125,10 +1225,10 @@ impl<'a, T> WeakHandle<'a, T> {
             self.ptr.as_ref().increment_refcount();
         }
 
-        Ok(RcHandle {
+        RcHandle {
             ptr: self.ptr,
             _boo: PhantomData,
-        })
+        }
     }
 }
 
