@@ -622,6 +622,13 @@ impl<'a, T: ?Sized + Pointee> Handle<'a, T> {
         let ptr = ptr::from_raw_parts_mut(ptr, metadata);
         unsafe { Handle::from_raw(ptr) }
     }
+
+    #[must_use]
+    #[inline]
+    pub const fn to_raw_parts(self) -> (*const (), <T as Pointee>::Metadata) {
+        let raw = Self::into_raw(self);
+        <*const T>::to_raw_parts(raw)
+    }
 }
 
 impl<'a, T> Handle<'a, [T]> {

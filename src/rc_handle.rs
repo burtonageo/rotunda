@@ -790,6 +790,13 @@ impl<'a, T: ?Sized + Pointee> RcHandle<'a, T> {
         let ptr = ptr::from_raw_parts(data, metadata);
         unsafe { Self::from_raw(ptr) }
     }
+
+    #[must_use]
+    #[inline]
+    pub const fn to_raw_parts(self) -> (*const (), <T as Pointee>::Metadata) {
+        let raw = Self::into_raw(self);
+        <*const T>::to_raw_parts(raw)
+    }
 }
 
 impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for RcHandle<'a, T> {
@@ -1331,6 +1338,13 @@ impl<'a, T: ?Sized + Pointee> WeakHandle<'a, T> {
     ) -> Self {
         let ptr = ptr::from_raw_parts(ptr, metadata);
         unsafe { Self::from_raw(ptr) }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn to_raw_parts(self) -> (*const (), <T as Pointee>::Metadata) {
+        let raw = Self::into_raw(self);
+        <*const T>::to_raw_parts(raw)
     }
 }
 
