@@ -436,6 +436,28 @@ fn test_rc() {
         let thirteen = WeakHandle::try_resurrect(&weak, 13).unwrap_err();
         assert_eq!(thirteen, 13);
     });
+
+    arena.with_scope(|arena| {
+        let rc = RcHandle::new_in(arena, 2500);
+        let weak = RcHandle::downgrade(&rc);
+
+        let handle = RcHandle::into_handle(rc).unwrap();
+
+        assert_eq!(*handle, 2500);
+        assert_eq!(WeakHandle::try_resurrect(&weak, 128), Err(128));
+
+        drop(handle);
+        assert_eq!(WeakHandle::try_resurrect(&weak, 155), Err(155));
+
+        let rc_2 = RcHandle::new_in(arena,9876);
+        let weak = RcHandle::downgrade(&rc_2);
+
+        let inner = RcHandle::into_inner(rc_2).unwrap();
+        assert_eq!(inner, 9876);
+
+        let new_rc = WeakHandle::try_resurrect(&weak, 1234).unwrap();
+        assert_eq!(*new_rc, 1234);
+    });
 }
 
 #[cfg(feature = "nightly_coerce_pointee")]

@@ -481,7 +481,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
         if Self::is_unique(&this) {
             // Decrement the ref count to `0` to invalidate all
             // `WeakHandle`s which point here.
-            Self::inner(&this).decrement_refcount();
+            Self::inner(&this).mark_inaccessible();
 
             let raw = this
                 .ptr
@@ -501,6 +501,14 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     /// If there are other live `RcHandle`s to the shared value, this method
     /// returns `None`.
     ///
+    /// Note that any `WeakHandle`s into this handle will not be able to
+    /// be resurrected with [`WeakHandle::try_resurrect()`], as it cannot
+    /// ensure that there is not a live `Handle` to the data part of the shared
+    /// value.
+    ///
+    /// If you will need to resurrect any `WeakHandle`s to this data, use
+    /// [`Handle::into_inner()`].
+    /// 
     /// # Examples
     ///
     /// ```
@@ -582,7 +590,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     /// ```
     /// use core::marker::PhantomData;
     /// use rotunda::{Arena, rc_handle::RcHandle};
-    /// 
+    ///
     /// let arena = Arena::new();
     ///
     /// let rc = RcHandle::new_in(&arena, PhantomData::<usize>);
@@ -611,7 +619,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     ///
     /// ```
     /// use rotunda::{Arena, rc_handle::RcHandle};
-    /// 
+    ///
     /// let arena = Arena::new();
     ///
     /// let (rc, rc_2) = (RcHandle::new_in(&arena, 0usize), RcHandle::new_in(&arena, 0usize));
@@ -623,7 +631,10 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     #[must_use]
     #[inline]
     pub fn ptr_eq<Rhs: Into<WeakHandle<'a, U>>, U: ?Sized>(this: &Self, other: Rhs) -> bool {
-        ptr::eq(Self::as_ptr(this).cast::<()>(), WeakHandle::as_ptr(&other.into()).cast::<()>())
+        ptr::eq(
+            Self::as_ptr(this).cast::<()>(),
+            WeakHandle::as_ptr(&other.into()).cast::<()>(),
+        )
     }
 
     /// Hash the pointer into the given `hasher`.
@@ -635,7 +646,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     /// use rotunda::{Arena, rc_handle::RcHandle};
     ///
     /// let mut hasher = DefaultHasher::new();
-    /// 
+    ///
     /// let arena = Arena::new();
     ///
     /// let rc = RcHandle::new_in(&arena, [0u8; 255]);
@@ -671,7 +682,16 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
 impl<'a, T: Unpin> RcHandle<'a, T> {
     #[inline]
     pub fn try_unwrap(this: Self) -> Result<T, RcHandle<'a, T>> {
-        Self::try_into_handle(this).map(Handle::into_inner)
+        let inner = this.ptr;
+        let value = Self::try_into_handle(this).map(Handle::into_inner)?;
+
+        unsafe {
+            // The handle has been moved out from, so it is valid to reset the count
+            // to `0` so that other `WeakHandle`s can resurrect this `RcHandle`.
+            inner.as_ref().count.set(0);
+        }
+
+        Ok(value)
     }
 
     #[must_use]
@@ -1189,7 +1209,7 @@ impl<'a, T> WeakHandle<'a, T> {
     /// ```
     #[inline]
     pub fn try_resurrect_with<F: FnOnce() -> T>(&self, f: F) -> Result<RcHandle<'a, T>, F> {
-        if WeakHandle::ref_count(&self) > 0 || is_dangling(self.ptr.as_ptr()) {
+        if !self.is_accessible() || self.ref_count() > 0 {
             return Err(f);
         }
 
@@ -1377,9 +1397,10 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
     #[must_use]
     #[inline]
     pub fn ref_count(&self) -> usize {
-        self.inner()
-            .map(|inner| inner.count.get())
-            .unwrap_or_default()
+        match self.inner() {
+            Some(inner) if inner.is_live() => inner.count.get(),
+            _ => 0
+        }
     }
 
     /// Access a pointer to the shared value.
@@ -1522,7 +1543,13 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
     #[must_use]
     #[inline]
     fn is_valid(&self) -> bool {
-        !self.is_dangling() && unsafe { self.ptr.as_ref().count.get() != 0 }
+        !self.is_dangling() && unsafe { self.ptr.as_ref().is_live() }
+    }
+
+    #[must_use]
+    #[inline]
+    fn is_accessible(&self) -> bool {
+        !self.is_dangling() && unsafe { self.ptr.as_ref().is_accessible() }
     }
 
     #[must_use]
@@ -1631,12 +1658,31 @@ struct RcHandleInner<T: ?Sized> {
 }
 
 impl<T: ?Sized> RcHandleInner<T> {
+    const COUNT_INACCESSIBLE: usize = usize::MAX;
+
+    #[inline]
+    const fn mark_inaccessible(&self) {
+        self.count.replace(Self::COUNT_INACCESSIBLE);
+    }
+
+    #[inline]
+    const fn is_accessible(&self) -> bool {
+        let count = self.count.get();
+        count < Self::COUNT_INACCESSIBLE   
+    }
+
+    #[inline]
+    const fn is_live(&self) -> bool {
+        let count = self.count.get();
+        count > 0 && count < Self::COUNT_INACCESSIBLE
+    }
+
     #[track_caller]
     #[inline]
     const fn increment_refcount(&self) {
         let new_count = match self.count.get().checked_add(1) {
-            Some(value) => value,
-            None => modify_refcount_failed("refcount overflow"),
+            Some(value) if value != Self::COUNT_INACCESSIBLE => value,
+            _ => modify_refcount_failed("refcount overflow"),
         };
 
         self.count.replace(new_count);
@@ -1645,7 +1691,12 @@ impl<T: ?Sized> RcHandleInner<T> {
     #[track_caller]
     #[inline]
     const fn decrement_refcount(&self) {
-        let new_count = match self.count.get().checked_sub(1) {
+        let count = self.count.get();
+        if count == Self::COUNT_INACCESSIBLE {
+            return;
+        }
+
+        let new_count = match count.checked_sub(1) {
             Some(value) => value,
             None => modify_refcount_failed("refcount underflow"),
         };
