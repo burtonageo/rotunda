@@ -1033,6 +1033,13 @@ impl<'a, T, A: Allocator> From<&'a Arena<A>> for LinkedList<'a, T, A> {
     }
 }
 
+impl<'a, T: 'a, A: Allocator> From<IntoIter<'a, T, A>> for LinkedList<'a, T, A> {
+    #[inline]
+    fn from(value: IntoIter<'a, T, A>) -> Self {
+        value.into_list()
+    }
+}
+
 impl<'a, T: PartialEq, A: Allocator> PartialEq for LinkedList<'a, T, A> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
