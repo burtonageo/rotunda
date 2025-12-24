@@ -347,7 +347,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     ///
     /// # Panics
     ///
-    /// This method will panic if decrementing the refcount would cause an underflow.P
+    /// This method will panic if decrementing the refcount would cause an underflow.
     #[inline]
     pub unsafe fn decrement_count(raw: *const T) {
         unsafe {
@@ -430,18 +430,20 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let string = "This message";
+    /// const DATA: &'_ str = "This message";
     ///
-    /// let mut rc_handle = RcHandle::new_splat(&arena, 20, 0u8);
+    /// const BUF_SIZE: usize = 20;
+    /// let mut rc_handle = RcHandle::new_splat(&arena, BUF_SIZE, 0u8);
+    /// # assert!(rc_handle.len() >= DATA.len());
     ///
     /// unsafe {
     ///     let contents = RcHandle::get_mut_unchecked(&mut rc_handle);
-    ///     core::ptr::copy_nonoverlapping(string.as_bytes().as_ptr(), contents.as_mut_ptr(), string.len());
+    ///     core::ptr::copy_nonoverlapping(DATA.as_bytes().as_ptr(), contents.as_mut_ptr(), DATA.len());
     /// }
     ///
-    /// assert_eq!(&rc_handle[..string.len()], "This message".as_bytes());
-    /// assert_eq!(&rc_handle[string.len()..], &[0u8; 8]);
-    /// assert_eq!(rc_handle.len(), 20);
+    /// assert_eq!(&rc_handle[..DATA.len()], DATA.as_bytes());
+    /// assert_eq!(&rc_handle[DATA.len()..], &[0u8; const { BUF_SIZE - DATA.len() }]);
+    /// assert_eq!(rc_handle.len(), BUF_SIZE);
     /// ```
     #[must_use]
     #[inline]
@@ -571,18 +573,76 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
         unsafe { NonZero::new_unchecked(Self::ref_count(this)) }
     }
 
+    /// Check if this is the only `RcHandle` which has ownership of the shared value.
+    ///
+    /// If this is `true`, then [`RcHandle::get_mut()`] will succeed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use core::marker::PhantomData;
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    /// 
+    /// let arena = Arena::new();
+    ///
+    /// let rc = RcHandle::new_in(&arena, PhantomData::<usize>);
+    ///
+    /// assert!(RcHandle::is_unique(&rc));
+    ///
+    /// let rc_2 = RcHandle::clone(&rc);
+    ///
+    /// assert!(!RcHandle::is_unique(&rc));
+    /// ```
     #[must_use]
     #[inline]
     pub const fn is_unique(this: &Self) -> bool {
         RcHandle::ref_count(this) == 1
     }
 
+    /// Returns `true` if the pointer value of `self` is equal to `other`.
+    ///
+    /// If this returns `true`, then both handles must be pointing to the same
+    /// shared value.
+    ///
+    /// This method takes `other` by `Into<WeakHandle<'a, U>>`, which means that
+    /// this equality can be compared to both `RcHandle`s and `WeakHandle`s.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    /// 
+    /// let arena = Arena::new();
+    ///
+    /// let (rc, rc_2) = (RcHandle::new_in(&arena, 0usize), RcHandle::new_in(&arena, 0usize));
+    /// let cloned = RcHandle::clone(&rc);
+    ///
+    /// assert!(RcHandle::ptr_eq(&rc, &cloned));
+    /// assert!(!RcHandle::ptr_eq(&rc, &rc_2));
+    /// ```
     #[must_use]
     #[inline]
     pub fn ptr_eq<Rhs: Into<WeakHandle<'a, U>>, U: ?Sized>(this: &Self, other: Rhs) -> bool {
         ptr::eq(Self::as_ptr(this).cast::<()>(), WeakHandle::as_ptr(&other.into()).cast::<()>())
     }
 
+    /// Hash the pointer into the given `hasher`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::hash::{Hasher, DefaultHasher};
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let mut hasher = DefaultHasher::new();
+    /// 
+    /// let arena = Arena::new();
+    ///
+    /// let rc = RcHandle::new_in(&arena, [0u8; 255]);
+    ///
+    /// RcHandle::ptr_hash(&rc, &mut hasher);
+    /// let code = hasher.finish();
+    /// ```
     #[inline]
     pub fn ptr_hash<H: Hasher>(this: &Self, hasher: &mut H) {
         ptr::hash(RcHandle::as_ptr(this), hasher);
@@ -690,6 +750,25 @@ impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
         unsafe { mem::transmute(this) }
     }
 
+    /// Initialize the `RcHandle` with the given value and return the initialized handle.
+    ///
+    /// It is the programmer's responsibility to ensure that the `RcHandle` is only initialized
+    /// once. If the uninitialized `RcHandle` is cloned and initialized multiple times, or if
+    /// the initialized `RcHandle` is dropped before any uninitialized copies, then the destructor
+    /// may be skipped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc_uninit = RcHandle::new_uninit_in(&arena);
+    /// let rc = RcHandle::init(rc_uninit, 420usize);
+    ///
+    /// assert_eq!(*rc, 420);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn init(mut this: Self, value: T) -> RcHandle<'a, T> {
@@ -703,6 +782,7 @@ impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
 }
 
 impl<'a, T, const N: usize> RcHandle<'a, MaybeUninit<[T; N]>> {
+    /// Transpose a `RcHandle<MaybeUninit<[T; N]>>` to an `RcHandle<[MaybeUninit<T>; N]>`.
     #[must_use]
     #[inline]
     pub const fn transpose_inner_uninit(this: Self) -> RcHandle<'a, [MaybeUninit<T>; N]> {
