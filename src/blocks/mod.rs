@@ -125,10 +125,8 @@ impl Blocks {
             fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
                 let mut list = fmtr.debug_list();
 
-                let mut curr = self.0.get();
-                while let Some(ptr) = curr {
+                for ptr in BlockIter(self.0.get()) {
                     list.entry(&ptr);
-                    curr = unsafe { ptr.as_ref().next.get() };
                 }
 
                 list.finish()
@@ -273,7 +271,6 @@ impl Blocks {
         &self.free_blocks
     }
 
-    #[cfg(test)]
     #[must_use]
     #[inline]
     pub(crate) const fn used_blocks(&self) -> &BlockPtr {
@@ -377,26 +374,20 @@ pub(super) unsafe fn dealloc_blocks_n(
     block_start: &BlockPtr,
     allocator: &dyn Allocator,
 ) {
-    let mut i = 0;
-    let mut next_block = None;
-    while let Some(block) = block_start.get() {
-        let next = unsafe { &block.as_ref().next };
+    let mut iter = BlockIter(block_start.get()).enumerate();
 
+    while let Some((i, block)) = iter.next() {
         if i >= n {
-            next_block = Some(block);
-            break;
+            block_start.set(Some(block));
+            return;
         }
-
-        block_start.set(next.get());
 
         unsafe {
             allocator.deallocate(block.cast(), block_layout);
         }
-
-        i += 1;
     }
 
-    block_start.set(next_block);
+    block_start.set(iter.next().map(|tup| tup.1));
 }
 
 pub(super) struct ScopedRestore<'a> {
@@ -433,10 +424,12 @@ impl<'a> Drop for ScopedRestore<'a> {
             self.blocks.curr_block.set(self.old_curr_block);
         }
 
-        let mut free_block = self.blocks.used_blocks.replace(self.old_used_blocks);
-        while let Some(block) = free_block {
-            free_block = unsafe { block.as_ref().next.get() };
-            if Some(block) != self.old_curr_block {
+        let free_block = self.blocks.used_blocks.replace(self.old_used_blocks);
+        for block in BlockIter(free_block) {
+            if self
+                .old_curr_block
+                .is_none_or(|old_block| !NonNull::eq(&old_block, &block))
+            {
                 push_single_block(&self.blocks.free_blocks, block);
             }
         }
@@ -471,4 +464,26 @@ const fn push_block(list_head: &BlockPtr, block: NonNull<Block>) {
         curr_block.as_ref().next.replace(old_head);
     }
     list_head.replace(Some(block));
+}
+
+#[repr(transparent)]
+pub(crate) struct BlockIter(Option<NonNull<Block>>);
+
+impl BlockIter {
+    #[inline(always)]
+    pub(crate) const fn new(ptr: Option<NonNull<Block>>) -> Self {
+        BlockIter(ptr)
+    }
+}
+
+impl Iterator for BlockIter {
+    type Item = NonNull<Block>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let ptr = self.0?;
+        let next = unsafe { ptr.as_ref().next.clone() };
+        self.0 = next.get();
+        Some(ptr)
+    }
 }

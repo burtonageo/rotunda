@@ -157,7 +157,7 @@ extern crate alloc;
 #[cfg(any(test, feature = "std"))]
 extern crate std;
 
-use crate::blocks::{Block, Blocks, ScopedRestore};
+use crate::blocks::{Block, BlockIter, Blocks, ScopedRestore};
 use alloc::alloc::{AllocError, Allocator, Global, Layout, LayoutError, handle_alloc_error};
 use core::{
     error::Error as ErrorTrait,
@@ -1175,15 +1175,15 @@ impl<A: Allocator> Drop for Arena<A> {
 /// [`Arena::free_blocks()`]: ./struct.Arena.html#method.free_blocks
 pub struct FreeBlocksMut<'a, A: Allocator = Global> {
     arena: &'a mut Arena<A>,
-    curr: Option<NonNull<Block>>,
+    it: BlockIter,
 }
 
 impl<'a, A: Allocator> FreeBlocksMut<'a, A> {
     #[must_use]
     #[inline]
     const fn new(arena: &'a mut Arena<A>) -> Self {
-        let curr = arena.blocks.free_blocks().get();
-        Self { arena, curr }
+        let it = BlockIter::new(arena.blocks.free_blocks().get());
+        Self { arena, it }
     }
 }
 
@@ -1192,18 +1192,13 @@ impl<'a, A: Allocator> Iterator for FreeBlocksMut<'a, A> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let block_size = self.arena.block_size();
-        let (data, next) = unsafe {
-            let block = self.curr?;
-            let next = {
-                let block = block.as_ref();
-                block.next.get()
-            };
+        let block = self.it.next()?;
 
-            (Block::data_mut(block, block_size), next)
+        let data = unsafe {
+            let block_size = self.arena.block_size();
+            Block::data_mut(block, block_size)
         };
 
-        self.curr = next;
         Some(data)
     }
 }
@@ -1224,29 +1219,26 @@ impl<'a, A: Allocator> fmt::Debug for FreeBlocksMut<'a, A> {
 /// [`Arena`]: ./struct.Arena.html
 /// [`Arena::all_blocks()`]: ./struct.Arena.html#method.all_blocks
 pub struct AllBlocksMut<'a, A: Allocator = Global> {
-    curr: Option<NonNull<Block>>,
     arena: &'a mut Arena<A>,
-    state: State,
-}
-
-#[derive(Default)]
-enum State {
-    #[default]
-    Pending,
-    Started,
+    curr: Option<NonNull<Block>>,
+    free_blocks: BlockIter,
+    used_blocks: BlockIter,
 }
 
 impl<'a, A: Allocator> AllBlocksMut<'a, A> {
     #[inline]
     const fn new(arena: &'a mut Arena<A>) -> Self {
-        let (curr, state) = {
-            match arena.blocks.curr_block().get() {
-                block @ Some(_) => (block, State::Pending),
-                None => (arena.blocks.free_blocks().get(), State::Started),
-            }
-        };
+        let curr = arena.blocks.curr_block().get();
 
-        Self { curr, arena, state }
+        let free_blocks = BlockIter::new(arena.blocks.free_blocks().get());
+        let used_blocks = BlockIter::new(arena.blocks.used_blocks().get());
+
+        Self {
+            curr,
+            arena,
+            free_blocks,
+            used_blocks,
+        }
     }
 }
 
@@ -1255,31 +1247,16 @@ impl<'a, A: Allocator> Iterator for AllBlocksMut<'a, A> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let block_size = self.arena.block_size();
-        match self.state {
-            State::Pending => {
-                let curr = unsafe { self.curr.map(|block| Block::data_mut(block, block_size)) };
+        let to_block_data = |block: NonNull<Block>| -> &'_ mut [MaybeUninit<u8>] {
+            let block_size = self.arena.block_size();
+            unsafe { Block::data_mut(block, block_size) }
+        };
 
-                self.state = State::Started;
-                self.curr = self.arena.blocks.free_blocks().get();
-
-                if curr.is_some() { curr } else { self.next() }
-            }
-            State::Started => {
-                let (data, next) = unsafe {
-                    let block = self.curr?;
-                    let next = {
-                        let block = block.as_ref();
-                        block.next.get()
-                    };
-
-                    (Block::data_mut(block, block_size), next)
-                };
-
-                self.curr = next;
-                Some(data)
-            }
-        }
+        self.curr
+            .take()
+            .or_else(|| self.free_blocks.next())
+            .or_else(|| self.used_blocks.next())
+            .map(to_block_data)
     }
 }
 
