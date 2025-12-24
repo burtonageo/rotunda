@@ -30,7 +30,7 @@ use core::{
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
 #[cfg(feature = "std")]
-use std::io::{self, Read, Write};
+use std::io::{self, IoSlice, Read, Write};
 
 #[macro_export]
 macro_rules! buf {
@@ -1306,6 +1306,44 @@ impl<'a> Write for Buffer<'a, u8> {
     }
 
     #[inline]
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        let space = self.capacity() - self.len();
+
+        let mut written = 0;
+        for buf in bufs {
+            let len = buf.len();
+            if written + len > space {
+                let avail = space - written;
+                self.extend_from_slice_copy(&buf[..avail]);
+                break;
+            } else {
+                self.extend_from_slice_copy(buf);
+                written += len;
+            }
+        }
+
+        Ok(space)
+    }
+
+    #[cfg(feature = "nightly_can_vector")]
+    fn is_write_vectored(&self) -> bool {
+        true
+    }
+
+    #[inline]
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        let written = self.write(buf)?;
+        if written > 0 {
+            Err(io::Error::new(
+                io::ErrorKind::WriteZero,
+                "failed to fill whole buffer",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    #[inline]
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
@@ -1892,13 +1930,55 @@ impl<'a, A: Allocator> Write for GrowableBuffer<'a, u8, A> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let len = buf.len();
-        let space = match self.try_reserve(len).map_err(|e| e.available) {
+        let space = match self.ensure_capacity(len).map_err(|e| e.available) {
             Ok(_) => len,
             Err(space) => space,
         };
 
         self.extend(buf.into_iter().take(space).copied());
         Ok(space)
+    }
+
+    #[inline]
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        let len = bufs.iter().map(|buf| buf.len()).sum();
+        let space = match self.ensure_capacity(len).map_err(|e| e.available) {
+            Ok(_) => len,
+            Err(space) => space,
+        };
+
+        let mut written = 0;
+        for buf in bufs {
+            let len = buf.len();
+            if written + len > space {
+                let avail = space - written;
+                self.extend_from_slice_copy(&buf[..avail]);
+                break;
+            } else {
+                self.extend_from_slice_copy(buf);
+                written += len;
+            }
+        }
+
+        Ok(space)
+    }
+
+    #[cfg(feature = "nightly_can_vector")]
+    fn is_write_vectored(&self) -> bool {
+        true
+    }
+
+    #[inline]
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        let written = self.write(buf)?;
+        if written > 0 {
+            Err(io::Error::new(
+                io::ErrorKind::WriteZero,
+                "failed to fill whole buffer",
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     #[inline]
@@ -1919,6 +1999,22 @@ impl<'a, A: Allocator> Read for GrowableBuffer<'a, u8, A> {
 pub struct TryReserveError {
     requested: usize,
     available: usize,
+}
+
+impl TryReserveError {
+    /// The number of instances of `T` requested when reserving space in the `GrowableBuffer`.
+    #[must_use]
+    #[inline]
+    pub const fn requested(&self) -> usize {
+        self.requested
+    }
+
+    /// The number of instances of `T` which can be reserved without overflowing the `GrowableBuffer`.
+    #[must_use]
+    #[inline]
+    pub const fn available(&self) -> usize {
+        self.available
+    }
 }
 
 impl fmt::Display for TryReserveError {
@@ -2205,6 +2301,34 @@ impl<'a, T> ExactSizeIterator for IntoIter<'a, T> {
     #[inline]
     fn len(&self) -> usize {
         self.len_const()
+    }
+}
+
+impl<'a, T> AsRef<[T]> for IntoIter<'a, T> {
+    #[inline]
+    fn as_ref(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+impl<'a, T> AsMut<[T]> for IntoIter<'a, T> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut [T] {
+        self.as_mut_slice()
+    }
+}
+
+impl<'a, T> Borrow<[T]> for IntoIter<'a, T> {
+    #[inline]
+    fn borrow(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+impl<'a, T> BorrowMut<[T]> for IntoIter<'a, T> {
+    #[inline]
+    fn borrow_mut(&mut self) -> &mut [T] {
+        self.as_mut_slice()
     }
 }
 

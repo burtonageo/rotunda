@@ -1,6 +1,7 @@
 #![no_std]
 #![cfg_attr(feature = "nightly_ptr_metadata", feature(ptr_metadata))]
 #![cfg_attr(feature = "nightly_coerce_pointee", feature(derive_coerce_pointee))]
+#![cfg_attr(feature = "nightly_can_vector", feature(can_vector))]
 #![feature(alloc_layout_extra, allocator_api)]
 #![warn(
     missing_docs,

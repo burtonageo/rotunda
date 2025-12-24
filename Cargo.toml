@@ -18,5 +18,6 @@ nightly = [
 ]
 nightly_ptr_metadata = []
 nightly_coerce_pointee = []
+nightly_can_vector = ["std"]
 std = []
 serde = ["dep:serde_core"]
