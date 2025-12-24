@@ -855,7 +855,6 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     unsafe fn get_node_unchecked(&self, index: usize) -> NonNull<Node<T>> {
         let mut iter = NodeIter::new(self);
-        // @TODO(George): Iter from the end of the list if index >= self.len / 2
 
         let node = if index >= self.len / 2 {
             iter.rev().nth(self.len().saturating_sub(index + 1))
