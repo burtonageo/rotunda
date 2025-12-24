@@ -579,8 +579,8 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
 
     #[must_use]
     #[inline]
-    pub fn ptr_eq<Rhs: Into<WeakHandle<'a, T>>>(this: &Self, other: Rhs) -> bool {
-        ptr::eq(Self::as_ptr(this), WeakHandle::as_ptr(&other.into()))
+    pub fn ptr_eq<Rhs: Into<WeakHandle<'a, U>>, U: ?Sized>(this: &Self, other: Rhs) -> bool {
+        ptr::eq(Self::as_ptr(this).cast::<()>(), WeakHandle::as_ptr(&other.into()).cast::<()>())
     }
 
     #[inline]
@@ -1362,10 +1362,10 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
     /// ```
     #[must_use]
     #[inline]
-    pub fn ptr_eq<Rhs: Into<WeakHandle<'a, T>>>(&self, rhs: Rhs) -> bool {
+    pub fn ptr_eq<Rhs: Into<WeakHandle<'a, U>>, U: ?Sized>(&self, rhs: Rhs) -> bool {
         let rhs = rhs.into();
         let (lhs, rhs) = (self.ptr.as_ptr(), rhs.ptr.as_ptr());
-        ptr::eq(lhs, rhs)
+        ptr::eq(lhs.cast::<()>(), rhs.cast::<()>())
     }
 
     /// Hashes the pointer value of this `WeakHandle` into the given `hasher`.
