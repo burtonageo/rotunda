@@ -12,6 +12,10 @@ optional = true
 
 [features]
 default = []
+nightly = [
+    "nightly_ptr_metadata",
+    "nightly_coerce_pointee",
+]
 nightly_ptr_metadata = []
 nightly_coerce_pointee = []
 std = []
