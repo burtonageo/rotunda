@@ -1500,8 +1500,7 @@ impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for WeakHandle<'a, T> {
                 &Destroyed
             };
 
-            let mut debug_tuple = fmtr.debug_tuple("WeakHandle");
-            debug_tuple.field(payload).finish()
+            fmtr.debug_tuple("WeakHandle").field(payload).finish()
         }
     }
 }
