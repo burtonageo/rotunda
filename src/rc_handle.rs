@@ -64,7 +64,7 @@ impl<'a, T> RcHandle<'a, T> {
     #[inline]
     pub fn new_in<A: Allocator>(arena: &'a Arena<A>, value: T) -> Self {
         let handle = RcHandle::new_uninit_in(arena);
-        unsafe { RcHandle::init(handle, value) }
+        RcHandle::init(handle, value)
     }
 
     /// Create a new `RcHandle` containing the return value of the given function.
@@ -84,7 +84,7 @@ impl<'a, T> RcHandle<'a, T> {
     #[inline]
     pub fn new_with<A: Allocator, F: FnOnce() -> T>(arena: &'a Arena<A>, f: F) -> Self {
         let handle = RcHandle::new_uninit_in(arena);
-        unsafe { RcHandle::init(handle, f()) }
+        RcHandle::init(handle, f())
     }
 
     #[track_caller]
@@ -692,7 +692,7 @@ impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
 
     #[must_use]
     #[inline]
-    pub const unsafe fn init(mut this: Self, value: T) -> RcHandle<'a, T> {
+    pub const fn init(mut this: Self, value: T) -> RcHandle<'a, T> {
         unsafe {
             let inner = RcHandle::get_mut_unchecked(&mut this);
             let _ = inner.write(value);
