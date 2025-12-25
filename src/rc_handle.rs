@@ -688,6 +688,24 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     const fn inner(this: &Self) -> &RcHandleInner<T> {
         unsafe { this.ptr.as_ref() }
     }
+
+    #[must_use]
+    #[inline]
+    const fn clone_const(&self) -> RcHandle<'a, T> {
+        let inner = Self::inner(self);
+        inner.increment_refcount();
+
+        Self {
+            ptr: self.ptr,
+            _boo: PhantomData,
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    const fn as_ref_const(&self) -> &T {
+        &Self::inner(self).data
+    }
 }
 
 impl<'a, T: Unpin> RcHandle<'a, T> {
@@ -995,20 +1013,26 @@ impl<'a> RcHandle<'a, str> {
             _boo: PhantomData,
         }
     }
+
+    #[inline]
+    pub const fn into_bytes(this: Self) -> RcHandle<'a, [u8]> {
+        unsafe { mem::transmute(this) }
+    }
 }
 
 impl<'a> RcHandle<'a, [u8]> {
     #[inline]
-    pub fn as_utf8(this: &Self) -> Result<RcHandle<'a, str>, Utf8Error> {
-        let _ = str::from_utf8(this.as_ref())?;
-        unsafe { Ok(Self::as_utf8_unchecked(this)) }
+    pub const fn to_utf8(this: &Self) -> Result<RcHandle<'a, str>, Utf8Error> {
+        match str::from_utf8(this.as_ref_const()) {
+            Ok(_) => unsafe { Ok(Self::into_utf8_unchecked(this.clone_const())) },
+            Err(e) => Err(e),
+        }
     }
 
     #[inline]
-    pub unsafe fn as_utf8_unchecked(this: &Self) -> RcHandle<'a, str> {
-        let copy = this.clone();
+    pub const unsafe fn into_utf8_unchecked(this: Self) -> RcHandle<'a, str> {
         unsafe {
-            mem::transmute(copy)
+            mem::transmute(this)
         }
     }
 }
@@ -1057,7 +1081,7 @@ impl<'a, T: ?Sized> fmt::Pointer for RcHandle<'a, T> {
 impl<'a, T: ?Sized> AsRef<T> for RcHandle<'a, T> {
     #[inline]
     fn as_ref(&self) -> &T {
-        &Self::inner(self).data
+        self.as_ref_const()
     }
 }
 
@@ -1096,13 +1120,7 @@ impl<'a, T: ?Sized> Clone for RcHandle<'a, T> {
     #[track_caller]
     #[inline]
     fn clone(&self) -> Self {
-        let inner = Self::inner(self);
-        inner.increment_refcount();
-
-        Self {
-            ptr: self.ptr,
-            _boo: PhantomData,
-        }
+        self.clone_const()
     }
 }
 
