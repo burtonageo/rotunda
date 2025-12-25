@@ -23,6 +23,7 @@ use core::{
     ops::{Deref, Index},
     ptr::{self, NonNull},
     slice::{self, SliceIndex},
+    str::Utf8Error,
 };
 #[cfg(feature = "serde")]
 use serde_core::ser::{Serialize, Serializer};
@@ -518,7 +519,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     ///
     /// If you will need to resurrect any `WeakHandle`s to this data, use
     /// [`Handle::into_inner()`].
-    /// 
+    ///
     /// # Examples
     ///
     /// ```
@@ -694,7 +695,7 @@ impl<'a, T: Unpin> RcHandle<'a, T> {
     ///
     /// If this `RcHandle` does not have sole ownership of the wrapped value, then
     /// it is returned in the `Err` variant.
-    /// 
+    ///
     /// # Examples
     ///
     /// ```
@@ -923,15 +924,63 @@ impl<'a> RcHandle<'a, str> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_str_in<A: Allocator>(arena: &'a Arena<A>, string: &'_ str) -> Self {
-        let string_len = string.len();
+    pub fn new_str_in<A: Allocator, S: ?Sized + AsRef<str>>(
+        arena: &'a Arena<A>,
+        string: &'_ S,
+    ) -> Self {
+        unsafe {
+            Self::new_from_utf8_unchecked_in_inner(arena, string.as_ref().as_bytes())
+        }
+    }
+
+    /// Create a new `RcHandle` containing the given bytes as a string.
+    ///
+    /// If `bytes` is not a valid utf8 encoded string, a `Utf8Error` will be returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let valid = RcHandle::new_from_utf8_in(&arena, b"Hello!").unwrap();
+    /// assert_eq!(&valid, "Hello!");
+    /// ```
+    #[track_caller]
+    #[must_use]
+    #[inline]
+    pub fn new_from_utf8_in<A: Allocator, B: ?Sized + AsRef<[u8]>>(
+        arena: &'a Arena<A>,
+        bytes: &B,
+    ) -> Result<Self, Utf8Error> {
+        str::from_utf8(bytes.as_ref()).map(|s| RcHandle::new_str_in(arena, s))
+    }
+
+    #[track_caller]
+    #[must_use]
+    #[inline]
+    pub unsafe fn new_from_utf8_unchecked_in<A: Allocator, B: ?Sized + AsRef<[u8]>>(
+        arena: &'a Arena<A>,
+        bytes: &B,
+    ) -> Self {
+        unsafe {
+            Self::new_from_utf8_unchecked_in_inner(arena, bytes.as_ref())
+        }
+    }
+
+    #[track_caller]
+    #[must_use]
+    #[inline]
+    unsafe fn new_from_utf8_unchecked_in_inner<A: Allocator>(arena: &'a Arena<A>, bytes: &[u8]) -> Self {
+        let string_len = bytes.len();
         let mut rc_handle =
             RcHandle::<'a, [MaybeUninit<u8>]>::new_slice_uninit_in(&arena, string_len);
 
         unsafe {
             let slice = RcHandle::get_mut_unchecked(&mut rc_handle);
             let string_bytes = {
-                let data = string.as_bytes().as_ptr().cast::<MaybeUninit<u8>>();
+                let data = bytes.as_ptr().cast::<MaybeUninit<u8>>();
                 slice::from_raw_parts(data, string_len)
             };
 
@@ -944,6 +993,22 @@ impl<'a> RcHandle<'a, str> {
         RcHandle {
             ptr,
             _boo: PhantomData,
+        }
+    }
+}
+
+impl<'a> RcHandle<'a, [u8]> {
+    #[inline]
+    pub fn as_utf8(this: &Self) -> Result<RcHandle<'a, str>, Utf8Error> {
+        let _ = str::from_utf8(this.as_ref())?;
+        unsafe { Ok(Self::as_utf8_unchecked(this)) }
+    }
+
+    #[inline]
+    pub unsafe fn as_utf8_unchecked(this: &Self) -> RcHandle<'a, str> {
+        let copy = this.clone();
+        unsafe {
+            mem::transmute(copy)
         }
     }
 }
@@ -1450,7 +1515,7 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
     pub fn ref_count(&self) -> usize {
         match self.inner() {
             Some(inner) if inner.is_live() => inner.count.get(),
-            _ => 0
+            _ => 0,
         }
     }
 
@@ -1719,7 +1784,7 @@ impl<T: ?Sized> RcHandleInner<T> {
     #[inline]
     const fn is_accessible(&self) -> bool {
         let count = self.count.get();
-        count < Self::COUNT_INACCESSIBLE   
+        count < Self::COUNT_INACCESSIBLE
     }
 
     #[inline]
