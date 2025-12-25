@@ -2349,8 +2349,9 @@ impl<'a, T> Drop for IntoIter<'a, T> {
             return;
         }
 
-        let slice = &mut self.as_mut_slice()[front..back];
         unsafe {
+            let slice =
+                ptr::slice_from_raw_parts_mut(self.data_start_mut().add(front), back - front);
             ptr::drop_in_place(slice);
         }
     }
