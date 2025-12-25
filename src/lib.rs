@@ -1247,16 +1247,14 @@ impl<'a, A: Allocator> Iterator for AllBlocksMut<'a, A> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let to_block_data = |block: NonNull<Block>| -> &'_ mut [MaybeUninit<u8>] {
-            let block_size = self.arena.block_size();
-            unsafe { Block::data_mut(block, block_size) }
-        };
-
         self.curr
             .take()
             .or_else(|| self.free_blocks.next())
             .or_else(|| self.used_blocks.next())
-            .map(to_block_data)
+            .map(|block| {
+                let block_size = self.arena.block_size();
+                unsafe { Block::data_mut(block, block_size) }
+            })
     }
 }
 
