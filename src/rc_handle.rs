@@ -2,7 +2,7 @@
 
 //! Single-threaded reference-counting pointer types backed by an `Arena`.
 
-use crate::{Arena, handle::Handle};
+use crate::{Arena, buffer::Buffer, handle::Handle};
 use alloc::alloc::{Allocator, Layout};
 #[cfg(feature = "nightly_coerce_pointee")]
 use core::marker::CoercePointee;
@@ -142,6 +142,16 @@ impl<'a, T> RcHandle<'a, [T]> {
         mem::forget(guard);
 
         unsafe { RcHandle::assume_init_slice(handle) }
+    }
+
+    #[inline]
+    pub fn try_into_buffer(this: Self) -> Result<Buffer<'a, T>, Self> {
+        Self::try_into_handle(this).map(Buffer::from_slice_handle)
+    }
+
+    #[inline]
+    pub fn into_buffer(this: Self) -> Option<Buffer<'a, T>> {
+        Self::try_into_buffer(this).ok()
     }
 }
 
