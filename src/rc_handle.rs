@@ -690,6 +690,23 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
 }
 
 impl<'a, T: Unpin> RcHandle<'a, T> {
+    /// Consumes the `RcHandle`, returning the inner value.
+    ///
+    /// If this `RcHandle` does not have sole ownership of the wrapped value, then
+    /// it is returned in the `Err` variant.
+    /// 
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc = RcHandle::new_in(&arena, 25i32);
+    ///
+    /// let data: i32 = RcHandle::try_unwrap(rc).unwrap();
+    /// assert_eq!(data, 25);
+    /// ```
     #[inline]
     pub fn try_unwrap(this: Self) -> Result<T, RcHandle<'a, T>> {
         let inner = this.ptr;
@@ -704,6 +721,23 @@ impl<'a, T: Unpin> RcHandle<'a, T> {
         Ok(value)
     }
 
+    /// Consumes the `RcHandle`, returning the inner value.
+    ///
+    /// If this `RcHandle` does not have sole ownership of the wrapped value, then
+    /// `None` is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc = RcHandle::new_in(&arena, 4224i32);
+    ///
+    /// let data: Option<i32> = RcHandle::into_inner(rc);
+    /// assert_eq!(data, Some(4224));
+    /// ```
     #[must_use]
     #[inline]
     pub fn into_inner(this: Self) -> Option<T> {
