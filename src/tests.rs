@@ -46,6 +46,9 @@ fn test_arena_alloc() {
     const MESSAGE: &'_ str = "Hello!";
     let message = Handle::new_str_in(&arena, MESSAGE);
     assert_eq!(&*message, MESSAGE);
+
+    let zst = Handle::new_in(&arena, ());
+    assert_eq!(*zst, ());
 }
 
 #[test]
