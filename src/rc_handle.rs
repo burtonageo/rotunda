@@ -1060,14 +1060,14 @@ impl<'a, T: ?Sized + Pointee> RcHandle<'a, T> {
 impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for RcHandle<'a, T> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&self.as_ref(), fmtr)
+        fmt::Debug::fmt(self.as_ref(), fmtr)
     }
 }
 
 impl<'a, T: ?Sized + fmt::Display> fmt::Display for RcHandle<'a, T> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.as_ref(), fmtr)
+        fmt::Display::fmt(self.as_ref(), fmtr)
     }
 }
 
