@@ -10,6 +10,7 @@ use crate::{
 use alloc::alloc::Allocator;
 use core::{
     borrow::{Borrow, BorrowMut},
+    cmp,
     fmt,
     error::Error as ErrorTrait,
     hash::Hash,
@@ -39,6 +40,13 @@ impl<'a> StringBuffer<'a> {
     pub const unsafe fn from_handle(handle: Handle<'a, [MaybeUninit<u8>]>) -> Self {
         Self {
             inner: unsafe { Buffer::from_raw_parts(handle, 0) },
+        }
+    }
+
+    #[inline]
+    pub const fn from_str_handle(handle: Handle<'a, str>) -> Self {
+        Self {
+            inner: Buffer::from_slice_handle(Handle::into_bytes(handle))
         }
     }
 
@@ -298,28 +306,28 @@ impl<'a> Hash for StringBuffer<'a> {
 
 impl<'a> PartialOrd for StringBuffer<'a> {
     #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl<'a> PartialOrd<str> for StringBuffer<'a> {
     #[inline]
-    fn partial_cmp(&self, other: &str) -> Option<core::cmp::Ordering> {
+    fn partial_cmp(&self, other: &str) -> Option<cmp::Ordering> {
         Some(self.as_str().cmp(other))
     }
 }
 
 impl<'a> PartialOrd<Handle<'_, str>> for StringBuffer<'a> {
     #[inline]
-    fn partial_cmp(&self, other: &Handle<'_, str>) -> Option<core::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Handle<'_, str>) -> Option<cmp::Ordering> {
         Some(self.as_str().cmp(other.as_ref()))
     }
 }
 
 impl<'a> Ord for StringBuffer<'a> {
     #[inline]
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
         self.as_str().cmp(other.as_str())
     }
 }
@@ -340,6 +348,13 @@ impl<'a> TryFrom<Handle<'a, [u8]>> for StringBuffer<'a> {
     }
 }
 
+impl<'a> From<Handle<'a, str>> for StringBuffer<'a> {
+    #[inline]
+    fn from(value: Handle<'a, str>) -> Self {
+        StringBuffer::from_str_handle(value)
+    }
+}
+
 impl<'a> From<StringBuffer<'a>> for Buffer<'a, u8> {
     #[inline]
     fn from(value: StringBuffer<'a>) -> Self {
@@ -353,7 +368,6 @@ impl<'a> From<StringBuffer<'a>> for Handle<'a, [u8]> {
         value.into_bytes().into_slice_handle()
     }
 }
-
 
 #[cfg(feature = "serde")]
 impl<'a> Serialize for StringBuffer<'a> {

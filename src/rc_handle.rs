@@ -996,6 +996,13 @@ impl<'a, T: ?Sized> AsRef<T> for RcHandle<'a, T> {
     }
 }
 
+impl<'a> AsRef<[u8]> for RcHandle<'a, str> {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 impl<'a, T: ?Sized> Borrow<T> for RcHandle<'a, T> {
     #[inline]
     fn borrow(&self) -> &T {
