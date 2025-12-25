@@ -1296,6 +1296,13 @@ impl<'a, T> From<Handle<'a, [T]>> for Buffer<'a, T> {
     }
 }
 
+impl<'a, T> From<IntoIter<'a, T>> for Buffer<'a, T> {
+    #[inline]
+    fn from(value: IntoIter<'a, T>) -> Self {
+        value.into_buffer()
+    }
+}
+
 #[cfg(feature = "std")]
 impl<'a> Write for Buffer<'a, u8> {
     #[inline]
