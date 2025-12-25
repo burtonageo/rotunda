@@ -12,6 +12,7 @@ use core::{
     any::Any,
     borrow::{Borrow, BorrowMut},
     cmp::Ordering,
+    error::Error as ErrorTrait,
     fmt,
     hash::{Hash, Hasher},
     hint::assert_unchecked,
@@ -22,7 +23,7 @@ use core::{
     pin::Pin,
     ptr::{self, NonNull},
     slice::{self, SliceIndex},
-    str,
+    str::{self, Utf8Error},
 };
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
@@ -474,6 +475,18 @@ impl<'a, T: ?Sized> Handle<'a, T> {
     #[inline]
     pub(crate) const fn as_nonnull(this: &Self) -> NonNull<T> {
         this.ptr
+    }
+
+    #[must_use]
+    #[inline]
+    const fn as_ref_const(&self) -> &T {
+        unsafe { self.ptr.as_ref() }
+    }
+
+    #[must_use]
+    #[inline]
+    const fn as_mut_const(&mut self) -> &mut T {
+        unsafe { self.ptr.as_mut() }
     }
 }
 
@@ -1032,6 +1045,21 @@ impl<'a> Handle<'a, str> {
         inner(arena, string.as_ref())
     }
 
+    #[inline]
+    pub const fn from_utf8(bytes: Handle<'a, [u8]>) -> Result<Self, FromUtf8Error<'a>> {
+        match str::from_utf8(bytes.as_ref_const()) {
+            Ok(_) => unsafe { Ok(Self::from_utf8_unchecked(bytes)) },
+            Err(error) => Err(FromUtf8Error { bytes, error }),
+        }
+    }
+
+    #[inline]
+    pub const unsafe fn from_utf8_unchecked(bytes: Handle<'a, [u8]>) -> Self {
+        unsafe {
+            mem::transmute(bytes)
+        }
+    }
+
     /// Create a `Handle` containing an empty `str`.
     ///
     /// This method does not allocate.
@@ -1048,8 +1076,7 @@ impl<'a> Handle<'a, str> {
     #[inline]
     pub const fn empty_str() -> Self {
         unsafe {
-            let empty_bytes = ptr::slice_from_raw_parts_mut(ptr::dangling_mut::<u8>(), 0);
-            Handle::from_raw(empty_bytes as *mut str)
+            Self::from_utf8_unchecked(Handle::empty())
         }
     }
 }
@@ -1092,28 +1119,28 @@ impl<'a, T: ?Sized> fmt::Pointer for Handle<'a, T> {
 impl<'a, T: ?Sized> AsRef<T> for Handle<'a, T> {
     #[inline]
     fn as_ref(&self) -> &T {
-        unsafe { self.ptr.as_ref() }
+        self.as_ref_const()
     }
 }
 
 impl<'a, T: ?Sized> AsMut<T> for Handle<'a, T> {
     #[inline]
     fn as_mut(&mut self) -> &mut T {
-        unsafe { self.ptr.as_mut() }
+        self.as_mut_const()
     }
 }
 
 impl<'a, T: ?Sized> Borrow<T> for Handle<'a, T> {
     #[inline]
     fn borrow(&self) -> &T {
-        self.as_ref()
+        self.as_ref_const()
     }
 }
 
 impl<'a, T: ?Sized> BorrowMut<T> for Handle<'a, T> {
     #[inline]
     fn borrow_mut(&mut self) -> &mut T {
-        self.as_mut()
+        self.as_mut_const()
     }
 }
 
@@ -1376,5 +1403,45 @@ impl<'a, T: Serialize> Serialize for Handle<'a, T> {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.as_ref().serialize(serializer)
+    }
+}
+
+#[derive(Debug)]
+pub struct FromUtf8Error<'a> {
+    bytes: Handle<'a, [u8]>,
+    error: Utf8Error,
+}
+
+impl<'a> FromUtf8Error<'a> {
+    #[must_use]
+    #[inline]
+    pub fn into_bytes(self) -> Handle<'a, [u8]> {
+        self.bytes
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn utf8_error(&self) -> Utf8Error {
+        self.error
+    }
+}
+
+impl<'a> fmt::Display for FromUtf8Error<'a> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.error, fmtr)
+    }
+}
+
+impl<'a> ErrorTrait for FromUtf8Error<'a> {
+    #[inline]
+    fn source(&self) -> Option<&(dyn ErrorTrait + 'static)> {
+        Some(&self.error)
     }
 }
