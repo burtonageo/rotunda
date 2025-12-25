@@ -27,7 +27,7 @@ use core::{
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
 #[cfg(feature = "std")]
-use std::io::{self, BufRead, IoSlice, Read, Write};
+use std::io::{self, BufRead, IoSlice, IoSliceMut, Read, Write};
 
 /// An owned, mutable pointer to some memory backed by an [`Arena`], analogous to
 /// [`Box<T>`].
@@ -1312,6 +1312,21 @@ impl<'a, R: ?Sized + Read> Read for Handle<'a, R> {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.as_mut().read(buf)
+    }
+
+    #[inline]
+    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        self.as_mut().read_vectored(bufs)
+    }
+
+    #[inline]
+    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+        self.as_mut().read_exact(buf)
+    }
+
+    #[inline]
+    fn read_to_end(&mut self, buf: &mut std::vec::Vec<u8>) -> io::Result<usize> {
+        self.as_mut().read_to_end(buf)
     }
 }
 
