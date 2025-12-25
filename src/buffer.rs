@@ -2337,7 +2337,7 @@ impl<'a, T> FusedIterator for IntoIter<'a, T> {}
 impl<'a, T> Drop for IntoIter<'a, T> {
     #[inline]
     fn drop(&mut self) {
-        let (front, back) = (self.front_idx, self.back_idx.saturating_sub(1));
+        let (front, back) = (self.front_idx, self.back_idx);
         if front >= back {
             return;
         }

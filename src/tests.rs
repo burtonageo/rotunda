@@ -581,6 +581,23 @@ fn test_buffer() {
     for item in iter {
         assert_eq!(item, 128);
     }
+
+    arena.with_scope(|arena| {
+        static DROPS: AtomicU32 = AtomicU32::new(0);
+        struct CountDrops;
+        impl Drop for CountDrops {
+            fn drop(&mut self) {
+                DROPS.fetch_add(1, AtomicOrdering::SeqCst);
+            }
+        }
+
+        let count_drops = CountDrops;
+        let buf = Buffer::new_in(&arena, [count_drops]);
+        let iter = buf.into_iter();
+        drop(iter);
+
+        assert_eq!(DROPS.load(AtomicOrdering::SeqCst), 1);
+    })
 }
 
 #[test]
