@@ -2,7 +2,12 @@
 
 //! A singly-owned mutable pointer backed by an `Arena`.
 
-use crate::{Arena, buffer::Buffer, rc_handle::RcHandle, string_buffer::StringBuffer};
+use crate::{
+    Arena,
+    buffer::Buffer,
+    rc_handle::RcHandle,
+    string_buffer::{FromUtf8Error, StringBuffer},
+};
 use alloc::alloc::{Allocator, Layout};
 #[cfg(feature = "nightly_coerce_pointee")]
 use core::marker::CoercePointee;
@@ -12,7 +17,6 @@ use core::{
     any::Any,
     borrow::{Borrow, BorrowMut},
     cmp::Ordering,
-    error::Error as ErrorTrait,
     fmt,
     hash::{Hash, Hasher},
     hint::assert_unchecked,
@@ -23,7 +27,7 @@ use core::{
     pin::Pin,
     ptr::{self, NonNull},
     slice::{self, SliceIndex},
-    str::{self, Utf8Error},
+    str,
 };
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
@@ -1049,15 +1053,18 @@ impl<'a> Handle<'a, str> {
     pub const fn from_utf8(bytes: Handle<'a, [u8]>) -> Result<Self, FromUtf8Error<'a>> {
         match str::from_utf8(bytes.as_ref_const()) {
             Ok(_) => unsafe { Ok(Self::from_utf8_unchecked(bytes)) },
-            Err(error) => Err(FromUtf8Error { bytes, error }),
+            Err(error) => Err(FromUtf8Error::new(Buffer::from_slice_handle(bytes), error)),
         }
     }
 
     #[inline]
     pub const unsafe fn from_utf8_unchecked(bytes: Handle<'a, [u8]>) -> Self {
-        unsafe {
-            mem::transmute(bytes)
-        }
+        unsafe { mem::transmute(bytes) }
+    }
+
+    #[inline]
+    pub const fn into_bytes(this: Self) -> Handle<'a, [u8]> {
+        unsafe { mem::transmute(this) }
     }
 
     /// Create a `Handle` containing an empty `str`.
@@ -1075,9 +1082,7 @@ impl<'a> Handle<'a, str> {
     #[must_use]
     #[inline]
     pub const fn empty_str() -> Self {
-        unsafe {
-            Self::from_utf8_unchecked(Handle::empty())
-        }
+        unsafe { Self::from_utf8_unchecked(Handle::empty()) }
     }
 }
 
@@ -1127,6 +1132,13 @@ impl<'a, T: ?Sized> AsMut<T> for Handle<'a, T> {
     #[inline]
     fn as_mut(&mut self) -> &mut T {
         self.as_mut_const()
+    }
+}
+
+impl<'a> AsRef<[u8]> for Handle<'a, str> {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
     }
 }
 
@@ -1223,6 +1235,21 @@ impl<'a, T> From<Handle<'a, [T; 1]>> for Handle<'a, T> {
     #[inline]
     fn from(value: Handle<'a, [T; 1]>) -> Self {
         Handle::from_array(value)
+    }
+}
+
+impl<'a> TryFrom<Handle<'a, [u8]>> for Handle<'a, str> {
+    type Error = FromUtf8Error<'a>;
+    #[inline]
+    fn try_from(value: Handle<'a, [u8]>) -> Result<Self, Self::Error> {
+        Handle::from_utf8(value)
+    }
+}
+
+impl<'a> From<Handle<'a, str>> for Handle<'a, [u8]> {
+    #[inline]
+    fn from(value: Handle<'a, str>) -> Self {
+        Handle::into_bytes(value)
     }
 }
 
@@ -1403,45 +1430,5 @@ impl<'a, T: Serialize> Serialize for Handle<'a, T> {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.as_ref().serialize(serializer)
-    }
-}
-
-#[derive(Debug)]
-pub struct FromUtf8Error<'a> {
-    bytes: Handle<'a, [u8]>,
-    error: Utf8Error,
-}
-
-impl<'a> FromUtf8Error<'a> {
-    #[must_use]
-    #[inline]
-    pub fn into_bytes(self) -> Handle<'a, [u8]> {
-        self.bytes
-    }
-
-    #[must_use]
-    #[inline]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    #[must_use]
-    #[inline]
-    pub fn utf8_error(&self) -> Utf8Error {
-        self.error
-    }
-}
-
-impl<'a> fmt::Display for FromUtf8Error<'a> {
-    #[inline]
-    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.error, fmtr)
-    }
-}
-
-impl<'a> ErrorTrait for FromUtf8Error<'a> {
-    #[inline]
-    fn source(&self) -> Option<&(dyn ErrorTrait + 'static)> {
-        Some(&self.error)
     }
 }

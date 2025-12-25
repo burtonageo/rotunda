@@ -11,10 +11,11 @@ use alloc::alloc::Allocator;
 use core::{
     borrow::{Borrow, BorrowMut},
     fmt,
+    error::Error as ErrorTrait,
     hash::Hash,
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
-    ptr, str,
+    ptr, str::{self, Utf8Error},
 };
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
@@ -41,6 +42,24 @@ impl<'a> StringBuffer<'a> {
         }
     }
 
+    #[inline]
+    pub const fn from_utf8(bytes: Buffer<'a, u8>) -> Result<Self, FromUtf8Error<'a>> {
+        match str::from_utf8(bytes.as_slice()) {
+            Ok(_) => unsafe { Ok(Self::from_utf8_unchecked(bytes)) },
+            Err(error) => Err(FromUtf8Error::new(bytes, error)),
+        }
+    }
+
+    #[inline]
+    pub const unsafe fn from_utf8_unchecked(bytes: Buffer<'a, u8>) -> Self {
+        Self { inner: bytes }
+    }
+
+    #[inline]
+    pub fn into_bytes(self) -> Buffer<'a, u8> {
+        self.inner
+    }
+
     #[track_caller]
     #[inline]
     #[must_use]
@@ -56,6 +75,14 @@ impl<'a> StringBuffer<'a> {
         let mut buf = StringBuffer::with_capacity_in_arena(s.len(), arena);
         buf.push_str(s);
         buf
+    }
+
+    #[inline]
+    pub fn split_at_spare_capacity(self) -> (StringBuffer<'a>, Buffer<'a, MaybeUninit<u8>>) {
+        let (string, spare_cap) = self.inner.split_at_spare_capacity();
+        unsafe {
+            (StringBuffer::from_utf8_unchecked(Buffer::from(string)), Buffer::from(spare_cap))
+        }
     }
 
     #[inline]
@@ -211,6 +238,13 @@ impl<'a> AsMut<str> for StringBuffer<'a> {
     }
 }
 
+impl<'a> AsRef<[u8]> for StringBuffer<'a> {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 impl<'a> fmt::Debug for StringBuffer<'a> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -249,7 +283,7 @@ impl<'a> PartialEq<str> for StringBuffer<'a> {
 impl<'a> PartialEq<Handle<'_, str>> for StringBuffer<'a> {
     #[inline]
     fn eq(&self, other: &Handle<str>) -> bool {
-        PartialEq::eq(self.as_str(), other.as_ref())
+        PartialEq::<str>::eq(self.as_str(), other.as_ref())
     }
 }
 
@@ -290,10 +324,86 @@ impl<'a> Ord for StringBuffer<'a> {
     }
 }
 
+impl<'a> TryFrom<Buffer<'a, u8>> for StringBuffer<'a> {
+    type Error = FromUtf8Error<'a>;
+    #[inline]
+    fn try_from(value: Buffer<'a, u8>) -> Result<Self, Self::Error> {
+        StringBuffer::from_utf8(value)
+    }
+}
+
+impl<'a> TryFrom<Handle<'a, [u8]>> for StringBuffer<'a> {
+    type Error = FromUtf8Error<'a>;
+    #[inline]
+    fn try_from(value: Handle<'a, [u8]>) -> Result<Self, Self::Error> {
+        TryFrom::try_from(Buffer::from_slice_handle(value))
+    }
+}
+
+impl<'a> From<StringBuffer<'a>> for Buffer<'a, u8> {
+    #[inline]
+    fn from(value: StringBuffer<'a>) -> Self {
+        value.into_bytes()
+    }
+}
+
+impl<'a> From<StringBuffer<'a>> for Handle<'a, [u8]> {
+    #[inline]
+    fn from(value: StringBuffer<'a>) -> Self {
+        value.into_bytes().into_slice_handle()
+    }
+}
+
+
 #[cfg(feature = "serde")]
 impl<'a> Serialize for StringBuffer<'a> {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         <str as Serialize>::serialize(self.as_ref(), serializer)
+    }
+}
+
+#[derive(Debug)]
+pub struct FromUtf8Error<'a> {
+    bytes: Buffer<'a, u8>,
+    error: Utf8Error,
+}
+
+impl<'a> FromUtf8Error<'a> {
+    #[inline]
+    pub(crate) const fn new(bytes: Buffer<'a, u8>, error: Utf8Error) -> Self {
+        Self { bytes, error }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn into_bytes(self) -> Buffer<'a, u8> {
+        self.bytes
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn utf8_error(&self) -> &Utf8Error {
+        &self.error
+    }
+}
+
+impl<'a> fmt::Display for FromUtf8Error<'a> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self.utf8_error(), fmtr)
+    }
+}
+
+impl<'a> ErrorTrait for FromUtf8Error<'a> {
+    #[inline]
+    fn source(&self) -> Option<&(dyn ErrorTrait + 'static)> {
+        Some(&self.error)
     }
 }
