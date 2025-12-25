@@ -723,7 +723,10 @@ impl<A: Allocator> Arena<A> {
     /// let arena = Arena::new();
     /// let handle = unsafe {
     ///     arena.with_scope_dynamic(|| {
-    ///         Handle::new_in(&arena, vec![1, 2, 3, 4, 5])
+    ///         let handle = Handle::new_in(&arena, vec![1, 2, 3, 4, 5]);
+    ///         # let mut handle = handle;
+    ///         # unsafe { core::ptr::drop_in_place(Handle::as_mut_ptr(&mut handle)); } // Keep miri happy
+    ///         handle
     ///     })
     /// };
     ///
@@ -742,6 +745,8 @@ impl<A: Allocator> Arena<A> {
     /// unsafe {
     ///     arena.with_scope_dynamic(|| {
     ///         let handle = Handle::new_in(&arena, String::from("This is a message!"));
+    ///         # let mut handle = handle;
+    ///         # unsafe { core::ptr::drop_in_place(Handle::as_mut_ptr(&mut handle)); } // Keep miri happy
     ///         buffer.push(handle);
     ///     });
     /// };
