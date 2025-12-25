@@ -27,7 +27,7 @@ use core::{
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
 #[cfg(feature = "std")]
-use std::io::{self, BufRead, Read, Write};
+use std::io::{self, BufRead, IoSlice, Read, Write};
 
 /// An owned, mutable pointer to some memory backed by an [`Arena`], analogous to
 /// [`Box<T>`].
@@ -1333,6 +1333,21 @@ impl<'a, W: ?Sized + Write> Write for Handle<'a, W> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.as_mut().write(buf)
+    }
+
+    #[inline]
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        self.as_mut().write_vectored(bufs)
+    }
+
+    #[cfg(feature = "nightly_can_vector")]
+    fn is_write_vectored(&self) -> bool {
+        self.as_ref().is_write_vectored()
+    }
+
+    #[inline]
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        self.as_mut().write_all(buf)
     }
 
     #[inline]
