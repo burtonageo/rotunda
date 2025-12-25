@@ -763,15 +763,12 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     pub fn retain<F: FnMut(&T) -> bool>(&mut self, mut pred: F) {
         let mut node_iter = NodeIter::new(self);
-        let mut curr_node = node_iter.next();
         let mut i = 0;
-        while let Some(node) = curr_node {
+        while let Some(node) = node_iter.next() {
             let should_drop = unsafe {
                 let node_ref = &node.as_ref().data;
                 !pred(node_ref)
             };
-
-            let next = node_iter.next();
 
             if should_drop {
                 unsafe {
@@ -780,8 +777,6 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             } else {
                 i += 1;
             }
-
-            curr_node = next;
         }
     }
 
