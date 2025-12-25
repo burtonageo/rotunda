@@ -713,8 +713,9 @@ impl<A: Allocator> Arena<A> {
     /// # Safety
     ///
     /// This method is unsafe as it is possible to return a handle to memory which would
-    /// be freed automatically as the scope exits. This would allow safe code to be exposed
-    /// to dangling pointers, which could cause undefined behaviour.
+    /// be freed in the Arena automatically as the scope exits. This would allow safe code
+    /// to overwrite the memory in the `Arena` with a new value while still allowing the 
+    /// old `Handle` to be accessed, which could cause memory unsafety.
     ///
     /// To avoid this safety issue, never return data allocated in the arena during the scope.
     ///
@@ -730,9 +731,13 @@ impl<A: Allocator> Arena<A> {
     ///     })
     /// };
     ///
-    /// // Warning ⚠️: `handle` points to uninitialised memory here. It is undefined behaviour
-    /// // to dereference it in any way (including via non-trivial drop).
+    /// // Warning ⚠️: `handle` has simultaneously been leakded and points to uninitialised memory.
+    /// // It is undefined behaviour to dereference it in any way (including via non-trivial drop).
     /// # core::mem::forget(handle);
+    ///
+    /// // Warning ⚠️: This call to `Handle::new()` will use the same memory as which was used in the
+    /// // `with_scope_dynamic()` call above.
+    /// let handle = Handle::new_in(&arena, [128usize, 255, 300]);
     /// ```
     ///
     /// Note that this includes 'smuggling' handles out through a collection type which
@@ -751,8 +756,8 @@ impl<A: Allocator> Arena<A> {
     ///     });
     /// };
     ///
-    /// // Warning ⚠️: `buffer[0]` points to uninitialised memory here. It is undefined behaviour
-    /// // to dereference it in any way (including via non-trivial drop).
+    /// // Warning ⚠️: `buffer[0]` has simultaneously been leakded and points to uninitialised memory.
+    /// // It is undefined behaviour to dereference it in any way (including via non-trivial drop).
     /// # core::mem::forget(buffer.remove(0));
     /// ```
     ///
