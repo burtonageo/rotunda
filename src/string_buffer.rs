@@ -4,19 +4,20 @@
 
 use crate::{
     Arena,
-    buffer::{Buffer, TryExtendError},
+    buffer::{Buffer, GrowableBuffer, TryExtendError, TryReserveError},
     handle::Handle,
 };
-use alloc::alloc::Allocator;
+use alloc::alloc::{Allocator, Global};
 use core::{
     borrow::{Borrow, BorrowMut},
     cmp,
-    fmt,
     error::Error as ErrorTrait,
+    fmt,
     hash::Hash,
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
-    ptr, str::{self, Utf8Error},
+    ptr,
+    str::{self, Utf8Error},
 };
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
@@ -46,8 +47,36 @@ impl<'a> StringBuffer<'a> {
     #[inline]
     pub const fn from_str_handle(handle: Handle<'a, str>) -> Self {
         Self {
-            inner: Buffer::from_slice_handle(Handle::into_bytes(handle))
+            inner: Buffer::from_slice_handle(Handle::into_bytes(handle)),
         }
+    }
+
+    #[inline]
+    pub fn try_with_growable_in<A, E, F>(arena: &'a Arena<A>, f: F) -> Result<Self, E>
+    where
+        A: Allocator,
+        F: for<'buf> FnOnce(&'buf mut GrowableStringBuffer<'a, A>) -> Result<(), E>,
+    {
+        let buffer = Buffer::try_with_growable_in(arena, |buf| {
+            let mut buf = unsafe { &mut *ptr::from_mut(buf).cast::<GrowableStringBuffer<'a, A>>() };
+            f(&mut buf)
+        });
+
+        buffer.map(|buffer| unsafe { Self::from_utf8_unchecked(buffer) })
+    }
+
+    #[inline]
+    pub fn with_growable<A, F>(arena: &'a Arena<A>, f: F) -> Self
+    where
+        A: Allocator,
+        F: for<'buf> FnOnce(&'buf mut GrowableStringBuffer<'a, A>),
+    {
+        let buffer = Buffer::with_growable_in(arena, |buf| {
+            let mut buf = unsafe { &mut *ptr::from_mut(buf).cast::<GrowableStringBuffer<'a, A>>() };
+            f(&mut buf)
+        });
+
+        unsafe { Self::from_utf8_unchecked(buffer) }
     }
 
     #[inline]
@@ -89,7 +118,10 @@ impl<'a> StringBuffer<'a> {
     pub fn split_at_spare_capacity(self) -> (StringBuffer<'a>, Buffer<'a, MaybeUninit<u8>>) {
         let (string, spare_cap) = self.inner.split_at_spare_capacity();
         unsafe {
-            (StringBuffer::from_utf8_unchecked(Buffer::from(string)), Buffer::from(spare_cap))
+            (
+                StringBuffer::from_utf8_unchecked(Buffer::from(string)),
+                Buffer::from(spare_cap),
+            )
         }
     }
 
@@ -160,6 +192,19 @@ impl<'a> StringBuffer<'a> {
 
     #[must_use]
     #[inline]
+    pub fn pop(&mut self) -> Option<char> {
+        let ch = self.as_str().chars().next_back()?;
+        let new_len = self.inner.len() - ch.len_utf8();
+
+        unsafe {
+            self.set_len(new_len);
+        }
+
+        Some(ch)
+    }
+
+    #[must_use]
+    #[inline]
     pub const fn as_str(&self) -> &str {
         unsafe { str::from_utf8_unchecked(self.inner.as_slice()) }
     }
@@ -199,6 +244,34 @@ impl<'a> StringBuffer<'a> {
         } else {
             // inlined from `char::is_utf8_char_boundary()`, as that's a private method
             (self.as_bytes()[idx] as i8) >= -0x40
+        }
+    }
+}
+
+impl<'a> Extend<char> for StringBuffer<'a> {
+    #[track_caller]
+    #[inline]
+    fn extend<I: IntoIterator<Item = char>>(&mut self, iter: I) {
+        for item in iter {
+            self.push_char(item);
+        }
+    }
+}
+
+impl<'a, 'c> Extend<&'c char> for StringBuffer<'a> {
+    #[track_caller]
+    #[inline]
+    fn extend<I: IntoIterator<Item = &'c char>>(&mut self, iter: I) {
+        Extend::extend(self, iter.into_iter().copied());
+    }
+}
+
+impl<'a, 's> Extend<&'s str> for StringBuffer<'a> {
+    #[track_caller]
+    #[inline]
+    fn extend<I: IntoIterator<Item = &'s str>>(&mut self, iter: I) {
+        for item in iter {
+            self.push_str(item);
         }
     }
 }
@@ -374,6 +447,243 @@ impl<'a> Serialize for StringBuffer<'a> {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         <str as Serialize>::serialize(self.as_ref(), serializer)
+    }
+}
+
+#[repr(transparent)]
+pub struct GrowableStringBuffer<'a, A: Allocator = Global> {
+    inner: GrowableBuffer<'a, u8, A>,
+}
+
+impl<'a, A: Allocator> GrowableStringBuffer<'a, A> {
+    #[must_use]
+    #[inline]
+    pub const fn max_capacity(&self) -> usize {
+        self.inner.max_capacity()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn capacity(&self) -> usize {
+        self.inner.capacity()
+    }
+
+    #[inline]
+    pub const fn is_full(&self) -> bool {
+        self.inner.is_full()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn has_capacity(&self, required_capacity: usize) -> bool {
+        self.inner.has_capacity(required_capacity)
+    }
+
+    #[inline]
+    pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
+        self.inner.try_reserve(additional)
+    }
+
+    #[inline]
+    pub fn reserve(&mut self, additional: usize) {
+        self.inner.reserve(additional);
+    }
+
+    #[inline]
+    pub fn try_push_char(&mut self, value: char) -> Result<(), char> {
+        let mut bytes = [0u8; char::MAX_LEN_UTF8];
+        let string = value.encode_utf8(&mut bytes);
+
+        match self
+            .inner
+            .try_extend(string.as_bytes().into_iter().copied())
+        {
+            Ok(()) => Ok(()),
+            Err(_) => Err(value),
+        }
+    }
+
+    #[inline]
+    pub fn try_push_str<'s, S: 's + ?Sized + AsRef<str>>(
+        &mut self,
+        string: &'s S,
+    ) -> Result<(), &'s str> {
+        let string = string.as_ref();
+        match self
+            .inner
+            .try_extend(string.as_bytes().into_iter().copied())
+        {
+            Ok(()) => Ok(()),
+            Err(_) => Err(string),
+        }
+    }
+
+    #[track_caller]
+    #[inline]
+    pub fn push_char(&mut self, value: char) {
+        match self.try_push_char(value) {
+            Ok(_) => (),
+            Err(_) => panic!("No space for char in this buffer"),
+        }
+    }
+
+    #[track_caller]
+    #[inline]
+    pub fn push_str<S: ?Sized + AsRef<str>>(&mut self, string: &S) {
+        match self.try_push_str(string) {
+            Ok(_) => (),
+            Err(_) => panic!("No space for string in this buffer"),
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn pop(&mut self) -> Option<char> {
+        let ch = self.as_str().chars().next_back()?;
+        let new_len = self.inner.len() - ch.len_utf8();
+
+        unsafe {
+            self.set_len(new_len);
+        }
+
+        Some(ch)
+    }
+
+    #[inline]
+    pub const unsafe fn set_len(&mut self, new_len: usize) {
+        unsafe {
+            self.inner.set_len(new_len);
+        }
+    }
+
+    #[inline]
+    pub fn shrink_to_fit(&mut self) {
+        self.inner.shrink_to_fit();
+    }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn as_bytes(&self) -> &[u8] {
+        self.inner.as_slice()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn as_str(&self) -> &str {
+        unsafe { str::from_utf8_unchecked(self.as_bytes()) }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn as_mut_str(&mut self) -> &mut str {
+        unsafe { str::from_utf8_unchecked_mut(self.inner.as_mut_slice()) }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn as_ptr(&self) -> *const u8 {
+        self.inner.as_ptr()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.inner.as_mut_ptr()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<u8>] {
+        self.inner.spare_capacity_mut()
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn bytes(&'_ self) -> <&'_ [u8] as IntoIterator>::IntoIter {
+        self.as_bytes().iter()
+    }
+}
+
+impl<'a, A: Allocator> Extend<char> for GrowableStringBuffer<'a, A> {
+    #[track_caller]
+    #[inline]
+    fn extend<I: IntoIterator<Item = char>>(&mut self, iter: I) {
+        for item in iter {
+            self.push_char(item);
+        }
+    }
+}
+
+impl<'a, 'c, A: Allocator> Extend<&'c char> for GrowableStringBuffer<'a, A> {
+    #[track_caller]
+    #[inline]
+    fn extend<I: IntoIterator<Item = &'c char>>(&mut self, iter: I) {
+        Extend::extend(self, iter.into_iter().copied());
+    }
+}
+
+impl<'a, 's, A: Allocator> Extend<&'s str> for GrowableStringBuffer<'a, A> {
+    #[track_caller]
+    #[inline]
+    fn extend<I: IntoIterator<Item = &'s str>>(&mut self, iter: I) {
+        for item in iter {
+            self.push_str(item);
+        }
+    }
+}
+
+impl<'a, A: Allocator> AsRef<str> for GrowableStringBuffer<'a, A> {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl<'a, A: Allocator> AsMut<str> for GrowableStringBuffer<'a, A> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut str {
+        self.as_mut_str()
+    }
+}
+
+impl<'a, A: Allocator> AsRef<[u8]> for GrowableStringBuffer<'a, A> {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+impl<'a, A: Allocator> Borrow<str> for GrowableStringBuffer<'a, A> {
+    #[inline]
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl<'a, A: Allocator> BorrowMut<str> for GrowableStringBuffer<'a, A> {
+    #[inline]
+    fn borrow_mut(&mut self) -> &mut str {
+        self.as_mut_str()
+    }
+}
+
+impl<'a, A: Allocator> Deref for GrowableStringBuffer<'a, A> {
+    type Target = str;
+    #[inline]
+    fn deref(&self) -> &<Self as Deref>::Target {
+        self.as_str()
+    }
+}
+
+impl<'a, A: Allocator> DerefMut for GrowableStringBuffer<'a, A> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut <Self as Deref>::Target {
+        self.as_mut_str()
     }
 }
 
