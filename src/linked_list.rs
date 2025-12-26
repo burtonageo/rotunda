@@ -1123,6 +1123,24 @@ impl<'a, T, A: Allocator> Extend<T> for LinkedList<'a, T, A> {
     }
 }
 
+impl<'a, 't, T: Copy, A: Allocator> Extend<&'t T> for LinkedList<'a, T, A> {
+    #[track_caller]
+    #[inline]
+    fn extend<I: IntoIterator<Item = &'t T>>(&mut self, iter: I) {
+        Extend::extend(self, iter.into_iter().copied())
+    }
+}
+
+impl<'a, 't, T: Copy, A: Allocator> Extend<&'t [T]> for LinkedList<'a, T, A> {
+    #[track_caller]
+    #[inline]
+    fn extend<I: IntoIterator<Item = &'t [T]>>(&mut self, iter: I) {
+        for item in iter {
+            Extend::extend(self, item.into_iter().copied())
+        }
+    }
+}
+
 #[cfg(feature = "serde")]
 impl<'a, T: Serialize> Serialize for LinkedList<'a, T> {
     #[inline]
