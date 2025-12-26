@@ -1284,8 +1284,27 @@ impl<'a, T> IntoIterator for Buffer<'a, T> {
 
 impl<'a, T> Extend<T> for Buffer<'a, T> {
     #[track_caller]
+    #[inline]
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         self.try_extend(iter).unwrap_or_else(|e| panic!("{}", e));
+    }
+}
+
+impl<'a, 't, T: Copy> Extend<&'t T> for Buffer<'a, T> {
+    #[track_caller]
+    #[inline]
+    fn extend<I: IntoIterator<Item = &'t T>>(&mut self, iter: I) {
+        Extend::extend(self, iter.into_iter().copied())
+    }
+}
+
+impl<'a, 't, T: Copy> Extend<&'t [T]> for Buffer<'a, T> {
+    #[track_caller]
+    #[inline]
+    fn extend<I: IntoIterator<Item = &'t [T]>>(&mut self, iter: I) {
+        for item in iter {
+            self.extend(item);
+        }
     }
 }
 
@@ -1562,6 +1581,23 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
         }
 
         self.len += 1;
+
+        Ok(())
+    }
+
+    #[inline]
+    pub fn try_extend<I: IntoIterator<Item = T>>(
+        &mut self,
+        iter: I,
+    ) -> Result<(), (T, I::IntoIter)> {
+        let mut iter = iter.into_iter();
+
+        while let Some(item) = iter.next() {
+            match self.try_push(item) {
+                Ok(()) => (),
+                Err(item) => return Err((item, iter)),
+            }
+        }
 
         Ok(())
     }
