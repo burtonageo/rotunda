@@ -977,6 +977,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// assert_eq!(message, "HELLO ❤️");
     /// ```
+    #[allow(clippy::mut_from_ref)]
     #[track_caller]
     #[must_use]
     #[inline]
@@ -1076,7 +1077,6 @@ impl<A: Allocator> Arena<A> {
         AllBlocksMut::new(self)
     }
 
-    #[must_use]
     #[inline]
     unsafe fn get_free_block(&self) -> Result<NonNull<Block>, AllocError> {
         let block = match self.blocks.free_blocks().get() {
@@ -1101,14 +1101,12 @@ impl<A: Allocator> Arena<A> {
         Ok(block)
     }
 
-    #[must_use]
     #[inline]
     fn alloc_block(&self) -> Result<NonNull<Block>, AllocError> {
         let layout = self.blocks.block_layout();
         Block::try_alloc(layout, self.allocator())
     }
 
-    #[must_use]
     fn get_block_for_layout(&self, layout: Layout) -> Result<NonNull<Block>, Error> {
         let block = self
             .blocks
@@ -1148,7 +1146,7 @@ impl<A: Allocator> Arena<A> {
             ptr = ptr.map_addr(|addr| addr.saturating_add(offset));
         }
 
-        return ptr;
+        ptr
     }
 }
 

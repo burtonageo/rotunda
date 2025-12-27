@@ -762,9 +762,9 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[track_caller]
     #[inline]
     pub fn retain<F: FnMut(&T) -> bool>(&mut self, mut pred: F) {
-        let mut node_iter = NodeIter::new(self);
+        let node_iter = NodeIter::new(self);
         let mut i = 0;
-        while let Some(node) = node_iter.next() {
+        for node in node_iter {
             let should_drop = unsafe {
                 let node_ref = &node.as_ref().data;
                 !pred(node_ref)
@@ -1136,7 +1136,7 @@ impl<'a, 't, T: Copy, A: Allocator> Extend<&'t [T]> for LinkedList<'a, T, A> {
     #[inline]
     fn extend<I: IntoIterator<Item = &'t [T]>>(&mut self, iter: I) {
         for item in iter {
-            Extend::extend(self, item.into_iter().copied())
+            Extend::extend(self, item.iter().copied())
         }
     }
 }

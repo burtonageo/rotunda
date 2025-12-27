@@ -58,8 +58,8 @@ impl<'a> StringBuffer<'a> {
         F: for<'buf> FnOnce(&'buf mut GrowableStringBuffer<'a, A>) -> Result<(), E>,
     {
         let buffer = Buffer::try_with_growable_in(arena, |buf| {
-            let mut buf = unsafe { &mut *ptr::from_mut(buf).cast::<GrowableStringBuffer<'a, A>>() };
-            f(&mut buf)
+            let buf = unsafe { &mut *ptr::from_mut(buf).cast::<GrowableStringBuffer<'a, A>>() };
+            f(buf)
         });
 
         buffer.map(|buffer| unsafe { Self::from_utf8_unchecked(buffer) })
@@ -72,8 +72,8 @@ impl<'a> StringBuffer<'a> {
         F: for<'buf> FnOnce(&'buf mut GrowableStringBuffer<'a, A>),
     {
         let buffer = Buffer::with_growable_in(arena, |buf| {
-            let mut buf = unsafe { &mut *ptr::from_mut(buf).cast::<GrowableStringBuffer<'a, A>>() };
-            f(&mut buf)
+            let buf = unsafe { &mut *ptr::from_mut(buf).cast::<GrowableStringBuffer<'a, A>>() };
+            f(buf)
         });
 
         unsafe { Self::from_utf8_unchecked(buffer) }
@@ -231,7 +231,6 @@ impl<'a> StringBuffer<'a> {
         self.as_str().as_bytes()
     }
 
-    #[must_use]
     #[inline]
     pub fn bytes(&self) -> Bytes<'_> {
         self.as_str().bytes()
@@ -500,10 +499,7 @@ impl<'a, A: Allocator> GrowableStringBuffer<'a, A> {
         let mut bytes = [0u8; char::MAX_LEN_UTF8];
         let string = value.encode_utf8(&mut bytes);
 
-        match self
-            .inner
-            .try_extend(string.as_bytes().into_iter().copied())
-        {
+        match self.inner.try_extend(string.bytes()) {
             Ok(()) => Ok(()),
             Err(_) => Err(value),
         }
@@ -515,10 +511,7 @@ impl<'a, A: Allocator> GrowableStringBuffer<'a, A> {
         string: &'s S,
     ) -> Result<(), &'s str> {
         let string = string.as_ref();
-        match self
-            .inner
-            .try_extend(string.as_bytes().into_iter().copied())
-        {
+        match self.inner.try_extend(string.bytes()) {
             Ok(()) => Ok(()),
             Err(_) => Err(string),
         }
@@ -602,19 +595,16 @@ impl<'a, A: Allocator> GrowableStringBuffer<'a, A> {
         self.inner.as_mut_ptr()
     }
 
-    #[must_use]
     #[inline]
     pub fn bytes(&self) -> Bytes<'_> {
         self.as_str().bytes()
     }
 
-    #[must_use]
     #[inline]
     pub fn chars(&self) -> Chars<'_> {
         self.as_str().chars()
     }
 
-    #[must_use]
     #[inline]
     pub fn char_indices(&self) -> CharIndices<'_> {
         self.as_str().char_indices()

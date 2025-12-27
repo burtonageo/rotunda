@@ -150,10 +150,10 @@ impl<'a, T> Buffer<'a, T> {
     pub fn from_fn_in<A: Allocator, F: FnMut(usize) -> T>(
         arena: &'a Arena<A>,
         len: usize,
-        mut f: F,
+        f: F,
     ) -> Self {
         let mut buf = Buffer::with_capacity_in(arena, len);
-        buf.extend((0..len).map(|i| f(i)));
+        buf.extend((0..len).map(f));
         buf
     }
 
@@ -2101,7 +2101,6 @@ pub struct TryExtendError<I: IntoIterator> {
 }
 
 impl<I: IntoIterator> TryExtendError<I> {
-    #[must_use]
     #[inline]
     pub fn into_inner(self) -> (I::Item, Fuse<I::IntoIter>) {
         let TryExtendError { curr, rest } = self;

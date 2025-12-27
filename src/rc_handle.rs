@@ -966,7 +966,6 @@ impl<'a> RcHandle<'a, str> {
     /// assert_eq!(&valid, "Hello!");
     /// ```
     #[track_caller]
-    #[must_use]
     #[inline]
     pub fn new_from_utf8_in<A: Allocator, B: ?Sized + AsRef<[u8]>>(
         arena: &'a Arena<A>,
@@ -994,7 +993,7 @@ impl<'a> RcHandle<'a, str> {
     ) -> Self {
         let string_len = bytes.len();
         let mut rc_handle =
-            RcHandle::<'a, [MaybeUninit<u8>]>::new_slice_uninit_in(&arena, string_len);
+            RcHandle::<'a, [MaybeUninit<u8>]>::new_slice_uninit_in(arena, string_len);
 
         unsafe {
             let slice = RcHandle::get_mut_unchecked(&mut rc_handle);
@@ -1349,7 +1348,7 @@ impl<'a, T> WeakHandle<'a, T> {
             return Err(f);
         }
 
-        unsafe { Ok(Self::resurrect_unchecked_with(&self, f)) }
+        unsafe { Ok(Self::resurrect_unchecked_with(self, f)) }
     }
 
     /// Attempt to upgrade the given `WeakHandle` to an `RcHandle`, otherwise reinitialize with `f`.
@@ -1393,8 +1392,8 @@ impl<'a, T> WeakHandle<'a, T> {
         if self.is_dangling() {
             None
         } else {
-            let rc = Self::upgrade(&self)
-                .unwrap_or_else(|| unsafe { Self::resurrect_unchecked_with(&self, f) });
+            let rc = Self::upgrade(self)
+                .unwrap_or_else(|| unsafe { Self::resurrect_unchecked_with(self, f) });
             Some(rc)
         }
     }
@@ -1436,8 +1435,8 @@ impl<'a, T> WeakHandle<'a, T> {
             *self = RcHandle::downgrade(&rc);
             rc
         } else {
-            Self::upgrade(&self)
-                .unwrap_or_else(|| unsafe { Self::resurrect_unchecked_with(&self, f) })
+            Self::upgrade(self)
+                .unwrap_or_else(|| unsafe { Self::resurrect_unchecked_with(self, f) })
         }
     }
 
@@ -1447,7 +1446,7 @@ impl<'a, T> WeakHandle<'a, T> {
     unsafe fn resurrect_unchecked_with<F: FnOnce() -> T>(&self, f: F) -> RcHandle<'a, T> {
         unsafe {
             assert_unchecked(!self.is_dangling());
-            assert_unchecked(WeakHandle::ref_count(&self) == 0);
+            assert_unchecked(WeakHandle::ref_count(self) == 0);
 
             {
                 let inner = self.ptr.as_ptr();

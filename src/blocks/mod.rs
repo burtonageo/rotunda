@@ -373,8 +373,7 @@ pub(super) unsafe fn dealloc_blocks_n(
     allocator: &dyn Allocator,
 ) {
     let mut iter = BlockIter(block_start.get()).enumerate();
-
-    while let Some((i, block)) = iter.next() {
+    for (i, block) in iter.by_ref() {
         if i >= n {
             block_start.set(Some(block));
             return;

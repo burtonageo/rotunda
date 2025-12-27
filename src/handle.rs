@@ -26,7 +26,7 @@ use core::{
     ops::{Deref, DerefMut, Index, IndexMut},
     pin::Pin,
     ptr::{self, NonNull},
-    slice::{self, SliceIndex},
+    slice::SliceIndex,
     str,
 };
 #[cfg(feature = "serde")]
@@ -158,7 +158,7 @@ impl<'a, T> Handle<'a, T> {
     pub const fn into_slice(this: Self) -> Handle<'a, [T]> {
         let ptr = Handle::into_raw(this);
         unsafe {
-            let slice = slice::from_raw_parts_mut(ptr, 1) as *mut [T];
+            let slice = ptr::slice_from_raw_parts_mut(ptr, 1);
             Handle::from_raw(slice)
         }
     }
@@ -812,12 +812,8 @@ impl<'a, T> Handle<'a, [T]> {
     /// assert_eq!(lhs.as_ref(), &[1, 2, 3]);
     /// assert_eq!(rhs.as_ref(), &[4, 5, 6]);
     /// ```
-    #[allow(clippy::type_complexity)]
     #[inline]
-    pub const fn split_at_checked(
-        this: Self,
-        mid: usize,
-    ) -> Result<(Handle<'a, [T]>, Handle<'a, [T]>), Handle<'a, [T]>> {
+    pub const fn split_at_checked(this: Self, mid: usize) -> Result<(Self, Self), Self> {
         if Self::check_split(&this, mid) {
             unsafe { Ok(Self::split_at_unchecked(this, mid)) }
         } else {
