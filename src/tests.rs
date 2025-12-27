@@ -601,7 +601,7 @@ fn test_buffer() {
 
     arena.with_scope(|arena| {
         let buffer = Buffer::new_in(arena, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-        let (lhs, rhs) = buffer.split_buffer_at(5);
+        let (lhs, rhs) = Buffer::split_at(buffer, 5);
         assert_eq!(&lhs, &[1, 2, 3, 4, 5]);
         assert_eq!(&rhs, &[6, 7, 8, 9, 10]);
     });
