@@ -15,9 +15,9 @@ pub(super) mod lock;
 pub(super) struct Blocks {
     block_size: usize,
     curr_block_pos: Cell<usize>,
-    curr_block: BlockPtr,
-    free_blocks: BlockPtr,
-    used_blocks: BlockPtr,
+    curr_block: BlockCellPtr,
+    free_blocks: BlockCellPtr,
+    used_blocks: BlockCellPtr,
     _priv: (),
 }
 
@@ -93,7 +93,7 @@ impl Blocks {
 
     #[track_caller]
     #[inline]
-    pub(super) unsafe fn dealloc_blocks(&self, block_start: &BlockPtr, allocator: &dyn Allocator) {
+    pub(super) unsafe fn dealloc_blocks(&self, block_start: &BlockCellPtr, allocator: &dyn Allocator) {
         self.ensure_unlocked();
 
         let block_layout = self.block_layout();
@@ -119,7 +119,7 @@ impl Blocks {
         fmtr: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         #[repr(transparent)]
-        struct DebugPtrChain(BlockPtr);
+        struct DebugPtrChain(BlockCellPtr);
 
         impl fmt::Debug for DebugPtrChain {
             fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -261,19 +261,19 @@ impl Blocks {
 
     #[must_use]
     #[inline]
-    pub(crate) const fn curr_block(&self) -> &BlockPtr {
+    pub(crate) const fn curr_block(&self) -> &BlockCellPtr {
         &self.curr_block
     }
 
     #[must_use]
     #[inline]
-    pub(crate) const fn free_blocks(&self) -> &BlockPtr {
+    pub(crate) const fn free_blocks(&self) -> &BlockCellPtr {
         &self.free_blocks
     }
 
     #[must_use]
     #[inline]
-    pub(crate) const fn used_blocks(&self) -> &BlockPtr {
+    pub(crate) const fn used_blocks(&self) -> &BlockCellPtr {
         &self.used_blocks
     }
 
@@ -292,7 +292,7 @@ impl Blocks {
 
 #[repr(C)]
 pub(super) struct Block {
-    pub(super) next: BlockPtr,
+    pub(super) next: BlockCellPtr,
     data: UnsafeCell<()>,
     _boo: PhantomData<(*mut u8, PhantomPinned)>,
 }
@@ -348,18 +348,16 @@ impl Block {
     #[inline]
     pub(super) fn data_start(this: NonNull<Self>) -> NonNull<c_void> {
         this.cast::<c_void>()
-            .map_addr(|addr| addr.saturating_add(mem::size_of::<BlockPtr>()))
+            .map_addr(|addr| addr.saturating_add(mem::size_of::<BlockCellPtr>()))
     }
 }
-
-type BlockPtr = Cell<Option<NonNull<Block>>>;
 
 #[track_caller]
 #[inline(never)]
 #[cold]
 pub(super) unsafe fn dealloc_blocks(
     block_layout: Layout,
-    block_start: &BlockPtr,
+    block_start: &BlockCellPtr,
     allocator: &dyn Allocator,
 ) {
     unsafe {
@@ -371,7 +369,7 @@ pub(super) unsafe fn dealloc_blocks(
 pub(super) unsafe fn dealloc_blocks_n(
     n: usize,
     block_layout: Layout,
-    block_start: &BlockPtr,
+    block_start: &BlockCellPtr,
     allocator: &dyn Allocator,
 ) {
     let mut iter = BlockIter(block_start.get()).enumerate();
@@ -446,26 +444,6 @@ impl<'a> Drop for ScopedRestore<'a> {
     }
 }
 
-const fn push_single_block(list_head: &BlockPtr, block: NonNull<Block>) {
-    let old_head = list_head.get();
-    unsafe {
-        block.as_ref().next.replace(old_head);
-    }
-    list_head.replace(Some(block));
-}
-
-const fn push_block(list_head: &BlockPtr, block: NonNull<Block>) {
-    let old_head = list_head.get();
-    unsafe {
-        let mut curr_block = block;
-        while let Some(next) = curr_block.as_ref().next.get() {
-            curr_block = next;
-        }
-        curr_block.as_ref().next.replace(old_head);
-    }
-    list_head.replace(Some(block));
-}
-
 #[repr(transparent)]
 pub(crate) struct BlockIter(Option<NonNull<Block>>);
 
@@ -486,4 +464,26 @@ impl Iterator for BlockIter {
         self.0 = next.get();
         Some(ptr)
     }
+}
+
+type BlockCellPtr = Cell<Option<NonNull<Block>>>;
+
+const fn push_single_block(list_head: &BlockCellPtr, block: NonNull<Block>) {
+    let old_head = list_head.get();
+    unsafe {
+        block.as_ref().next.replace(old_head);
+    }
+    list_head.replace(Some(block));
+}
+
+const fn push_block(list_head: &BlockCellPtr, block: NonNull<Block>) {
+    let old_head = list_head.get();
+    unsafe {
+        let mut curr_block = block;
+        while let Some(next) = curr_block.as_ref().next.get() {
+            curr_block = next;
+        }
+        curr_block.as_ref().next.replace(old_head);
+    }
+    list_head.replace(Some(block));
 }

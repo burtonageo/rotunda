@@ -946,12 +946,12 @@ impl<'a> RcHandle<'a, str> {
         arena: &'a Arena<A>,
         string: &'_ S,
     ) -> Self {
-        unsafe {
-            Self::new_from_utf8_unchecked_in_inner(arena, string.as_ref().as_bytes())
-        }
+        unsafe { Self::new_from_utf8_unchecked_in_inner(arena, string.as_ref().as_bytes()) }
     }
 
     /// Create a new `RcHandle` containing the given bytes as a string.
+    ///
+    /// # Errors
     ///
     /// If `bytes` is not a valid utf8 encoded string, a `Utf8Error` will be returned.
     ///
@@ -982,15 +982,16 @@ impl<'a> RcHandle<'a, str> {
         arena: &'a Arena<A>,
         bytes: &B,
     ) -> Self {
-        unsafe {
-            Self::new_from_utf8_unchecked_in_inner(arena, bytes.as_ref())
-        }
+        unsafe { Self::new_from_utf8_unchecked_in_inner(arena, bytes.as_ref()) }
     }
 
     #[track_caller]
     #[must_use]
     #[inline]
-    unsafe fn new_from_utf8_unchecked_in_inner<A: Allocator>(arena: &'a Arena<A>, bytes: &[u8]) -> Self {
+    unsafe fn new_from_utf8_unchecked_in_inner<A: Allocator>(
+        arena: &'a Arena<A>,
+        bytes: &[u8],
+    ) -> Self {
         let string_len = bytes.len();
         let mut rc_handle =
             RcHandle::<'a, [MaybeUninit<u8>]>::new_slice_uninit_in(&arena, string_len);
@@ -1031,9 +1032,7 @@ impl<'a> RcHandle<'a, [u8]> {
 
     #[inline]
     pub const unsafe fn into_utf8_unchecked(this: Self) -> RcHandle<'a, str> {
-        unsafe {
-            mem::transmute(this)
-        }
+        unsafe { mem::transmute(this) }
     }
 }
 
@@ -1220,10 +1219,13 @@ impl<'a, T: ?Sized> Drop for RcHandle<'a, T> {
     #[track_caller]
     #[inline]
     fn drop(&mut self) {
-        let inner = Self::inner(self);
-        inner.decrement_refcount();
+        let should_drop = {
+            let inner = Self::inner(self);
+            inner.decrement_refcount();
+            !inner.is_live()
+        };
 
-        if inner.count.get() == 0 {
+        if should_drop {
             unsafe {
                 ptr::drop_in_place(&raw mut self.ptr.as_mut().data);
             }
