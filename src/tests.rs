@@ -452,7 +452,7 @@ fn test_rc() {
         drop(handle);
         assert_eq!(WeakHandle::try_resurrect(&weak, 155), Err(155));
 
-        let rc_2 = RcHandle::new_in(arena,9876);
+        let rc_2 = RcHandle::new_in(arena, 9876);
         let weak = RcHandle::downgrade(&rc_2);
 
         let inner = RcHandle::into_inner(rc_2).unwrap();
@@ -597,7 +597,14 @@ fn test_buffer() {
         drop(iter);
 
         assert_eq!(DROPS.load(AtomicOrdering::SeqCst), 1);
-    })
+    });
+
+    arena.with_scope(|arena| {
+        let buffer = Buffer::new_in(arena, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        let (lhs, rhs) = buffer.split_buffer_at(5);
+        assert_eq!(&lhs, &[1, 2, 3, 4, 5]);
+        assert_eq!(&rhs, &[6, 7, 8, 9, 10]);
+    });
 }
 
 #[test]
@@ -644,6 +651,14 @@ fn test_string_buffer() {
         string_buf.push_str(" amet");
 
         assert_eq!(&*string_buf, "Lorem ipsum dolor sit amet");
+
+        let mut words = string_buf.split_ascii_whitespace();
+        assert_eq!(words.next(), Some("Lorem"));
+        assert_eq!(words.next(), Some("ipsum"));
+        assert_eq!(words.next(), Some("dolor"));
+        assert_eq!(words.next(), Some("sit"));
+        assert_eq!(words.next(), Some("amet"));
+        assert_eq!(words.next(), None);
 
         string_buf.clear();
 

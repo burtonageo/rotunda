@@ -17,7 +17,7 @@ use core::{
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
     ptr,
-    str::{self, Utf8Error},
+    str::{self, Bytes, CharIndices, Chars, Utf8Error},
 };
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
@@ -229,6 +229,12 @@ impl<'a> StringBuffer<'a> {
     #[inline]
     pub const fn as_bytes(&self) -> &[u8] {
         self.as_str().as_bytes()
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn bytes(&self) -> Bytes<'_> {
+        self.as_str().bytes()
     }
 
     #[must_use]
@@ -598,14 +604,26 @@ impl<'a, A: Allocator> GrowableStringBuffer<'a, A> {
 
     #[must_use]
     #[inline]
-    pub const fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<u8>] {
-        self.inner.spare_capacity_mut()
+    pub fn bytes(&self) -> Bytes<'_> {
+        self.as_str().bytes()
     }
 
     #[must_use]
     #[inline]
-    pub fn bytes(&'_ self) -> <&'_ [u8] as IntoIterator>::IntoIter {
-        self.as_bytes().iter()
+    pub fn chars(&self) -> Chars<'_> {
+        self.as_str().chars()
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn char_indices(&self) -> CharIndices<'_> {
+        self.as_str().char_indices()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<u8>] {
+        self.inner.spare_capacity_mut()
     }
 }
 

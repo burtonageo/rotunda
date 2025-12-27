@@ -719,6 +719,33 @@ impl<'a, T> Buffer<'a, T> {
         }
     }
 
+    #[inline]
+    pub fn split_buffer_at(self, mid: usize) -> (Buffer<'a, T>, Buffer<'a, T>) {
+        let handle = self.into_slice_handle();
+        let (lhs, rhs) = Handle::split_at(handle, mid);
+        (Buffer::from(lhs), Buffer::from(rhs))
+    }
+
+    #[inline]
+    pub fn split_buffer_at_checked(
+        self,
+        mid: usize,
+    ) -> Result<(Buffer<'a, T>, Buffer<'a, T>), Self> {
+        let handle = self.into_slice_handle();
+        Handle::split_at_checked(handle, mid)
+            .map_err(Buffer::from_slice_handle)
+            .map(|(lhs, rhs)| (Buffer::from(lhs), Buffer::from(rhs)))
+    }
+
+    #[inline]
+    pub unsafe fn split_buffer_at_unchecked(self, mid: usize) -> (Buffer<'a, T>, Buffer<'a, T>) {
+        let handle = self.into_slice_handle();
+        unsafe {
+            let (lhs, rhs) = Handle::split_at_unchecked(handle, mid);
+            (Buffer::from(lhs), Buffer::from(rhs))
+        }
+    }
+
     /// Access the spare capacity of the `Buffer` as a mutable slice.
     ///
     /// The returned slice will have a length of `self.capacity() - self.len()`.
