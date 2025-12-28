@@ -6,9 +6,13 @@ use crate::{
     rc_handle::{RcHandle, WeakHandle},
     string_buffer::StringBuffer,
 };
+#[cfg(feature = "nightly")]
+use std::alloc::System;
+#[cfg(feature = "allocator-api2")]
+use allocator_api2::alloc::System;
+use alloc::alloc::{Allocator, Layout};
 use core::{mem::ManuallyDrop, sync::atomic::AtomicUsize};
 use std::{
-    alloc::{Allocator, Layout, System},
     iter::Extend,
     mem,
     ptr::{self, NonNull},
@@ -463,7 +467,7 @@ fn test_rc() {
     });
 }
 
-#[cfg(feature = "nightly_coerce_pointee")]
+#[cfg(feature = "nightly")]
 #[test]
 fn test_dyn() {
     use std::{fmt::Display, string::ToString};
@@ -624,7 +628,7 @@ fn test_custom_alloc() {
 
     unsafe impl Allocator for CustomAllocator {
         #[inline]
-        fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, std::alloc::AllocError> {
+        fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, alloc::alloc::AllocError> {
             self.0.allocate(layout)
         }
 

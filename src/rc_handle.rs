@@ -2,12 +2,10 @@
 
 //! Single-threaded reference-counting pointer types backed by an `Arena`.
 
-use crate::{Arena, buffer::Buffer, handle::Handle};
+use crate::{Arena, buffer::Buffer, handle::Handle, layout_repeat};
 use alloc::alloc::{Allocator, Layout};
-#[cfg(feature = "nightly_coerce_pointee")]
-use core::marker::CoercePointee;
-#[cfg(feature = "nightly_ptr_metadata")]
-use core::ptr::{Pointee, Thin};
+#[cfg(feature = "nightly")]
+use core::{ptr::{Pointee, Thin}, marker::CoercePointee};
 use core::{
     any::Any,
     borrow::Borrow,
@@ -36,7 +34,7 @@ use serde_core::ser::{Serialize, Serializer};
 /// [`Arena`]: ../struct.Arena.html
 /// [`Rc<T>`]: https://doc.rust-lang.org/stable/std/rc/struct.Rc.html
 /// [module documentation]: ./index.html
-#[cfg_attr(feature = "nightly_coerce_pointee", derive(CoercePointee))]
+#[cfg_attr(feature = "nightly", derive(CoercePointee))]
 #[repr(transparent)]
 pub struct RcHandle<'a, T: ?Sized> {
     ptr: NonNull<RcHandleInner<T>>,
@@ -1001,7 +999,7 @@ impl<'a, T> RcHandle<'a, [MaybeUninit<T>]> {
     #[must_use]
     #[inline]
     pub fn new_slice_uninit_in<A: Allocator>(arena: &'a Arena<A>, slice_len: usize) -> Self {
-        let (array_layout, ..) = Layout::new::<T>().repeat(slice_len).expect("size overflow");
+        let (array_layout, ..) = layout_repeat(&Layout::new::<T>(), slice_len).expect("size overflow");
         let inner_layout = rc_inner_layout_for_value_layout(array_layout);
 
         unsafe {
@@ -1219,7 +1217,7 @@ impl<'a> RcHandle<'a, [u8]> {
     }
 }
 
-#[cfg(feature = "nightly_ptr_metadata")]
+#[cfg(feature = "nightly")]
 impl<'a, T: ?Sized + Pointee> RcHandle<'a, T> {
     #[must_use]
     #[inline]
@@ -1446,7 +1444,7 @@ impl<'a, T: ?Sized> Drop for RcHandle<'a, T> {
 ///
 /// [`Arena`]: ./struct.Arena.html
 /// [`Weak<T>`]: https://doc.rust-lang.org/stable/std/rc/struct.Weak.html
-#[cfg_attr(feature = "nightly_coerce_pointee", derive(CoercePointee))]
+#[cfg_attr(feature = "nightly", derive(CoercePointee))]
 #[repr(transparent)]
 pub struct WeakHandle<'a, T: ?Sized> {
     ptr: NonNull<RcHandleInner<T>>,
@@ -1903,7 +1901,7 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
     }
 }
 
-#[cfg(feature = "nightly_ptr_metadata")]
+#[cfg(feature = "nightly")]
 impl<'a, T: ?Sized + Pointee> WeakHandle<'a, T> {
     #[must_use]
     #[inline]

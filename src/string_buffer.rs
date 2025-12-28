@@ -186,7 +186,7 @@ impl<'a> StringBuffer<'a> {
 
     #[inline]
     pub fn push_char(&mut self, ch: char) {
-        let mut ch_bytes = [0u8; char::MAX_LEN_UTF8];
+        let mut ch_bytes = [0u8; 4];
         self.push_str(ch.encode_utf8(&mut ch_bytes));
     }
 
@@ -496,7 +496,7 @@ impl<'a, A: Allocator> GrowableStringBuffer<'a, A> {
 
     #[inline]
     pub fn try_push_char(&mut self, value: char) -> Result<(), char> {
-        let mut bytes = [0u8; char::MAX_LEN_UTF8];
+        let mut bytes = [0u8; 4];
         let string = value.encode_utf8(&mut bytes);
 
         match self.inner.try_extend(string.bytes()) {

@@ -3,16 +3,11 @@
 //! A singly-owned mutable pointer backed by an `Arena`.
 
 use crate::{
-    Arena,
-    buffer::Buffer,
-    rc_handle::RcHandle,
-    string_buffer::{FromUtf8Error, StringBuffer},
+    Arena, buffer::Buffer, layout_repeat, rc_handle::RcHandle, string_buffer::{FromUtf8Error, StringBuffer}
 };
 use alloc::alloc::{Allocator, Layout};
-#[cfg(feature = "nightly_coerce_pointee")]
-use core::marker::CoercePointee;
-#[cfg(feature = "nightly_ptr_metadata")]
-use core::ptr::{Pointee, Thin};
+#[cfg(feature = "nightly")]
+use core::{marker::CoercePointee, ptr::{Pointee, Thin}};
 use core::{
     any::Any,
     borrow::{Borrow, BorrowMut},
@@ -43,7 +38,7 @@ use std::io::{self, BufRead, IoSlice, IoSliceMut, Read, Write};
 /// [`Box<T>`]: https://doc.rust-lang.org/stable/std/boxed/struct.Box.html
 /// [module documentation]: ./index.html
 #[repr(transparent)]
-#[cfg_attr(feature = "nightly_coerce_pointee", derive(CoercePointee))]
+#[cfg_attr(feature = "nightly", derive(CoercePointee))]
 pub struct Handle<'a, T: ?Sized> {
     ptr: NonNull<T>,
     _boo: PhantomData<(&'a Arena, T)>,
@@ -293,7 +288,9 @@ impl<'a, T> Handle<'a, [MaybeUninit<T>]> {
     #[must_use]
     pub fn new_slice_uninit_in<A: Allocator>(arena: &'a Arena<A>, slice_len: usize) -> Self {
         let type_layout = Layout::new::<T>();
-        let (array_layout, ..) = Layout::repeat(&type_layout, slice_len).expect("size overflow");
+        let (array_layout, ..) = {
+            layout_repeat(&type_layout, slice_len).expect("size overflow")
+        };
 
         let ptr = {
             let ptr = arena.alloc_raw(array_layout).cast::<MaybeUninit<T>>();
@@ -628,7 +625,7 @@ impl<'a> Handle<'a, dyn Any + Send + Sync> {
     }
 }
 
-#[cfg(feature = "nightly_ptr_metadata")]
+#[cfg(feature = "nightly")]
 impl<'a, T: ?Sized + Pointee> Handle<'a, T> {
     #[must_use]
     #[inline]

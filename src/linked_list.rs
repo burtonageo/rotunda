@@ -1422,16 +1422,15 @@ impl<T: fmt::Debug> fmt::Debug for NodeIter<T> {
 }
 
 #[allow(dead_code, unused)]
-struct CursorMut<'a, T> {
-    head: Option<NonNull<Node<T>>>,
-    tail: Option<NonNull<Node<T>>>,
-    curr: Option<NonNull<Node<T>>>,
-    len: usize,
-    _boo: PhantomData<&'a mut Node<T>>,
+struct CursorMut<'l, 'a, T> {
+    before_idx: usize,
+    next: NonNull<Node<T>>,
+    prev: NonNull<Node<T>>,
+    list: &'l mut LinkedList<'a, T>,
 }
 
 #[allow(dead_code, unused)]
-impl<'a, T> CursorMut<'a, T> {
+impl<'l, 'a, T> CursorMut<'l, 'a, T> {
     fn move_next(&mut self) {}
 
     fn move_prev(&mut self) {}

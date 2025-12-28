@@ -1,8 +1,6 @@
 #![no_std]
-#![cfg_attr(feature = "nightly_ptr_metadata", feature(ptr_metadata))]
-#![cfg_attr(feature = "nightly_coerce_pointee", feature(derive_coerce_pointee))]
-#![cfg_attr(feature = "nightly_can_vector", feature(can_vector))]
-#![feature(alloc_layout_extra, allocator_api)]
+#![cfg_attr(feature = "nightly", feature(ptr_metadata, derive_coerce_pointee, alloc_layout_extra, allocator_api))]
+#![cfg_attr(all(feature = "nightly", feature = "std"), feature(can_vector))]
 #![warn(
     missing_docs,
     clippy::empty_line_after_doc_comments,
@@ -153,7 +151,15 @@
 //! [`handle::Handle`]: ./handle/struct.Handle.html
 //! [`handle`]: ./handle/index.html
 
+#[cfg(not(any(feature = "allocator-api2", feature = "nightly")))]
+compile_error!("An allocator must be provided, either through `nightly` or `allocator-api2`");
+
+#[cfg(all(not(feature = "allocator-api2"), feature = "nightly"))]
 extern crate alloc;
+
+#[cfg(feature = "allocator-api2")]
+extern crate allocator_api2 as alloc;
+
 #[cfg(any(test, feature = "std"))]
 extern crate std;
 
@@ -259,7 +265,11 @@ impl<A: Allocator> Arena<A> {
     /// #![feature(allocator_api)]
     ///
     /// use rotunda::Arena;
-    /// use std::alloc::Global;
+    /// # #[cfg(feature = "allocator-api2")]
+    /// # extern crate allocator_api2 as alloc;
+    /// # #[cfg(not(feature = "allocator-api2"))]
+    /// # extern crate alloc;
+    /// use alloc::alloc::Global;
     ///
     /// let arena = Arena::new_in(Global);
     /// ```
@@ -286,7 +296,11 @@ impl<A: Allocator> Arena<A> {
     /// #![feature(allocator_api)]
     ///
     /// use rotunda::Arena;
-    /// use std::alloc::Global;
+    /// # #[cfg(feature = "allocator-api2")]
+    /// # extern crate allocator_api2 as alloc;
+    /// # #[cfg(not(feature = "allocator-api2"))]
+    /// # extern crate alloc;
+    /// use alloc::alloc::Global;
     ///
     /// let block_size = 4 * 1024 * 1024;
     /// let arena = Arena::with_block_size_in(block_size, Global);
@@ -367,6 +381,9 @@ impl<A: Allocator> Arena<A> {
     /// ```
     /// # #![feature(allocator_api)]
     /// use rotunda::Arena;
+    /// # #[cfg(feature = "allocator-api2")]
+    /// # extern crate allocator_api2 as alloc;
+    /// # #[cfg(feature = "nightly")]
     /// # extern crate alloc;
     ///
     /// let arena = Arena::new();
@@ -497,6 +514,9 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(feature = "allocator-api2")]
+    /// # extern crate allocator_api2 as alloc;
+    /// # #[cfg(feature = "nightly")]
     /// # extern crate alloc;
     /// use rotunda::Arena;
     /// use alloc::alloc::Layout;
@@ -529,6 +549,9 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(feature = "allocator-api2")]
+    /// # extern crate allocator_api2 as alloc;
+    /// # #[cfg(feature = "nightly")]
     /// # extern crate alloc;
     /// use rotunda::Arena;
     /// use alloc::alloc::Layout;
@@ -866,6 +889,9 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(feature = "allocator-api2")]
+    /// # extern crate allocator_api2 as alloc;
+    /// # #[cfg(feature = "nightly")]
     /// # extern crate alloc;
     /// # use alloc::alloc::Layout;
     /// # use rotunda::Error;
@@ -1330,3 +1356,13 @@ impl ErrorTrait for Error {
 }
 
 pub(crate) type InvariantLifetime<'a, T> = PhantomData<fn(&'a T) -> &'a T>;
+
+#[inline]
+fn layout_repeat(layout: &Layout, n: usize) -> Result<(Layout, usize), LayoutError> {
+    let padded = layout.pad_to_align();
+    match layout.size().checked_mul(n) {
+        Some(array_size) => Layout::from_size_align(array_size, layout.align()).map(|layout| (layout, padded.size())),
+        // Generate a guaranteed `LayoutError` by creating a `Layout` with alignment `0`.
+        None => Layout::from_size_align(1, 0).map(|layout| (layout, 0)),
+    }
+}

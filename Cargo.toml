@@ -10,14 +10,13 @@ readme = "./Readme.md"
 version = "1"
 optional = true
 
+[dependencies.allocator-api2]
+version = "0.4.0"
+optional = true
+
 [features]
-default = []
-nightly = [
-    "nightly_ptr_metadata",
-    "nightly_coerce_pointee",
-]
-nightly_ptr_metadata = []
-nightly_coerce_pointee = []
-nightly_can_vector = ["std"]
+default = ["allocator-api2"]
+nightly = []
+allocator-api2 = ["dep:allocator-api2"]
 std = []
 serde = ["dep:serde_core"]
