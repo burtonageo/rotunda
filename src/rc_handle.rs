@@ -225,10 +225,55 @@ impl<'a, T: Copy, const N: usize> RcHandle<'a, [T; N]> {
 }
 
 impl<'a, T: Copy> RcHandle<'a, [T]> {
+    /// Create a new `RcHandle` containing a copy of the given slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc_handle = RcHandle::new_slice_in(&arena, &[1, 2, 3, 4, 5]);
+    /// assert_eq!(&rc_handle, &[1, 2, 3, 4, 5]);
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_splat<A: Allocator>(
+    pub fn new_slice_in<A: Allocator, S: ?Sized + AsRef<[T]>>(
+        arena: &'a Arena<A>,
+        slice: &'_ S,
+    ) -> Self {
+        let slice = slice.as_ref();
+        let mut rc_handle = RcHandle::new_slice_uninit_in(arena, slice.len());
+
+        unsafe {
+            let slice = {
+                slice::from_raw_parts(slice.as_ptr().cast::<MaybeUninit<T>>(), slice.len())
+            };
+
+            RcHandle::get_mut_unchecked(&mut rc_handle).copy_from_slice(slice);
+            RcHandle::assume_init_slice(rc_handle)
+        }
+    }
+
+    /// Create a new `RcHandle` to a shared value of a slice with size `slice_len`, and 
+    /// each element initialized to `value`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc_handle = RcHandle::new_splat_in(&arena, 5, 128u32);
+    /// assert_eq!(&rc_handle, &[128u32; 5]);
+    /// ```
+    #[track_caller]
+    #[must_use]
+    #[inline]
+    pub fn new_splat_in<A: Allocator>(
         arena: &'a Arena<A>,
         slice_len: usize,
         value: T,
@@ -335,9 +380,27 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     ///
     /// # Panics
     ///
-    /// This method will panic if incrementing the refcount would overflow [`usize::MAX`]
+    /// This method will panic if incrementing the refcount would overflow [`usize::MAX - 1`].
     ///
-    /// [`usize::MAX`]: https://doc.rust-lang.org/stable/std/primitive.usize.html#associatedconstant.MAX
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    /// let arena = Arena::new();
+    ///
+    /// let handle = RcHandle::new_in(&arena, 12345);
+    ///
+    /// let raw = RcHandle::into_raw(handle);
+    ///
+    /// // Create an extra logical copy of the reference count.
+    /// unsafe { RcHandle::increment_count(raw) };
+    ///
+    /// // Free both implicit copies of the `RcHandle`.
+    /// let _ = unsafe { (RcHandle::from_raw(raw), RcHandle::from_raw(raw)) };
+    /// # unsafe { assert!(rotunda::rc_handle::WeakHandle::from_raw(raw).upgrade().is_none()); }
+    /// ```
+    ///
+    /// [`usize::MAX - 1`]: https://doc.rust-lang.org/stable/std/primitive.usize.html#associatedconstant.MAX
     #[inline]
     pub unsafe fn increment_count(raw: *const T) {
         unsafe {
@@ -359,6 +422,26 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     /// # Panics
     ///
     /// This method will panic if decrementing the refcount would cause an underflow.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let handle = RcHandle::new_in(&arena, 12345);
+    ///
+    /// let raw = RcHandle::into_raw(handle);
+    ///
+    /// unsafe {
+    ///     RcHandle::decrement_count(raw);
+    /// }
+    ///
+    /// // It is safe to construct a `WeakHandle` from a freed `RawHandle`
+    /// let weak = unsafe { WeakHandle::from_raw(raw) };
+    /// # assert!(weak.upgrade().is_none());
+    /// ```
     #[inline]
     pub unsafe fn decrement_count(raw: *const T) {
         unsafe {
@@ -827,6 +910,33 @@ impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
         }
     }
 
+    /// Returns a new `RcHandle` which assumes that the contents have been initialized.
+    ///
+    /// It is the programmer's responsibility to ensure that the `RcHandle` is only initialized
+    /// once. If the uninitialized `RcHandle` is cloned and initialized multiple times, or if
+    /// the initialized `RcHandle` is dropped before any uninitialized clones, then the destructor
+    /// may be skipped.
+    /// 
+    /// # Safety
+    ///
+    /// It is the programmer's responsibility to ensure that all invariants which relate to
+    /// `MaybeUninit::assume_init()` are upheld - namely that the contained value has
+    /// been fully initialized.
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut rc_uninit = RcHandle::new_uninit_in(&arena);
+    /// 
+    /// let rc = unsafe {
+    ///     RcHandle::get_mut_unchecked(&mut rc_uninit).write(6000usize);
+    ///     RcHandle::assume_init(rc_uninit)
+    /// };
+    ///
+    /// assert_eq!(*rc, 6000);
+    /// ```
     #[must_use]
     #[inline]
     pub const unsafe fn assume_init(this: Self) -> RcHandle<'a, T> {
@@ -837,7 +947,7 @@ impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
     ///
     /// It is the programmer's responsibility to ensure that the `RcHandle` is only initialized
     /// once. If the uninitialized `RcHandle` is cloned and initialized multiple times, or if
-    /// the initialized `RcHandle` is dropped before any uninitialized copies, then the destructor
+    /// the initialized `RcHandle` is dropped before any uninitialized clones, then the destructor
     /// may be skipped.
     ///
     /// # Examples
@@ -974,6 +1084,24 @@ impl<'a> RcHandle<'a, str> {
         str::from_utf8(bytes.as_ref()).map(|s| RcHandle::new_str_in(arena, s))
     }
 
+    /// Create a new `RcHandle` containing the given bytes as a string.
+    /// This factory method will not perform any validation.
+    ///
+    /// # Safety
+    ///
+    /// If `bytes` is not a valid utf8 encoded string, then the returned `RcHandle` will
+    /// not be able to uphold safety invariants around the wrapped `str`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let valid = unsafe { RcHandle::new_from_utf8_unchecked_in(&arena, b"This is a message") };
+    /// assert_eq!(&valid, "This is a message");
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
@@ -992,8 +1120,7 @@ impl<'a> RcHandle<'a, str> {
         bytes: &[u8],
     ) -> Self {
         let string_len = bytes.len();
-        let mut rc_handle =
-            RcHandle::<'a, [MaybeUninit<u8>]>::new_slice_uninit_in(arena, string_len);
+        let mut rc_handle = RcHandle::new_slice_uninit_in(arena, string_len);
 
         unsafe {
             let slice = RcHandle::get_mut_unchecked(&mut rc_handle);
@@ -1005,15 +1132,29 @@ impl<'a> RcHandle<'a, str> {
             slice.copy_from_slice(string_bytes);
         }
 
-        let ptr = rc_handle.ptr.as_ptr() as *mut RcHandleInner<str>;
-        let ptr = unsafe { NonNull::new_unchecked(ptr) };
+        let ptr =
+            unsafe { NonNull::new_unchecked(rc_handle.ptr.as_ptr() as *mut RcHandleInner<str>) };
         mem::forget(rc_handle);
+
         RcHandle {
             ptr,
             _boo: PhantomData,
         }
     }
 
+    /// Consumes this `RcHandle`, returning a new `RcHandle` over the bytes of the string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc = RcHandle::new_str_in(&arena, "Hello");
+    /// let bytes = RcHandle::into_bytes(rc);
+    /// assert_eq!(&bytes, &[b'H', b'e', b'l', b'l', b'o']);
+    /// ```
     #[inline]
     pub const fn into_bytes(this: Self) -> RcHandle<'a, [u8]> {
         unsafe { mem::transmute(this) }
@@ -1021,6 +1162,30 @@ impl<'a> RcHandle<'a, str> {
 }
 
 impl<'a> RcHandle<'a, [u8]> {
+    /// Converts the `RcHandle<'_, [u8]>` into a `RcHandle<'_, str>`, performing validation
+    /// on the contents. A `Clone::clone` of the original data is returned on success.
+    ///
+    /// # Errors
+    ///
+    /// If the `RcHandle` does not contain a byte array which is a valid utf8 string, then
+    /// an error will be returned. The original bytes are not consumed by this function.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if calling the `clone()` method would panic.
+    ///
+    /// # Examples
+    /// 
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let bytes = RcHandle::new_slice_in(&arena, "今日は".as_bytes());
+    ///
+    /// let string = RcHandle::to_utf8(&bytes).unwrap();
+    /// assert_eq!(&string, "今日は");
+    /// ```
     #[inline]
     pub const fn to_utf8(this: &Self) -> Result<RcHandle<'a, str>, Utf8Error> {
         match str::from_utf8(this.as_ref_const()) {
@@ -1029,6 +1194,26 @@ impl<'a> RcHandle<'a, [u8]> {
         }
     }
 
+    /// Converts the `RcHandle<'_, [u8]>` into a `RcHandle<'_, str>`, without validating
+    /// the contents of the slice.
+    ///
+    /// # Safety
+    ///
+    /// If `this` is not a valid utf8 encoded string, then the returned `RcHandle` will
+    /// not be able to uphold safety invariants around the wrapped `str`.
+    /// 
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let bytes = RcHandle::new_slice_in(&arena, &[72u8, 101, 108, 108, 111, 0]);
+    /// let hello = unsafe { RcHandle::into_utf8_unchecked(bytes) };
+    ///
+    /// assert_eq!(&hello, "Hello\0");
+    /// ```
     #[inline]
     pub const unsafe fn into_utf8_unchecked(this: Self) -> RcHandle<'a, str> {
         unsafe { mem::transmute(this) }
@@ -1115,6 +1300,27 @@ impl<'a, T, I: SliceIndex<[T]>> Index<I> for RcHandle<'a, [T]> {
 }
 
 impl<'a, T: ?Sized> Clone for RcHandle<'a, T> {
+    /// Increment the reference count of a `RcHandle` pointer, and return a new `RcHandle` to the
+    /// shared data. The underlying shared value is not cloned, so this operation is computationally
+    /// cheap.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if incrementing the reference count would overflow [`usize::MAX - 1`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::with_block_size(u32::MAX as usize);
+    ///
+    /// let rc = RcHandle::new_splat_in(&arena, 1024 * 1024 * 8, 0u8);
+    ///
+    /// // Clone the `rc`. This increments the reference count, but does not copy any of the
+    /// // underlying data.
+    /// let rc_2 = RcHandle::clone(&rc);
+    /// ```
     #[track_caller]
     #[inline]
     fn clone(&self) -> Self {
