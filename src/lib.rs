@@ -337,8 +337,10 @@ impl<A: Allocator> Arena<A> {
     /// use rotunda::Arena;
     ///
     /// let arena = Arena::new();
+    /// # let mut arena = arena;
     ///
     /// arena.reserve_blocks(3);
+    /// # assert_eq!(arena.free_blocks().count(), 3);
     /// ```
     #[track_caller]
     #[inline]
@@ -368,12 +370,14 @@ impl<A: Allocator> Arena<A> {
     /// # extern crate alloc;
     ///
     /// let arena = Arena::new();
+    /// # let mut arena = arena;
     ///
     /// # fn inner(arena: &Arena) -> Result<(), alloc::alloc::AllocError> {
     /// arena.try_reserve_blocks(3)?;
     /// # Ok(())
     /// # }
     /// # inner(&arena);
+    /// # assert_eq!(arena.free_blocks().count(), 3);
     /// ```
     #[inline]
     pub fn try_reserve_blocks(&self, num_blocks: usize) -> Result<(), AllocError> {
@@ -407,7 +411,7 @@ impl<A: Allocator> Arena<A> {
     /// assert_eq!(block.len(), capacity);
     ///
     /// let data = Handle::new_in(&arena, 24i32);
-    /// assert!(ptr::eq(Handle::as_ptr(&data).cast::<u8>(), block.as_ptr() as *mut _ as *mut u8));
+    /// assert!(ptr::eq(Handle::as_ptr(&data).cast::<u8>(), block.as_ptr().cast()));
     ///
     /// let block = arena.curr_block_head().unwrap();
     /// assert_eq!(block.len(), capacity - mem::size_of::<i32>());
