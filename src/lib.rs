@@ -324,14 +324,15 @@ impl<A: Allocator> Arena<A> {
     /// # Example
     ///
     /// ```
-    /// #![feature(allocator_api)]
+    /// #![cfg_attr(feature = "nightly", feature(allocator_api))]
+    ///
+    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
+    /// use allocator_api2::alloc::Global;
+    ///
+    /// #[cfg(feature = "nightly")]
+    /// use alloc::alloc::Global;
     ///
     /// use rotunda::Arena;
-    /// # #[cfg(feature = "allocator-api2")]
-    /// # extern crate allocator_api2 as alloc;
-    /// # #[cfg(not(feature = "allocator-api2"))]
-    /// # extern crate alloc;
-    /// use alloc::alloc::Global;
     ///
     /// let arena = Arena::new_in(Global);
     /// ```
@@ -355,14 +356,15 @@ impl<A: Allocator> Arena<A> {
     /// # Example
     ///
     /// ```
-    /// #![feature(allocator_api)]
+    /// #![cfg_attr(feature = "nightly", feature(allocator_api))]
     ///
-    /// use rotunda::Arena;
-    /// # #[cfg(feature = "allocator-api2")]
-    /// # extern crate allocator_api2 as alloc;
-    /// # #[cfg(not(feature = "allocator-api2"))]
-    /// # extern crate alloc;
+    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
+    /// use allocator_api2::alloc::Global;
+    ///
+    /// #[cfg(feature = "nightly")]
     /// use alloc::alloc::Global;
+    /// 
+    /// use rotunda::Arena;
     ///
     /// let block_size = 4 * 1024 * 1024;
     /// let arena = Arena::with_block_size_in(block_size, Global);
@@ -385,9 +387,11 @@ impl<A: Allocator> Arena<A> {
     /// # Example
     ///
     /// ```
-    /// # use rotunda::{Arena, handle::Handle};
+    /// use rotunda::{Arena, handle::Handle};
+    /// 
     /// let block_size = 4 * 1024 * 1024;
     /// let arena = Arena::with_block_size(block_size);
+    ///
     /// let handle = Handle::new_in(&arena, 54i32);
     /// assert_eq!(arena.curr_block_capacity().unwrap(), block_size - std::mem::size_of::<i32>());
     /// ```
@@ -441,17 +445,20 @@ impl<A: Allocator> Arena<A> {
     /// # Example
     ///
     /// ```
-    /// # #![feature(allocator_api)]
-    /// use rotunda::Arena;
-    /// # #[cfg(feature = "allocator-api2")]
-    /// # extern crate allocator_api2 as alloc;
-    /// # #[cfg(feature = "nightly")]
-    /// # extern crate alloc;
+    /// #![cfg_attr(feature = "nightly", feature(allocator_api))]
     ///
+    /// # #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
+    /// # use allocator_api2::alloc::AllocError;
+    ///
+    /// # #[cfg(feature = "nightly")]
+    /// # use alloc::alloc::AllocError;
+    ///
+    /// use rotunda::Arena;
+    /// 
     /// let arena = Arena::new();
     /// # let mut arena = arena;
     ///
-    /// # fn inner(arena: &Arena) -> Result<(), alloc::alloc::AllocError> {
+    /// # fn inner(arena: &Arena) -> Result<(), AllocError> {
     /// arena.try_reserve_blocks(3)?;
     /// # Ok(())
     /// # }
@@ -475,7 +482,7 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # use core::{mem, ptr};
+    /// use core::{mem, ptr};
     /// use rotunda::{Arena, handle::Handle};
     ///
     /// let capacity = 3100;
