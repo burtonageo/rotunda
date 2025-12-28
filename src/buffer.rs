@@ -1349,7 +1349,7 @@ impl<'a> Write for Buffer<'a, u8> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let space = self.capacity() - self.len();
-        self.extend(buf.into_iter().take(space).copied());
+        self.extend(buf.iter().take(space).copied());
         Ok(space)
     }
 
@@ -1373,7 +1373,7 @@ impl<'a> Write for Buffer<'a, u8> {
         Ok(space)
     }
 
-    #[cfg(feature = "nightly_can_vector")]
+    #[cfg(feature = "nightly")]
     fn is_write_vectored(&self) -> bool {
         true
     }
@@ -2000,7 +2000,7 @@ impl<'a, A: Allocator> Write for GrowableBuffer<'a, u8, A> {
             Err(space) => space,
         };
 
-        self.extend(buf.into_iter().take(space).copied());
+        self.extend(buf.iter().take(space).copied());
         Ok(space)
     }
 
@@ -2028,7 +2028,7 @@ impl<'a, A: Allocator> Write for GrowableBuffer<'a, u8, A> {
         Ok(space)
     }
 
-    #[cfg(feature = "nightly_can_vector")]
+    #[cfg(feature = "nightly")]
     fn is_write_vectored(&self) -> bool {
         true
     }

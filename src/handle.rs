@@ -1402,7 +1402,7 @@ impl<'a, W: ?Sized + Write> Write for Handle<'a, W> {
         self.as_mut().write_vectored(bufs)
     }
 
-    #[cfg(feature = "nightly_can_vector")]
+    #[cfg(feature = "nightly")]
     fn is_write_vectored(&self) -> bool {
         self.as_ref().is_write_vectored()
     }
