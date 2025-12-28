@@ -17,7 +17,7 @@ use core::{
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
     ptr,
-    str::{self, Bytes, CharIndices, Chars, Utf8Error},
+    str::{self, Utf8Error},
 };
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
@@ -223,17 +223,6 @@ impl<'a> StringBuffer<'a> {
         let slice_ptr = Handle::into_raw(handle);
         let bytes = ptr::slice_from_raw_parts_mut(slice_ptr as *mut u8, len);
         unsafe { Handle::from_raw(bytes as *mut str) }
-    }
-
-    #[must_use]
-    #[inline]
-    pub const fn as_bytes(&self) -> &[u8] {
-        self.as_str().as_bytes()
-    }
-
-    #[inline]
-    pub fn bytes(&self) -> Bytes<'_> {
-        self.as_str().bytes()
     }
 }
 
@@ -551,47 +540,14 @@ impl<'a, A: Allocator> GrowableStringBuffer<'a, A> {
 
     #[must_use]
     #[inline]
-    pub const fn as_bytes(&self) -> &[u8] {
-        self.inner.as_slice()
-    }
-
-    #[must_use]
-    #[inline]
     pub const fn as_str(&self) -> &str {
-        unsafe { str::from_utf8_unchecked(self.as_bytes()) }
+        unsafe { str::from_utf8_unchecked(self.inner.as_slice()) }
     }
 
     #[must_use]
     #[inline]
     pub const fn as_mut_str(&mut self) -> &mut str {
         unsafe { str::from_utf8_unchecked_mut(self.inner.as_mut_slice()) }
-    }
-
-    #[must_use]
-    #[inline]
-    pub const fn as_ptr(&self) -> *const u8 {
-        self.inner.as_ptr()
-    }
-
-    #[must_use]
-    #[inline]
-    pub const fn as_mut_ptr(&mut self) -> *mut u8 {
-        self.inner.as_mut_ptr()
-    }
-
-    #[inline]
-    pub fn bytes(&self) -> Bytes<'_> {
-        self.as_str().bytes()
-    }
-
-    #[inline]
-    pub fn chars(&self) -> Chars<'_> {
-        self.as_str().chars()
-    }
-
-    #[inline]
-    pub fn char_indices(&self) -> CharIndices<'_> {
-        self.as_str().char_indices()
     }
 
     #[must_use]
