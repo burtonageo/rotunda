@@ -445,7 +445,7 @@ impl<A: Allocator> Arena<A> {
     /// # Example
     ///
     /// ```
-    /// #![cfg_attr(feature = "nightly", feature(allocator_api))]
+    /// # #![cfg_attr(feature = "nightly", feature(allocator_api))]
     ///
     /// # #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
     /// # use allocator_api2::alloc::AllocError;
@@ -533,8 +533,8 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # use rotunda::{Arena, handle::Handle};
-    /// # use core::mem;
+    /// use rotunda::{Arena, handle::Handle};
+    /// use core::mem;
     ///
     /// let arena = Arena::with_block_size(640);
     ///
@@ -583,12 +583,13 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "allocator-api2")]
-    /// # extern crate allocator_api2 as alloc;
-    /// # #[cfg(feature = "nightly")]
-    /// # extern crate alloc;
-    /// use rotunda::Arena;
+    /// #[cfg(feature = "allocator-api2")]
+    /// use allocator_api2::alloc::Layout;
+    ///
+    /// #[cfg(feature = "nightly")]
     /// use alloc::alloc::Layout;
+    ///
+    /// use rotunda::Arena;
     ///
     /// let arena = Arena::with_block_size(25);
     /// arena.force_push_new_block();
@@ -618,12 +619,13 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "allocator-api2")]
-    /// # extern crate allocator_api2 as alloc;
-    /// # #[cfg(feature = "nightly")]
-    /// # extern crate alloc;
-    /// use rotunda::Arena;
+    /// #[cfg(feature = "allocator-api2")]
+    /// use allocator_api2::alloc::Layout;
+    ///
+    /// #[cfg(feature = "nightly")]
     /// use alloc::alloc::Layout;
+    ///
+    /// use rotunda::Arena;
     ///
     /// let arena = Arena::with_block_size(25);
     /// assert_eq!(arena.curr_block_capacity(), None);
@@ -657,11 +659,13 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # use rotunda::{Arena, handle::Handle};
+    /// use rotunda::{Arena, handle::Handle};
+    ///
     /// let mut arena = Arena::new();
     /// {
     ///     let _handle = Handle::new_in(&arena, 23);
     /// }
+    ///
     /// arena.reset();
     /// ```
     #[inline]
@@ -745,7 +749,8 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # use rotunda::{Arena, handle::Handle};
+    /// use rotunda::{Arena, handle::Handle};
+    ///
     /// let arena = Arena::new();
     /// let result = arena.with_scope(|arena| {
     ///     let h1 = Handle::new_in(&arena, 5);
@@ -790,8 +795,9 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # use rotunda::{Arena, handle::Handle};
-    /// # use core::cell::Cell;
+    /// use rotunda::{Arena, handle::Handle};
+    /// use core::cell::Cell;
+    ///
     /// let data = vec![Cell::new(23)];
     /// let arena = Arena::new();
     /// let value = unsafe {
@@ -815,9 +821,11 @@ impl<A: Allocator> Arena<A> {
     ///
     /// To avoid this safety issue, never return data allocated in the arena during the scope.
     ///
-    /// ```rust,unsafe
-    /// # use rotunda::{Arena, handle::Handle};
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
     /// let arena = Arena::new();
+    ///
     /// let handle = unsafe {
     ///     arena.with_scope_dynamic(|| {
     ///         let handle = Handle::new_in(&arena, vec![1, 2, 3, 4, 5]);
@@ -839,10 +847,12 @@ impl<A: Allocator> Arena<A> {
     /// Note that this includes 'smuggling' handles out through a collection type which
     /// uses the `Arena` as a backing store:
     ///
-    /// ```rust,unsafe
-    /// # use rotunda::{Arena, buffer::Buffer, handle::Handle};
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer, handle::Handle};
+    ///
     /// let arena = Arena::new();
     /// let mut buffer = Buffer::with_capacity_in(&arena, 5);
+    ///
     /// unsafe {
     ///     arena.with_scope_dynamic(|| {
     ///         let handle = Handle::new_in(&arena, String::from("This is a message!"));
