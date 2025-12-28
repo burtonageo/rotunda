@@ -134,25 +134,84 @@
 //!   `Arena`, preventing use after frees.
 //! * They handle `Drop` logic when the handle goes out of scope, preventing resource leaks.
 //!
-//! ## `Handle`
+//! ## [`Handle`]
 //!
 //! The basic handle type is [`handle::Handle`], which is analogous to a `Box<T>` - it provides unique ownership
 //! of an object allocated in an [`Arena`], allows mutation, and drops the object when it goes out of scope.
 //!
 //! Read more in the [`handle`] module.
 //!
-//! ## `RcHandle`
+//! ## [`RcHandle`] and [`WeakHandle`]
 //!
-//! ## `Buffer`
+//! These are reference counted shared ownership handle types, analogous to `Rc<T>` and `Weak<T>`.
 //!
-//! ## `StringBuffer`
+//! Read more in the [`rc_handle`] module.
+//! 
+//! ## [`Buffer`]
 //!
-//! ## `LinkedList`
+//! An owned, growable buffer of elements backed by an allocation into an `Arena`. The [`Buffer`] has
+//! a fixed maximum size which cannot be changed in the `Arena`.
 //!
+//! Read more in the [`buffer`] module.
+//! 
+//! ## [`StringBuffer`]
+//!
+//! An owned, growable buffer containing utf8 encoded bytes.
+//! 
+//! Read more in the [`string_buffer`] module.
+//! 
+//! ## [`LinkedList`]
+//!
+//! A linked list of nodes, backed by an `Arena`. This allows an ordered collection of elements backed by
+//! an `Arena` without requiring contiguous space for all elements in the `Arena`.
+//! 
+//! Read more in the [`linked_list`] module.
+//! 
+//! # Features
+//!
+//! This crate can be customised with a few optional features:
+//!
+//! ## `allocator-api2`
+//! 
+//! This feature uses the `allocator-api2` crate for its definitions of the `Allocator` trait
+//! and other supporting APIs. This allows `rotunda` to be built on the `stable` and `beta`
+//! rust compilers.
+//!
+//! It is required that at least one of either this feature or the `nightly` feature are enabled so that
+//! an allocator API is provided.
+//! 
+//! ## `nightly`
+//!
+//! This feature enables usage of nightly features in `rotunda`, such as [`CoercePointee`]. It also
+//! allows using the `Allocator` trait and supporting APIs from [`alloc::alloc`]. Note that this feature
+//! will supersede `allocator-api2` (i.e. `alloc::alloc::Allocator` will be used over `allocator_api2::alloc::Allocator`)
+//! if both are enabled.
+//!
+//! ## `std`
+//!
+//! This feature enables integration with `std` traits, such as [`std::io::Read`].
+//!
+//! ## `serde`
+//!
+//! This feature enables the contents of handle types to be serialized transparently using [`serde`].
+//! 
 //! [`Arena`]: ./struct.Arena.html
 //! [`Arena::reset()`]: ./struct.Arena.html#method.reset
 //! [`handle::Handle`]: ./handle/struct.Handle.html
 //! [`handle`]: ./handle/index.html
+//! [`Handle`]: ./handle/struct.Handle.html
+//! [`WeakHandle`]: ./rc_handle/struct.WeakHandle.html
+//! [`RcHandle`]: ./rc_handle/struct.RcHandle.html
+//! [`rc_handle`]: ./rc_handle/index.html
+//! [`Buffer`]: ./buffer/struct.Buffer.html
+//! [`StringBuffer`]: ./string_buffer/struct.StringBuffer.html
+//! [`string_buffer`]: ./string_buffer/index.html
+//! [`LinkedList`]: ./linked_list/struct.LinkedList.html
+//! [`linked_list`]: ./linked_list/index.html
+//! [`CoercePointee`]: https://doc.rust-lang.org/stable/core/marker/derive.CoercePointee.html
+//! [`alloc::alloc`]: https://doc.rust-lang.org/stable/core/alloc/alloc/index.html
+//! [`std::io::Read`]: https://doc.rust-lang.org/stable/std/io/trait.Read.html
+//! [`serde`]: https://docs.rs/serde/latest
 
 #[cfg(not(any(feature = "allocator-api2", feature = "nightly")))]
 compile_error!("An allocator must be provided, either through `nightly` or `allocator-api2`");
