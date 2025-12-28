@@ -235,22 +235,6 @@ impl<'a> StringBuffer<'a> {
     pub fn bytes(&self) -> Bytes<'_> {
         self.as_str().bytes()
     }
-
-    #[must_use]
-    #[inline]
-    pub const fn is_char_boundary(&self, idx: usize) -> bool {
-        if idx == 0 {
-            return true;
-        }
-
-        let str_len = self.as_str().len();
-        if idx >= str_len {
-            idx == str_len
-        } else {
-            // inlined from `char::is_utf8_char_boundary()`, as that's a private method
-            (self.as_bytes()[idx] as i8) >= -0x40
-        }
-    }
 }
 
 impl<'a> Extend<char> for StringBuffer<'a> {
