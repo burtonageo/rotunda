@@ -995,7 +995,8 @@ impl<A: Allocator> Arena<A> {
     ///
     /// # Panics
     ///
-    /// This method will panic if the string cannot be allocated in the `Arena`
+    /// This method will panic if the string cannot be allocated in the `Arena`, or if the length of the
+    /// `string` is larger than `isize::MAX`.
     ///
     /// # Examples
     ///
@@ -1019,11 +1020,11 @@ impl<A: Allocator> Arena<A> {
         let len = string.len();
 
         unsafe {
-            // @SAFETY: It is always safe to create a layout for any number of bytes.
-            let slot = self.alloc_raw(Layout::array::<u8>(len).unwrap_unchecked());
+            let slot = self
+                .alloc_raw(Layout::array::<u8>(len).expect("could not create layout for string"));
 
             let slot = slot.as_ptr().cast::<u8>();
-            ptr::copy(string.as_ptr(), slot, len);
+            ptr::copy_nonoverlapping(string.as_ptr(), slot, len);
             let bytes = ptr::slice_from_raw_parts_mut(slot, len);
             &mut *(bytes as *mut str)
         }
