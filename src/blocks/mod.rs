@@ -93,7 +93,11 @@ impl Blocks {
 
     #[track_caller]
     #[inline]
-    pub(super) unsafe fn dealloc_blocks(&self, block_start: &BlockCellPtr, allocator: &dyn Allocator) {
+    pub(super) unsafe fn dealloc_blocks(
+        &self,
+        block_start: &BlockCellPtr,
+        allocator: &dyn Allocator,
+    ) {
         self.ensure_unlocked();
 
         let block_layout = self.block_layout();
@@ -281,6 +285,24 @@ impl Blocks {
     #[inline]
     pub(crate) fn is_locked(&self) -> bool {
         <Option<NonNull<Block>>>::eq(&self.free_blocks.get(), &Some(lock::LOCKED_PTR))
+    }
+
+    pub(crate) unsafe fn lock_unchecked(&self) -> LockData {
+        let old_free_blocks = self.free_blocks.replace(Some(lock::LOCKED_PTR));
+        let old_used_blocks = self.used_blocks.replace(Some(lock::LOCKED_PTR));
+        let prev_in_use = self.curr_block_pos().get();
+
+        LockData {
+            old_free_blocks,
+            old_used_blocks,
+            prev_in_use,
+        }
+    }
+
+    pub(crate) unsafe fn unlock(&self, lock_data: &LockData) {
+        self.free_blocks.replace(lock_data.old_free_blocks);
+        self.used_blocks.replace(lock_data.old_used_blocks);
+        self.curr_block_pos().set(lock_data.prev_in_use);
     }
 
     #[track_caller]
@@ -485,4 +507,11 @@ const fn push_block(list_head: &BlockCellPtr, block: NonNull<Block>) {
         curr_block.as_ref().next.replace(old_head);
     }
     list_head.replace(Some(block));
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct LockData {
+    pub(crate) old_free_blocks: Option<NonNull<Block>>,
+    pub(crate) old_used_blocks: Option<NonNull<Block>>,
+    pub(crate) prev_in_use: usize,
 }
