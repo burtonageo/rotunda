@@ -1,5 +1,8 @@
 #![no_std]
-#![cfg_attr(feature = "nightly", feature(ptr_metadata, derive_coerce_pointee, alloc_layout_extra, allocator_api))]
+#![cfg_attr(
+    feature = "nightly",
+    feature(ptr_metadata, derive_coerce_pointee, alloc_layout_extra, allocator_api)
+)]
 #![cfg_attr(all(feature = "nightly", feature = "std"), feature(can_vector))]
 #![warn(
     missing_docs,
@@ -741,7 +744,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// This method is unsafe as it is possible to return a handle to memory which would
     /// be freed in the Arena automatically as the scope exits. This would allow safe code
-    /// to overwrite the memory in the `Arena` with a new value while still allowing the 
+    /// to overwrite the memory in the `Arena` with a new value while still allowing the
     /// old `Handle` to be accessed, which could cause memory unsafety.
     ///
     /// To avoid this safety issue, never return data allocated in the arena during the scope.
@@ -1361,7 +1364,8 @@ pub(crate) type InvariantLifetime<'a, T> = PhantomData<fn(&'a T) -> &'a T>;
 fn layout_repeat(layout: &Layout, n: usize) -> Result<(Layout, usize), LayoutError> {
     let padded = layout.pad_to_align();
     match layout.size().checked_mul(n) {
-        Some(array_size) => Layout::from_size_align(array_size, layout.align()).map(|layout| (layout, padded.size())),
+        Some(array_size) => Layout::from_size_align(array_size, layout.align())
+            .map(|layout| (layout, padded.size())),
         // Generate a guaranteed `LayoutError` by creating a `Layout` with alignment `0`.
         None => Layout::from_size_align(1, 0).map(|layout| (layout, 0)),
     }
