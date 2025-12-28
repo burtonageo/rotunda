@@ -224,30 +224,28 @@ fn test_scoped() {
     let handle = Handle::new_in(&arena, 25i32);
     let handle_2 = Handle::new_in(&arena, 25i64);
 
-    let handle_3_ptr = arena.with_scope(|arena| {
+    let handle_3_ptr = arena.with_scope(|| {
         let handle_3 = Handle::new_in(&arena, 45i64);
         Handle::as_ptr(&handle_3)
     });
 
-    arena.with_scope(move |arena| {
+    arena.with_scope(|| {
         let handle_4 = Handle::new_in(&arena, 5i64);
         let handle_4_ptr = Handle::as_ptr(&handle_4);
 
         assert!(ptr::eq(handle_3_ptr, handle_4_ptr));
     });
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let first = Handle::new_in(&arena, 255i32);
         let second = Handle::new_in(&arena, 132u64);
 
-        unsafe {
-            arena.with_scope_dynamic(|| {
-                let value = Handle::new_in(&arena, *first as u64 + *second);
-                assert_eq!(*value, 387);
-                let _value = Handle::new_in(&arena, 510u16);
-                arena.reserve_blocks(2);
-            });
-        }
+        arena.with_scope(|| {
+            let value = Handle::new_in(&arena, *first as u64 + *second);
+            assert_eq!(*value, 387);
+            let _value = Handle::new_in(&arena, 510u16);
+            arena.reserve_blocks(2);
+        });
 
         let _third = Handle::new_in(&arena, 432);
     });
@@ -264,7 +262,7 @@ fn test_scoped() {
     let _value = Handle::new_in(&arena, [0u8; SIZE]);
 
     assert_eq!(arena.blocks.curr_block_pos().get(), SIZE);
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let _slice_handle = Handle::new_slice_splat_in(&arena, SIZE, [0u8; 8]);
         assert_eq!(
             arena.blocks.curr_block_pos().get(),
@@ -276,13 +274,11 @@ fn test_scoped() {
     assert_eq!(arena.blocks.curr_block_pos().get(), SIZE);
 
     let mut value = Handle::new_uninit_in(&arena);
-    unsafe {
-        arena.with_scope_dynamic(|| {
-            let val_1 = Handle::new_in(&arena, 2);
-            let val_2 = Handle::new_in(&arena, 4);
-            value.as_mut().write(*val_1 + *val_2);
-        });
-    }
+    arena.with_scope(|| {
+        let val_1 = Handle::new_in(&arena, 2);
+        let val_2 = Handle::new_in(&arena, 4);
+        value.as_mut().write(*val_1 + *val_2);
+    });
 
     let value = unsafe { Handle::assume_init(value) };
     let _data = Handle::new_in(&arena, [0i32; 16]);
@@ -321,7 +317,7 @@ fn test_rc() {
     use std::string::String;
     let arena = Arena::new();
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         use std::convert::identity;
 
         fn take_rc(hndl: RcHandle<'_, i32>) {
@@ -340,7 +336,7 @@ fn test_rc() {
         }
     });
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let mut weak = WeakHandle::<'_, i32>::new();
         {
             let ptr = weak.clone().into_raw();
@@ -395,7 +391,7 @@ fn test_rc() {
         }
     }
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let sv_3 = RcHandle::new_in(&arena, CountDrops(21));
         assert_eq!(DROP_COUNT.load(AtomicOrdering::SeqCst), 0);
 
@@ -409,7 +405,7 @@ fn test_rc() {
         assert_eq!(DROP_COUNT.load(AtomicOrdering::SeqCst), 1);
     });
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let rc_handle = RcHandle::new_in(&arena, String::from("Hello!"));
         let weak = RcHandle::downgrade(&rc_handle);
 
@@ -427,7 +423,7 @@ fn test_rc() {
         assert!(weak.upgrade().is_none());
     });
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let weak;
 
         {
@@ -444,8 +440,8 @@ fn test_rc() {
         assert_eq!(thirteen, 13);
     });
 
-    arena.with_scope(|arena| {
-        let rc = RcHandle::new_in(arena, 2500);
+    arena.with_scope(|| {
+        let rc = RcHandle::new_in(&arena, 2500);
         let weak = RcHandle::downgrade(&rc);
 
         let handle = RcHandle::into_handle(rc).unwrap();
@@ -456,7 +452,7 @@ fn test_rc() {
         drop(handle);
         assert_eq!(WeakHandle::try_resurrect(&weak, 155), Err(155));
 
-        let rc_2 = RcHandle::new_in(arena, 9876);
+        let rc_2 = RcHandle::new_in(&arena, 9876);
         let weak = RcHandle::downgrade(&rc_2);
 
         let inner = RcHandle::into_inner(rc_2).unwrap();
@@ -586,7 +582,7 @@ fn test_buffer() {
         assert_eq!(item, 128);
     }
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         static DROPS: AtomicU32 = AtomicU32::new(0);
         struct CountDrops;
         impl Drop for CountDrops {
@@ -603,8 +599,8 @@ fn test_buffer() {
         assert_eq!(DROPS.load(AtomicOrdering::SeqCst), 1);
     });
 
-    arena.with_scope(|arena| {
-        let buffer = Buffer::new_in(arena, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    arena.with_scope(|| {
+        let buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         let (lhs, rhs) = Buffer::split_at(buffer, 5);
         assert_eq!(&lhs, &[1, 2, 3, 4, 5]);
         assert_eq!(&rhs, &[6, 7, 8, 9, 10]);
@@ -647,7 +643,7 @@ fn test_custom_alloc() {
 fn test_string_buffer() {
     let arena = Arena::new();
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let mut string_buf = StringBuffer::with_capacity_in_arena(200, &arena);
 
         string_buf.push_str("Lorem ipsum");
@@ -675,7 +671,7 @@ fn test_string_buffer() {
 fn test_list() {
     let arena = Arena::new();
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let mut list = LinkedList::new(&arena);
         list.extend([1, 2, 3, 4, 5]);
         list.swap(0, 1);
@@ -687,7 +683,7 @@ fn test_list() {
         assert_eq!(list, [2, 1, 4, 5, 3]);
     });
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let mut list = LinkedList::new(&arena);
         list.extend([1usize, 2, 3, 4, 5]);
 
@@ -713,8 +709,8 @@ fn test_list() {
         assert!(list.is_empty());
     });
 
-    arena.with_scope(|arena| {
-        let mut list = LinkedList::new(arena);
+    arena.with_scope(|| {
+        let mut list = LinkedList::new(&arena);
         const DATA: &'static [usize] = &[1, 2, 3, 4];
         list.extend(DATA.into_iter().copied());
         list.reverse();
@@ -722,7 +718,7 @@ fn test_list() {
         assert_eq!(list, DATA);
     });
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let mut list = LinkedList::new(&arena);
         list.extend([1usize, 3, 5]);
         list.swap(0, 2);
@@ -740,7 +736,7 @@ fn test_list() {
         assert_eq!(front.as_deref(), Some(&3));
     });
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let mut list = LinkedList::new(&arena);
         const NUM: usize = 15;
 
@@ -780,7 +776,7 @@ fn test_list() {
         assert_eq!(&list, &data[..]);
     });
 
-    arena.with_scope(|arena| {
+    arena.with_scope(|| {
         let mut list = LinkedList::new(&arena);
         list.extend([1, 2, 3, 4, 5]);
 
@@ -795,8 +791,8 @@ fn test_list_split() {
 
     const LIST_LEN: usize = 25;
     for i in 0..=LIST_LEN {
-        arena.with_scope(move |arena| {
-            let mut list = LinkedList::from_iter_in(arena, 1..=LIST_LEN);
+        arena.with_scope(|| {
+            let mut list = LinkedList::from_iter_in(&arena, 1..=LIST_LEN);
             let end = list.split_off(i);
 
             if i > 0 {
@@ -813,8 +809,8 @@ fn test_list_split() {
 fn test_list_pop() {
     let arena = Arena::new();
 
-    arena.with_scope(|arena| {
-        let mut list = LinkedList::new(arena);
+    arena.with_scope(|| {
+        let mut list = LinkedList::new(&arena);
         list.push_front(21);
         list.push_front(32);
 

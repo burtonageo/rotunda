@@ -752,7 +752,7 @@ impl<A: Allocator> Arena<A> {
     /// use rotunda::{Arena, handle::Handle};
     ///
     /// let arena = Arena::new();
-    /// let result = arena.with_scope(|arena| {
+    /// let result = arena.with_scope(|| {
     ///     let h1 = Handle::new_in(&arena, 5);
     ///     let h2 = Handle::new_in(&arena, 10);
     ///     *h1 + *h2
@@ -766,9 +766,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// # Notes
     ///
-    /// The lifetime of `T` must be `'static`, which means that the closure cannot return borrowed data,
-    /// and the lifetime of `F` is `'static`, which means that data used in the scope must be moved into
-    /// the closure.
+    /// The lifetime of `T` must be `'static`, which means that the closure cannot return borrowed data.
     ///
     /// If this is too restrictive, you can use [`Arena::with_scope_dynamic()`].
     ///
@@ -777,9 +775,9 @@ impl<A: Allocator> Arena<A> {
     ///
     /// [`Arena::with_scope_dynamic()`]: ./struct.Arena.html#method.with_scope_dynamic
     #[inline]
-    pub fn with_scope<T: 'static, F: 'static + FnOnce(&Arena<A>) -> T>(&self, f: F) -> T {
+    pub fn with_scope<T: 'static, F: FnOnce() -> T>(&self, f: F) -> T {
         let _scope = ScopedRestore::new(&self.blocks);
-        f(self)
+        f()
     }
 
     /// Runs the given closure within a scope that frees all memory allocated from the arena within
@@ -869,7 +867,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// [`Arena::with_scope()`]: ./struct.Arena.html#method.with_scope
     #[inline]
-    pub unsafe fn with_scope_dynamic<T, F: FnMut() -> T>(&self, mut f: F) -> T {
+    pub unsafe fn with_scope_dynamic<T, F: FnOnce() -> T>(&self, f: F) -> T {
         let _scope = ScopedRestore::new(&self.blocks);
         f()
     }
