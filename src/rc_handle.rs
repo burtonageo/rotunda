@@ -248,16 +248,15 @@ impl<'a, T: Copy> RcHandle<'a, [T]> {
         let mut rc_handle = RcHandle::new_slice_uninit_in(arena, slice.len());
 
         unsafe {
-            let slice = {
-                slice::from_raw_parts(slice.as_ptr().cast::<MaybeUninit<T>>(), slice.len())
-            };
+            let slice =
+                { slice::from_raw_parts(slice.as_ptr().cast::<MaybeUninit<T>>(), slice.len()) };
 
             RcHandle::get_mut_unchecked(&mut rc_handle).copy_from_slice(slice);
             RcHandle::assume_init_slice(rc_handle)
         }
     }
 
-    /// Create a new `RcHandle` to a shared value of a slice with size `slice_len`, and 
+    /// Create a new `RcHandle` to a shared value of a slice with size `slice_len`, and
     /// each element initialized to `value`.
     ///
     /// # Examples
@@ -527,7 +526,7 @@ impl<'a, T: ?Sized> RcHandle<'a, T> {
     /// const DATA: &'_ str = "This message";
     ///
     /// const BUF_SIZE: usize = 20;
-    /// let mut rc_handle = RcHandle::new_splat(&arena, BUF_SIZE, 0u8);
+    /// let mut rc_handle = RcHandle::new_splat_in(&arena, BUF_SIZE, 0u8);
     /// # assert!(rc_handle.len() >= DATA.len());
     ///
     /// unsafe {
@@ -916,7 +915,7 @@ impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
     /// once. If the uninitialized `RcHandle` is cloned and initialized multiple times, or if
     /// the initialized `RcHandle` is dropped before any uninitialized clones, then the destructor
     /// may be skipped.
-    /// 
+    ///
     /// # Safety
     ///
     /// It is the programmer's responsibility to ensure that all invariants which relate to
@@ -929,7 +928,7 @@ impl<'a, T> RcHandle<'a, MaybeUninit<T>> {
     /// let arena = Arena::new();
     ///
     /// let mut rc_uninit = RcHandle::new_uninit_in(&arena);
-    /// 
+    ///
     /// let rc = unsafe {
     ///     RcHandle::get_mut_unchecked(&mut rc_uninit).write(6000usize);
     ///     RcHandle::assume_init(rc_uninit)
@@ -1175,7 +1174,7 @@ impl<'a> RcHandle<'a, [u8]> {
     /// This method will panic if calling the `clone()` method would panic.
     ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use rotunda::{Arena, rc_handle::RcHandle};
     ///
@@ -1201,7 +1200,7 @@ impl<'a> RcHandle<'a, [u8]> {
     ///
     /// If `this` is not a valid utf8 encoded string, then the returned `RcHandle` will
     /// not be able to uphold safety invariants around the wrapped `str`.
-    /// 
+    ///
     /// # Examples
     ///
     /// ```
@@ -1321,6 +1320,8 @@ impl<'a, T: ?Sized> Clone for RcHandle<'a, T> {
     /// // underlying data.
     /// let rc_2 = RcHandle::clone(&rc);
     /// ```
+    ///
+    /// [`usize::MAX - 1`]: https://doc.rust-lang.org/stable/std/primitive.usize.html#associatedconstant.MAX
     #[track_caller]
     #[inline]
     fn clone(&self) -> Self {
@@ -1680,7 +1681,7 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
     ///
     /// # Panics
     ///
-    /// If the reference count overflows, this method will panic.
+    /// This method will panic if incrementing the refcount would overflow [`usize::MAX - 1`].
     ///
     /// # Examples
     ///
@@ -1701,6 +1702,8 @@ impl<'a, T: ?Sized> WeakHandle<'a, T> {
     ///
     /// assert!(WeakHandle::upgrade(&weak).is_none());
     /// ```
+    ///
+    /// [`usize::MAX - 1`]: https://doc.rust-lang.org/stable/std/primitive.usize.html#associatedconstant.MAX
     #[track_caller]
     #[must_use]
     #[inline]
