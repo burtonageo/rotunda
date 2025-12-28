@@ -834,6 +834,22 @@ fn test_list_retain() {
 }
 
 #[test]
+fn test_list_reassign_to() {
+    let arena = Arena::new();
+
+    let mut list = LinkedList::from_iter_in(&arena, 0..10);
+
+    list.reassign_to(0..5);
+    assert_eq!(&list, &[0, 1, 2, 3, 4]);
+
+    list.reassign_to(0..12);
+    assert_eq!(&list, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+
+    list.reassign_to(1..13);
+    assert_eq!(&list, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+}
+
+#[test]
 fn test_growable_buffer() {
     let arena = Arena::with_block_size(5 * mem::size_of::<i32>());
 

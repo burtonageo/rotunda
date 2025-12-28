@@ -780,6 +780,51 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
     }
 
+    /// Overwrite the `LinkedList` with the contents of `iter`, re-using the existing
+    /// allocated nodes if available.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::from_iter_in(&arena, [0, 1, 2, 3, 4]);
+    ///
+    /// list.reassign_to([5, 6, 7]);
+    /// assert_eq!(&list, &[5, 6, 7]);
+    /// ```
+    #[track_caller]
+    #[inline]
+    pub fn reassign_to<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        let mut iter = iter.into_iter().peekable();
+        let mut node_iter = NodeIter::new(self).peekable();
+        let mut i = 0usize;
+
+        while let (Some(_), Some(_)) = (node_iter.peek(), iter.peek()) {
+            let (Some(from), Some(to)) = (node_iter.next(), iter.next()) else {
+                // The `peek()` calls above ensure that there are always more items available
+                // in each iterator.
+                unreachable!()
+            };
+
+            unsafe {
+                let ptr = Node::data_ptr(from).as_ptr();
+                ptr::drop_in_place(ptr);
+                ptr::write(ptr, to);
+            }
+
+            i += 1;
+        }
+
+        if i < self.len() {
+            let _ = self.split_off(i);
+        } else if iter.peek().is_some() {
+            self.extend(iter);
+        }
+    }
+
     /// Returns an immutable iterator over the elements of the `LinkedList`.
     ///
     /// # Example
