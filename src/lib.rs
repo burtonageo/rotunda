@@ -1,7 +1,7 @@
 #![no_std]
 #![cfg_attr(
     feature = "nightly",
-    feature(ptr_metadata, derive_coerce_pointee, alloc_layout_extra, allocator_api)
+    feature(ptr_metadata, derive_coerce_pointee, allocator_api)
 )]
 #![cfg_attr(all(feature = "nightly", feature = "std"), feature(can_vector))]
 #![warn(
