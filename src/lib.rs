@@ -212,8 +212,8 @@ impl Arena {
     /// ```
     ///
     /// [`Arena::new_in()`]: ./struct.Arena.html#method.new_in
-    #[inline]
     #[must_use]
+    #[inline]
     pub const fn new() -> Self {
         const { Self::new_in(Global) }
     }
@@ -238,8 +238,8 @@ impl Arena {
     /// ```
     ///
     /// [`Arena::with_block_size_in()`]: ./struct.Arena.html#method.with_block_size_in
-    #[inline]
     #[must_use]
+    #[inline]
     pub const fn with_block_size(block_size: usize) -> Self {
         Self::with_block_size_in(block_size, Global)
     }
@@ -278,8 +278,8 @@ impl<A: Allocator> Arena<A> {
     /// ```
     ///
     /// [`Arena::with_block_size_in()`]: ./struct.Arena.html#method.with_block_size_in
-    #[inline]
     #[must_use]
+    #[inline]
     pub const fn new_in(allocator: A) -> Self {
         let default_block_size = i16::MAX as usize + 1;
         Self::with_block_size_in(default_block_size, allocator)
@@ -332,8 +332,8 @@ impl<A: Allocator> Arena<A> {
     /// let handle = Handle::new_in(&arena, 54i32);
     /// assert_eq!(arena.curr_block_capacity().unwrap(), block_size - std::mem::size_of::<i32>());
     /// ```
-    #[inline]
     #[must_use]
+    #[inline]
     pub fn curr_block_capacity(&self) -> Option<usize> {
         self.blocks.curr_block_capacity()
     }
