@@ -206,7 +206,7 @@ fn test_trim() {
     arena.trim();
     assert_eq!(arena.blocks.free_blocks().get(), None);
 
-    const N: usize = 150;
+    const N: usize = if cfg!(miri) { 10 } else { 150 };
     for i in 0..N {
         arena.reserve_blocks(N);
 

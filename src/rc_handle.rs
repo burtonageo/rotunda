@@ -1312,8 +1312,8 @@ impl<'a, T: ?Sized> Clone for RcHandle<'a, T> {
     ///
     /// let arena = Arena::with_block_size(u32::MAX as usize);
     ///
-    /// let rc = RcHandle::new_splat_in(&arena, 1024 * 1024 * 8, 0u8);
-    ///
+    /// let rc = RcHandle::new_splat_in(&arena, 1024 * 2, 0u8);
+    /// 
     /// // Clone the `rc`. This increments the reference count, but does not copy any of the
     /// // underlying data.
     /// let rc_2 = RcHandle::clone(&rc);
