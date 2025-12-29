@@ -2904,7 +2904,7 @@ impl<'a, T> BorrowMut<[T]> for IntoIterHandles<'a, T> {
     }
 }
 
-impl<'a, T: Unpin> FusedIterator for IntoIterHandles<'a, T> {}
+impl<'a, T> FusedIterator for IntoIterHandles<'a, T> {}
 
 impl<'a, T> Drop for IntoIterHandles<'a, T> {
     #[inline]
