@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 #![allow(missing_docs, clippy::missing_safety_doc)]
 
 //! A UTF8-encoded, growable string. Backed by an `Arena`.

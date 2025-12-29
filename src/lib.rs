@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 #![no_std]
 #![cfg_attr(
     feature = "nightly",

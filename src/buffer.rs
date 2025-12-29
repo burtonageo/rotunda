@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 #![allow(missing_docs, clippy::missing_safety_doc)]
 
 //! A contiguous, growable array of values allocated in an `Arena`.

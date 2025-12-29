@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 #![warn(missing_docs, clippy::missing_safety_doc)]
 
 //! A doubly-linked owned list of nodes, backed by an `Arena`.

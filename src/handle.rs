@@ -1,13 +1,17 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 #![allow(missing_docs, clippy::missing_safety_doc)]
 
 //! A singly-owned mutable pointer backed by an `Arena`.
 
 use crate::{
-    Arena, buffer::Buffer, layout_repeat, rc_handle::RcHandle, string_buffer::{FromUtf8Error, StringBuffer}
+    Arena,
+    buffer::Buffer,
+    layout_repeat,
+    rc_handle::RcHandle,
+    string_buffer::{FromUtf8Error, StringBuffer},
 };
 use alloc::alloc::{Allocator, Layout};
-#[cfg(feature = "nightly")]
-use core::{marker::CoercePointee, ptr::{Pointee, Thin}};
 use core::{
     any::Any,
     borrow::{Borrow, BorrowMut},
@@ -23,6 +27,11 @@ use core::{
     ptr::{self, NonNull},
     slice::SliceIndex,
     str,
+};
+#[cfg(feature = "nightly")]
+use core::{
+    marker::CoercePointee,
+    ptr::{Pointee, Thin},
 };
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
@@ -288,9 +297,7 @@ impl<'a, T> Handle<'a, [MaybeUninit<T>]> {
     #[must_use]
     pub fn new_slice_uninit_in<A: Allocator>(arena: &'a Arena<A>, slice_len: usize) -> Self {
         let type_layout = Layout::new::<T>();
-        let (array_layout, ..) = {
-            layout_repeat(&type_layout, slice_len).expect("size overflow")
-        };
+        let (array_layout, ..) = { layout_repeat(&type_layout, slice_len).expect("size overflow") };
 
         let ptr = {
             let ptr = arena.alloc_raw(array_layout).cast::<MaybeUninit<T>>();

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use alloc::alloc::{AllocError, Allocator, Layout, handle_alloc_error};
 use core::{
     cell::{Cell, UnsafeCell},
