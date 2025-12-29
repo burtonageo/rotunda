@@ -193,7 +193,7 @@
 //!
 //! ## `serde`
 //!
-//! This feature enables the contents of handle types to be serialized transparently using [`serde`].
+//! This feature allows the contents of handle types to be serialized transparently using [`serde`].
 //!
 //! [`Arena`]: ./struct.Arena.html
 //! [`Arena::reset()`]: ./struct.Arena.html#method.reset
