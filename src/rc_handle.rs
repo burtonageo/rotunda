@@ -6,8 +6,6 @@
 
 use crate::{Arena, buffer::Buffer, handle::Handle, layout_repeat};
 use alloc::alloc::{Allocator, Layout};
-#[cfg(feature = "nightly")]
-use core::{ptr::{Pointee, Thin}, marker::CoercePointee};
 use core::{
     any::Any,
     borrow::Borrow,
@@ -24,6 +22,11 @@ use core::{
     ptr::{self, NonNull},
     slice::{self, SliceIndex},
     str::Utf8Error,
+};
+#[cfg(feature = "nightly")]
+use core::{
+    marker::CoercePointee,
+    ptr::{Pointee, Thin},
 };
 #[cfg(feature = "serde")]
 use serde_core::ser::{Serialize, Serializer};
@@ -157,49 +160,33 @@ impl<'a, T> RcHandle<'a, [T]> {
 }
 
 impl<'a, T, const N: usize> RcHandle<'a, [T; N]> {
+    /// Create a new `RcHandle` to a fixed size array, where each element is initialized
+    /// by calling `f` on its index into the array.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc_handle = RcHandle::<'_, [usize; 10]>::new_array_from_fn_in(&arena, |i| i);
+    /// assert_eq!(rc_handle.as_ref(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    /// ```
     #[track_caller]
     #[must_use]
     #[inline]
     pub fn new_array_from_fn_in<A: Allocator, F: FnMut(usize) -> T>(
         arena: &'a Arena<A>,
-        mut f: F,
+        f: F,
     ) -> Self {
-        struct Guard<'a, T> {
-            data: &'a mut [MaybeUninit<T>],
-            initted: usize,
+        let rc = RcHandle::new_slice_from_fn_in(arena, N, f);
+        let ptr = rc.ptr.cast::<RcHandleInner<[T; N]>>();
+        mem::forget(rc);
+        RcHandle {
+            ptr,
+            _boo: PhantomData,
         }
-
-        impl<'a, T> Drop for Guard<'a, T> {
-            #[inline]
-            fn drop(&mut self) {
-                unsafe {
-                    let slice =
-                        slice::from_raw_parts_mut(self.data.as_mut_ptr().cast::<T>(), self.initted);
-                    ptr::drop_in_place(slice);
-                }
-            }
-        }
-
-        let handle = RcHandle::<'_, MaybeUninit<[T; N]>>::new_uninit_in(arena);
-        let mut handle = RcHandle::<'_, MaybeUninit<[T; N]>>::transpose_inner_uninit(handle);
-
-        {
-            let handle_ref = unsafe { RcHandle::get_mut_unchecked(&mut handle) };
-            let mut guard = Guard {
-                data: &mut handle_ref[..],
-                initted: 0,
-            };
-
-            for i in 0..N {
-                let slot = unsafe { guard.data.get_unchecked_mut(i) };
-                slot.write(f(i));
-                guard.initted += 1;
-            }
-
-            mem::forget(guard);
-        }
-
-        unsafe { RcHandle::assume_init_array(handle) }
     }
 }
 
@@ -1001,7 +988,8 @@ impl<'a, T> RcHandle<'a, [MaybeUninit<T>]> {
     #[must_use]
     #[inline]
     pub fn new_slice_uninit_in<A: Allocator>(arena: &'a Arena<A>, slice_len: usize) -> Self {
-        let (array_layout, ..) = layout_repeat(&Layout::new::<T>(), slice_len).expect("size overflow");
+        let (array_layout, ..) =
+            layout_repeat(&Layout::new::<T>(), slice_len).expect("size overflow");
         let inner_layout = rc_inner_layout_for_value_layout(array_layout);
 
         unsafe {
@@ -1315,7 +1303,7 @@ impl<'a, T: ?Sized> Clone for RcHandle<'a, T> {
     /// let arena = Arena::with_block_size(u32::MAX as usize);
     ///
     /// let rc = RcHandle::new_splat_in(&arena, 1024 * 2, 0u8);
-    /// 
+    ///
     /// // Clone the `rc`. This increments the reference count, but does not copy any of the
     /// // underlying data.
     /// let rc_2 = RcHandle::clone(&rc);
