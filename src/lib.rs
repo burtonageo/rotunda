@@ -939,10 +939,12 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # use rotunda::Arena;
+    /// use rotunda::Arena;
+    ///
     /// const BLOCK_SIZE: usize = 6 * 1024 * 1024;
     /// let arena = Arena::with_block_size(BLOCK_SIZE);
-    /// assert_eq!(arena.block_size(), BLOCK_SIZE);
+    ///
+    ///  assert_eq!(arena.block_size(), BLOCK_SIZE);
     /// ```
     ///
     /// [`Arena::with_block_size()`]:
