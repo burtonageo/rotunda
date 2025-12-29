@@ -3,7 +3,13 @@
 #![no_std]
 #![cfg_attr(
     feature = "nightly",
-    feature(ptr_metadata, derive_coerce_pointee, allocator_api)
+    feature(
+        ptr_metadata,
+        derive_coerce_pointee,
+        allocator_api,
+        read_buf,
+        core_io_borrowed_buf
+    )
 )]
 #![cfg_attr(all(feature = "nightly", feature = "std"), feature(can_vector))]
 #![warn(
@@ -667,7 +673,7 @@ impl<A: Allocator> Arena<A> {
     /// {
     ///     let handle_1 = Handle::new_in(&arena, 23);
     ///     arena.force_push_new_block();
-    /// 
+    ///
     ///     let handle_2 = Handle::new_in(&arena, 45);
     ///     arena.force_push_new_block();
     ///
@@ -700,7 +706,7 @@ impl<A: Allocator> Arena<A> {
     /// {
     ///     let handle_1 = Handle::new_in(&arena, 123);
     ///     arena.force_push_new_block();
-    /// 
+    ///
     ///     let handle_2 = Handle::new_in(&arena, 456);
     ///     arena.force_push_new_block();
     ///
