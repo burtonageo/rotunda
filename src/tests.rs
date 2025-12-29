@@ -8,12 +8,12 @@ use crate::{
     rc_handle::{RcHandle, WeakHandle},
     string_buffer::StringBuffer,
 };
-#[cfg(feature = "nightly")]
-use std::alloc::System;
+use alloc::alloc::{Allocator, Layout};
 #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
 use allocator_api2::alloc::System;
-use alloc::alloc::{Allocator, Layout};
-use core::{mem::ManuallyDrop, sync::atomic::AtomicUsize};
+use core::{mem::{ManuallyDrop, MaybeUninit}, sync::atomic::AtomicUsize};
+#[cfg(feature = "nightly")]
+use std::alloc::System;
 use std::{
     iter::Extend,
     mem,
@@ -849,17 +849,33 @@ fn test_list_reassign_to() {
 
 #[test]
 fn test_list_drop_reclaim() {
-    let mut arena = Arena::new();
+    let arena = Arena::new();
 
     arena.force_push_new_block();
-    let ptr = arena.curr_block().map(|b| b.as_mut_ptr()).unwrap_or(ptr::null_mut());
+    let head_1 = arena
+        .curr_block_head()
+        .map(|b| b.as_ptr().cast::<MaybeUninit<u8>>())
+        .unwrap_or(ptr::null_mut());
 
     let mut list = LinkedList::new(&arena);
-    list.extend([1, 2, 3, 4 ,5, 6]);
+    list.extend([1usize, 2, 3, 4, 5, 6]);
+
+    let head_2 = arena
+        .curr_block_head()
+        .map(|b| b.as_ptr().cast::<MaybeUninit<u8>>())
+        .unwrap_or(ptr::null_mut());
+
     drop(list);
 
-    let ptr_2 = arena.curr_block().map(|b| b.as_mut_ptr()).unwrap_or(ptr::null_mut());
-    assert!(ptr::eq(ptr, ptr_2));
+    let head_3 = arena
+        .curr_block_head()
+        .map(|b| b.as_ptr().cast::<MaybeUninit<u8>>())
+        .unwrap_or(ptr::null_mut());
+
+    assert!(!ptr::eq(head_1, head_2));
+    assert!(!ptr::eq(head_2, head_3));
+
+    assert!(ptr::eq(head_1, head_3));
 }
 
 #[test]

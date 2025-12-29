@@ -310,14 +310,11 @@ impl Blocks {
         self.curr_block_pos().set(lock_data.prev_in_use);
     }
 
-    #[inline]
+    #[inline(never)]
     pub(super) fn is_last_allocation(&self, ptr: NonNull<()>) -> bool {
-        self.curr_block
-            .get()
-            .map(|block| unsafe {
-                NonNull::eq(&block.byte_add(self.curr_block_pos.get()), &ptr.cast())
-            })
-            .unwrap_or(false)
+        let Some(block) = self.curr_block.get() else { return false; };
+        let end = unsafe { Block::data_start(block).byte_add(self.curr_block_pos.get()) };
+        NonNull::eq(&end, &ptr.cast())
     }
 
     #[track_caller]
