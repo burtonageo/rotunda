@@ -8,7 +8,7 @@ use crate::{
 };
 #[cfg(feature = "nightly")]
 use std::alloc::System;
-#[cfg(feature = "allocator-api2")]
+#[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
 use allocator_api2::alloc::System;
 use alloc::alloc::{Allocator, Layout};
 use core::{mem::ManuallyDrop, sync::atomic::AtomicUsize};

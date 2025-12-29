@@ -146,40 +146,40 @@
 //! These are reference counted shared ownership handle types, analogous to `Rc<T>` and `Weak<T>`.
 //!
 //! Read more in the [`rc_handle`] module.
-//! 
+//!
 //! ## [`Buffer`]
 //!
 //! An owned, growable buffer of elements backed by an allocation into an `Arena`. The [`Buffer`] has
 //! a fixed maximum size which cannot be changed in the `Arena`.
 //!
 //! Read more in the [`buffer`] module.
-//! 
+//!
 //! ## [`StringBuffer`]
 //!
 //! An owned, growable buffer containing utf8 encoded bytes.
-//! 
+//!
 //! Read more in the [`string_buffer`] module.
-//! 
+//!
 //! ## [`LinkedList`]
 //!
 //! A linked list of nodes, backed by an `Arena`. This allows an ordered collection of elements backed by
 //! an `Arena` without requiring contiguous space for all elements in the `Arena`.
-//! 
+//!
 //! Read more in the [`linked_list`] module.
-//! 
+//!
 //! # Features
 //!
 //! This crate can be customised with a few optional features:
 //!
 //! ## `allocator-api2`
-//! 
+//!
 //! This feature uses the `allocator-api2` crate for its definitions of the `Allocator` trait
 //! and other supporting APIs. This allows `rotunda` to be built on the `stable` and `beta`
 //! rust compilers.
 //!
 //! It is required that at least one of either this feature or the `nightly` feature are enabled so that
 //! an allocator API is provided.
-//! 
+//!
 //! ## `nightly`
 //!
 //! This feature enables usage of nightly features in `rotunda`, such as [`CoercePointee`]. It also
@@ -194,7 +194,7 @@
 //! ## `serde`
 //!
 //! This feature enables the contents of handle types to be serialized transparently using [`serde`].
-//! 
+//!
 //! [`Arena`]: ./struct.Arena.html
 //! [`Arena::reset()`]: ./struct.Arena.html#method.reset
 //! [`handle::Handle`]: ./handle/struct.Handle.html
@@ -216,10 +216,10 @@
 #[cfg(not(any(feature = "allocator-api2", feature = "nightly")))]
 compile_error!("An allocator must be provided, either through `nightly` or `allocator-api2`");
 
-#[cfg(all(not(feature = "allocator-api2"), feature = "nightly"))]
+#[cfg(feature = "nightly")]
 extern crate alloc;
 
-#[cfg(feature = "allocator-api2")]
+#[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
 extern crate allocator_api2 as alloc;
 
 #[cfg(any(test, feature = "std"))]
@@ -330,7 +330,7 @@ impl<A: Allocator> Arena<A> {
     /// use allocator_api2::alloc::Global;
     ///
     /// #[cfg(feature = "nightly")]
-    /// use alloc::alloc::Global;
+    /// use std::alloc::Global;
     ///
     /// use rotunda::Arena;
     ///
@@ -362,8 +362,8 @@ impl<A: Allocator> Arena<A> {
     /// use allocator_api2::alloc::Global;
     ///
     /// #[cfg(feature = "nightly")]
-    /// use alloc::alloc::Global;
-    /// 
+    /// use std::alloc::Global;
+    ///
     /// use rotunda::Arena;
     ///
     /// let block_size = 4 * 1024 * 1024;
@@ -388,7 +388,7 @@ impl<A: Allocator> Arena<A> {
     ///
     /// ```
     /// use rotunda::{Arena, handle::Handle};
-    /// 
+    ///
     /// let block_size = 4 * 1024 * 1024;
     /// let arena = Arena::with_block_size(block_size);
     ///
@@ -451,10 +451,10 @@ impl<A: Allocator> Arena<A> {
     /// # use allocator_api2::alloc::AllocError;
     ///
     /// # #[cfg(feature = "nightly")]
-    /// # use alloc::alloc::AllocError;
+    /// # use std::alloc::AllocError;
     ///
     /// use rotunda::Arena;
-    /// 
+    ///
     /// let arena = Arena::new();
     /// # let mut arena = arena;
     ///
@@ -583,11 +583,11 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// #[cfg(feature = "allocator-api2")]
+    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
     /// use allocator_api2::alloc::Layout;
     ///
     /// #[cfg(feature = "nightly")]
-    /// use alloc::alloc::Layout;
+    /// use std::alloc::Layout;
     ///
     /// use rotunda::Arena;
     ///
@@ -619,11 +619,11 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// #[cfg(feature = "allocator-api2")]
+    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
     /// use allocator_api2::alloc::Layout;
     ///
     /// #[cfg(feature = "nightly")]
-    /// use alloc::alloc::Layout;
+    /// use std::alloc::Layout;
     ///
     /// use rotunda::Arena;
     ///
@@ -966,11 +966,12 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "allocator-api2")]
-    /// # extern crate allocator_api2 as alloc;
-    /// # #[cfg(feature = "nightly")]
-    /// # extern crate alloc;
-    /// # use alloc::alloc::Layout;
+    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
+    /// use allocator_api2::alloc::Layout;
+    ///
+    /// #[cfg(feature = "nightly")]
+    /// use std::alloc::Layout;
+    ///
     /// # use rotunda::Error;
     /// use rotunda::Arena;
     ///
@@ -1145,8 +1146,9 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # use rotunda::{Arena, handle::Handle};
-    /// # use core::mem::MaybeUninit;
+    /// use rotunda::{Arena, handle::Handle};
+    /// use core::mem::MaybeUninit;
+    ///
     /// let mut arena = Arena::new();
     /// # arena.force_push_new_block();
     /// # arena.force_push_new_block();
@@ -1169,8 +1171,9 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// # use rotunda::{Arena, handle::Handle};
-    /// # use core::mem::MaybeUninit;
+    /// use rotunda::{Arena, handle::Handle};
+    /// use core::mem::MaybeUninit;
+    ///
     /// let mut arena = Arena::new();
     /// # arena.force_push_new_block();
     /// # arena.force_push_new_block();
