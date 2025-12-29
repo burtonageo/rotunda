@@ -32,7 +32,7 @@ use core::{
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
 #[cfg(feature = "std")]
-use std::io::{self, IoSlice, Read, Write};
+use std::io::{self, BufRead, IoSlice, Read, Write};
 
 #[macro_export]
 macro_rules! buf {
@@ -398,10 +398,10 @@ impl<'a, T> Buffer<'a, T> {
     ///
     /// let mut buf = Buffer::with_capacity_in(&arena, 20);
     /// assert_eq!(buf.len(), 0);
-    /// 
+    ///
     /// buf.extend([1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
-    /// 
+    ///
     /// buf.push(5);
     /// assert_eq!(buf.len(), 4);
     /// ```
@@ -477,6 +477,34 @@ impl<'a, T> Buffer<'a, T> {
         self.as_mut_slice().iter_mut()
     }
 
+    /// Returns a by-value iterator which yields `Handle`s to each element
+    /// in the `Buffer`.
+    ///
+    /// This iterator can be used to split a `Buffer` into a `Handle` to each element.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// let mut buffer_of_handles = Buffer::with_capacity_in(&arena, buffer.len());
+    ///
+    /// buffer_of_handles.extend(buffer.iter_handles());
+    ///
+    /// for (i, handle) in buffer_of_handles.iter().enumerate() {
+    ///     assert_eq!(*handle, i + 1);
+    /// }
+    /// ```
+    #[must_use]
+    #[inline]
+    pub fn iter_handles(self) -> IntoIterHandles<'a, T> {
+        IntoIterHandles::new(self)
+    }
+
     /// Returns a raw pointer to the `Buffer`'s data, or a dangling pointer if this
     /// `Buffer` has a capacity of `0`.
     ///
@@ -497,7 +525,7 @@ impl<'a, T> Buffer<'a, T> {
     /// let buffer = Buffer::new_in(&arena, [1, 2, 4, 8]);
     ///
     /// let ptr = buffer.as_ptr();
-    /// 
+    ///
     /// let mut n = 1;
     /// unsafe {
     ///     for i in 0..buffer.len() {
@@ -506,7 +534,7 @@ impl<'a, T> Buffer<'a, T> {
     ///     }
     /// }
     /// ```
-    /// 
+    ///
     /// [`UnsafeCell`]: https://doc.rust-lang.org/stable/core/cell/struct.UnsafeCell.html
     /// [`Buffer::as_mut_ptr`]: ./struct.Buffer.html#method.as_mut_ptr
     #[must_use]
@@ -522,7 +550,7 @@ impl<'a, T> Buffer<'a, T> {
     /// or the pointer may dangle.
     ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use core::ptr;
     /// use rotunda::{Arena, buffer::Buffer};
@@ -530,7 +558,7 @@ impl<'a, T> Buffer<'a, T> {
     /// let arena = Arena::new();
     ///
     /// let my_data = [0usize, 1, 2, 3, 4, 5];
-    /// 
+    ///
     /// let mut buffer = Buffer::with_capacity_in(&arena, my_data.len());
     ///
     /// let buffer_ptr = buffer.as_mut_ptr();
@@ -557,7 +585,7 @@ impl<'a, T> Buffer<'a, T> {
     /// or the pointer may dangle.
     ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use core::ptr;
     /// use rotunda::{Arena, buffer::Buffer};
@@ -565,7 +593,7 @@ impl<'a, T> Buffer<'a, T> {
     /// let arena = Arena::new();
     ///
     /// let my_data = [0usize, 1, 2, 3, 4, 5];
-    /// 
+    ///
     /// let mut buffer = Buffer::with_capacity_in(&arena, my_data.len());
     ///
     /// let buffer_ptr = buffer.as_non_null();
@@ -580,7 +608,7 @@ impl<'a, T> Buffer<'a, T> {
     ///
     /// assert_eq!(&buffer, &my_data);
     /// ```
-    /// 
+    ///
     /// [`NonNull`]: https://doc.rust-lang.org/stable/core/ptr/struct.NonNull.html
     #[must_use]
     #[inline]
@@ -1207,6 +1235,8 @@ impl<'a, T: Clone> Buffer<'a, T> {
     /// If `new_len` is larger than the current length, then the buffer is
     /// extended by cloning `value`.
     ///
+    /// The length of the buffer will always be capped by its capacity.
+    ///
     /// # Examples
     ///
     /// ```
@@ -1219,7 +1249,7 @@ impl<'a, T: Clone> Buffer<'a, T> {
     ///
     /// assert_eq!(&buffer, &[1, 2]);
     ///
-    /// buffer.resize(4, 8);
+    /// buffer.resize(5, 8);
     /// assert_eq!(&buffer, &[1, 2, 8, 8]);
     /// ```
     #[track_caller]
@@ -1241,11 +1271,51 @@ impl<'a, T: Clone> Buffer<'a, T> {
         }
     }
 
+    /// Extends the `Buffer` by cloning the elements of `slice`.
+    ///
+    /// The `slice` will be iterated through until there is no more space. This method
+    /// will not panic if `slice.len()` is bigger than the spare capacity of the `Buffer`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer, rc_handle::RcHandle};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let data = [
+    ///     RcHandle::new_str_in(&arena, "Message"),
+    ///     RcHandle::new_str_in(&arena, "in"),
+    ///     RcHandle::new_str_in(&arena, "a"),
+    ///     RcHandle::new_str_in(&arena, "box"),
+    /// ];
+    ///
+    /// let mut buffer = Buffer::<RcHandle<str>>::with_capacity_in(&arena, 5);
+    ///
+    /// buffer.extend_from_slice(&data);
+    ///
+    /// assert_eq!(buffer.get(0).map(|rc| &**rc), Some("Message"));
+    /// assert_eq!(buffer.get(1).map(|rc| &**rc), Some("in"));
+    /// assert_eq!(buffer.get(2).map(|rc| &**rc), Some("a"));
+    /// assert_eq!(buffer.get(3).map(|rc| &**rc), Some("box"));
+    /// assert_eq!(buffer.get(4), None);
+    ///
+    /// let data_2 = [
+    ///     RcHandle::new_str_in(&arena, "with"),
+    ///     RcHandle::new_str_in(&arena, "complements"),
+    /// ];
+    ///
+    /// buffer.extend_from_slice(&data_2);
+    /// assert_eq!(buffer.get(4).map(|rc| &**rc), Some("with"));
+    /// assert_eq!(buffer.get(5), None);
+    /// ```
     #[track_caller]
     #[inline]
     pub fn extend_from_slice(&mut self, slice: &[T]) {
-        let num_elems = self.capacity() - slice.len().max(self.len);
-        for item in slice.iter().take(num_elems).cloned() {
+        let spare_cap = self.capacity() - self.len;
+        let count = usize_min(spare_cap, slice.len());
+
+        for item in slice.iter().take(count).cloned() {
             unsafe {
                 self.push_unchecked(item);
             }
@@ -1582,6 +1652,62 @@ impl<'a> Read for Buffer<'a, u8> {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.as_slice().read(buf)
+    }
+
+    #[inline]
+    fn read_to_end(&mut self, buf: &mut std::vec::Vec<u8>) -> io::Result<usize> {
+        self.as_slice().read_to_end(buf)
+    }
+
+    #[inline]
+    fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
+        self.as_slice().read_vectored(bufs)
+    }
+
+    #[cfg(feature = "nightly")]
+    #[inline]
+    fn is_read_vectored(&self) -> bool {
+        self.as_slice().is_read_vectored()
+    }
+
+    #[inline]
+    fn read_to_string(&mut self, buf: &mut std::string::String) -> io::Result<usize> {
+        self.as_slice().read_to_string(buf)
+    }
+
+    #[cfg(feature = "nightly")]
+    #[inline]
+    fn read_buf(&mut self, buf: io::BorrowedCursor<'_>) -> io::Result<()> {
+        self.as_slice().read_buf(buf)
+    }
+
+    #[cfg(feature = "nightly")]
+    #[inline]
+    fn read_buf_exact(&mut self, cursor: io::BorrowedCursor<'_>) -> io::Result<()> {
+        self.as_slice().read_buf_exact(cursor)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'a> BufRead for Buffer<'a, u8> {
+    #[inline]
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        Ok(self.as_slice())
+    }
+
+    #[inline]
+    fn consume(&mut self, amount: usize) {
+        self.as_slice().consume(amount)
+    }
+
+    #[inline]
+    fn read_until(&mut self, byte: u8, buf: &mut std::vec::Vec<u8>) -> io::Result<usize> {
+        self.as_slice().read_until(byte, buf)
+    }
+
+    #[inline]
+    fn read_line(&mut self, buf: &mut std::string::String) -> io::Result<usize> {
+        self.as_slice().read_line(buf)
     }
 }
 
@@ -2311,9 +2437,7 @@ impl<I: IntoIterator> Error for TryExtendError<I> {}
 /// [`Buffer`]: ./struct.Buffer.html
 /// [`Buffer::into_iter`]: ./struct.Buffer.html#method.into_iter
 pub struct IntoIter<'a, T> {
-    data: Handle<'a, [MaybeUninit<T>]>,
-    front_idx: usize,
-    back_idx: usize,
+    iter: IntoIterHandles<'a, T>,
 }
 
 impl<'a, T> IntoIter<'a, T> {
@@ -2337,7 +2461,7 @@ impl<'a, T> IntoIter<'a, T> {
     #[must_use]
     #[inline]
     pub const fn as_slice(&self) -> &[T] {
-        unsafe { slice::from_raw_parts(self.data_start(), self.len_const()) }
+        self.iter.as_slice()
     }
 
     /// Access the elements yet to be iterated through a mutable slice.
@@ -2361,7 +2485,7 @@ impl<'a, T> IntoIter<'a, T> {
     #[must_use]
     #[inline]
     pub const fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { slice::from_raw_parts_mut(self.data_start_mut(), self.len_const()) }
+        self.iter.as_mut_slice()
     }
 
     /// Consumes the iterator, returning a `Buffer` containing the unyielded values.
@@ -2387,14 +2511,15 @@ impl<'a, T> IntoIter<'a, T> {
     /// ```
     #[must_use]
     #[inline]
-    pub const fn into_buffer(self) -> Buffer<'a, T> {
-        let cap = Handle::<'_, [MaybeUninit<T>]>::as_ptr(&self.data).len();
-        let new_len = self.len_const();
-        let start = self.front_idx;
+    pub fn into_buffer(self) -> Buffer<'a, T> {
+        let IntoIter { iter } = self;
+        let cap = Handle::<'_, [MaybeUninit<T>]>::as_ptr(&iter.data).len();
+        let new_len = iter.len_const();
+        let start = iter.front_idx;
 
         let mut buf = unsafe {
-            let handle = ptr::read(&self.data);
-            mem::forget(self);
+            let handle = ptr::read(&iter.data);
+            mem::forget(iter);
             Buffer::from_raw_parts(handle, cap)
         };
 
@@ -2429,7 +2554,209 @@ impl<'a, T> IntoIter<'a, T> {
     /// ```
     #[must_use]
     #[inline]
-    pub const fn into_slice_handle(self) -> Handle<'a, [T]> {
+    pub fn into_slice_handle(self) -> Handle<'a, [T]> {
+        self.into_buffer().into_slice_handle()
+    }
+
+    #[must_use]
+    #[inline]
+    const fn new(buffer: Buffer<'a, T>) -> Self {
+        Self {
+            iter: IntoIterHandles::new(buffer),
+        }
+    }
+}
+
+impl<'a, T: fmt::Debug> fmt::Debug for IntoIter<'a, T> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.iter, fmtr)
+    }
+}
+
+impl<'a, T: Unpin> Iterator for IntoIter<'a, T> {
+    type Item = T;
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(Handle::into_inner)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+impl<'a, T: Unpin> DoubleEndedIterator for IntoIter<'a, T> {
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter.next_back().map(Handle::into_inner)
+    }
+}
+
+impl<'a, T: Unpin> ExactSizeIterator for IntoIter<'a, T> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+}
+
+impl<'a, T> AsRef<[T]> for IntoIter<'a, T> {
+    #[inline]
+    fn as_ref(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+impl<'a, T> AsMut<[T]> for IntoIter<'a, T> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut [T] {
+        self.as_mut_slice()
+    }
+}
+
+impl<'a, T> Borrow<[T]> for IntoIter<'a, T> {
+    #[inline]
+    fn borrow(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+impl<'a, T> BorrowMut<[T]> for IntoIter<'a, T> {
+    #[inline]
+    fn borrow_mut(&mut self) -> &mut [T] {
+        self.as_mut_slice()
+    }
+}
+
+impl<'a, T: Unpin> FusedIterator for IntoIter<'a, T> {}
+
+/// An iterator over a [`Buffer`], yielding each element as a `Handle<T>`
+///
+/// This type is returned by [`Buffer::iter_handles`].
+///
+/// [`Buffer`]: ./struct.Buffer.html
+/// [`Buffer::iter_handles`]: ./struct.Buffer.html#method.iter_handles
+pub struct IntoIterHandles<'a, T> {
+    data: Handle<'a, [MaybeUninit<T>]>,
+    front_idx: usize,
+    back_idx: usize,
+}
+
+impl<'a, T> IntoIterHandles<'a, T> {
+    /// Access the elements yet to be iterated through an immutable slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    /// let buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// let mut iter = buffer.iter_handles();
+    ///
+    /// let _ = iter.next().unwrap();
+    /// let _ = iter.next_back().unwrap();
+    ///
+    /// assert_eq!(iter.as_slice(), &[2, 3, 4]);
+    /// ```
+    #[must_use]
+    #[inline]
+    pub const fn as_slice(&self) -> &[T] {
+        unsafe { slice::from_raw_parts(self.data_start(), self.len_const()) }
+    }
+
+    /// Access the elements yet to be iterated through a mutable slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    /// let buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// let mut iter = buffer.iter_handles();
+    ///
+    /// iter.as_mut_slice().fill(255);
+    ///
+    /// for item in iter {
+    ///     assert_eq!(item, 255);
+    /// }
+    /// ```
+    #[must_use]
+    #[inline]
+    pub const fn as_mut_slice(&mut self) -> &mut [T] {
+        unsafe { slice::from_raw_parts_mut(self.data_start_mut(), self.len_const()) }
+    }
+
+    /// Consumes the iterator, returning a `Buffer` containing the unyielded values.
+    ///
+    /// The returned `Buffer` will have a reduced capacity compared to the original `Buffer`,
+    /// as space will be removed from the `Buffer` to ensure that any iterated `Handle`s
+    /// don't overlap with the `Buffer`'s data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    /// let buffer = Buffer::new_in(&arena, [0, 1, 2, 3, 4]);
+    ///
+    /// let mut iter = buffer.iter_handles();
+    ///
+    /// let first = iter.next().unwrap();
+    /// let second = iter.next().unwrap();
+    ///
+    /// assert_eq!(*first, 0);
+    /// assert_eq!(*second, 1);
+    ///
+    /// let buffer = iter.into_buffer();
+    /// assert_eq!(&buffer, &[2, 3, 4]);
+    /// assert_eq!(buffer.capacity(), 3);
+    ///
+    /// assert_eq!(*first, 0);
+    /// ```
+    #[must_use]
+    #[inline]
+    pub fn into_buffer(self) -> Buffer<'a, T> {
+        let new_len = self.len_const();
+        let start = self.front_idx;
+
+        unsafe {
+            let data = ptr::read(&self.data);
+            mem::forget(self);
+            let ptr = Handle::into_raw(data).cast::<MaybeUninit<T>>().add(start);
+            let ptr = ptr::slice_from_raw_parts_mut(ptr, new_len);
+            let handle = Handle::from_raw(ptr);
+            Buffer::from_raw_parts(handle, new_len)
+        }
+    }
+
+    /// Consumes the iterator, returning a `Handle<[T]>` containing the unyielded values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    /// let buffer = Buffer::new_in(&arena, [1024usize; 300]);
+    ///
+    /// let mut iter = buffer.iter_handles();
+    ///
+    /// for item in (&mut iter).take(150) {
+    ///     let _ = item;
+    /// }
+    ///
+    /// let slice_handle = iter.into_slice_handle();
+    /// assert_eq!(slice_handle.as_ref(), &[1024; 150]);
+    /// ```
+    #[must_use]
+    #[inline]
+    pub fn into_slice_handle(self) -> Handle<'a, [T]> {
         self.into_buffer().into_slice_handle()
     }
 
@@ -2467,15 +2794,61 @@ impl<'a, T> IntoIter<'a, T> {
     const fn len_const(&self) -> usize {
         self.back_idx - self.front_idx
     }
+}
 
-    #[must_use]
+impl<'a, T> Iterator for IntoIterHandles<'a, T> {
+    type Item = Handle<'a, T>;
+
     #[inline]
-    unsafe fn read_at_unchecked(&self, idx: usize) -> &MaybeUninit<T> {
-        unsafe { self.data.as_ref().get_unchecked(idx) }
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.front_idx >= self.back_idx {
+            return None;
+        }
+
+        let item = unsafe {
+            let ptr = Handle::as_mut_ptr(&mut self.data)
+                .cast::<T>()
+                .add(self.front_idx);
+            Handle::from_raw(ptr)
+        };
+
+        self.front_idx += 1;
+        Some(item)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len_const();
+        (len, Some(len))
     }
 }
 
-impl<'a, T: fmt::Debug> fmt::Debug for IntoIter<'a, T> {
+impl<'a, T> DoubleEndedIterator for IntoIterHandles<'a, T> {
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.front_idx >= self.back_idx {
+            return None;
+        }
+
+        let item = unsafe {
+            let idx = self.back_idx.saturating_sub(1);
+            let ptr = Handle::as_mut_ptr(&mut self.data).cast::<T>().add(idx);
+            Handle::from_raw(ptr)
+        };
+
+        self.back_idx -= 1;
+        Some(item)
+    }
+}
+
+impl<'a, T> ExactSizeIterator for IntoIterHandles<'a, T> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.len_const()
+    }
+}
+
+impl<'a, T: fmt::Debug> fmt::Debug for IntoIterHandles<'a, T> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
         struct Ellipsis;
@@ -2503,82 +2876,37 @@ impl<'a, T: fmt::Debug> fmt::Debug for IntoIter<'a, T> {
     }
 }
 
-impl<'a, T: Unpin> Iterator for IntoIter<'a, T> {
-    type Item = T;
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.front_idx >= self.back_idx {
-            return None;
-        }
-
-        let item = unsafe { self.read_at_unchecked(self.front_idx).assume_init_read() };
-
-        self.front_idx += 1;
-        Some(item)
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = ExactSizeIterator::len(self);
-        (len, Some(len))
-    }
-}
-
-impl<'a, T: Unpin> DoubleEndedIterator for IntoIter<'a, T> {
-    #[inline]
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.front_idx >= self.back_idx {
-            return None;
-        }
-
-        let item = unsafe {
-            self.read_at_unchecked(self.back_idx.saturating_sub(1))
-                .assume_init_read()
-        };
-
-        self.back_idx -= 1;
-        Some(item)
-    }
-}
-
-impl<'a, T: Unpin> ExactSizeIterator for IntoIter<'a, T> {
-    #[inline]
-    fn len(&self) -> usize {
-        self.len_const()
-    }
-}
-
-impl<'a, T> AsRef<[T]> for IntoIter<'a, T> {
+impl<'a, T> AsRef<[T]> for IntoIterHandles<'a, T> {
     #[inline]
     fn as_ref(&self) -> &[T] {
         self.as_slice()
     }
 }
 
-impl<'a, T> AsMut<[T]> for IntoIter<'a, T> {
+impl<'a, T> AsMut<[T]> for IntoIterHandles<'a, T> {
     #[inline]
     fn as_mut(&mut self) -> &mut [T] {
         self.as_mut_slice()
     }
 }
 
-impl<'a, T> Borrow<[T]> for IntoIter<'a, T> {
+impl<'a, T> Borrow<[T]> for IntoIterHandles<'a, T> {
     #[inline]
     fn borrow(&self) -> &[T] {
         self.as_slice()
     }
 }
 
-impl<'a, T> BorrowMut<[T]> for IntoIter<'a, T> {
+impl<'a, T> BorrowMut<[T]> for IntoIterHandles<'a, T> {
     #[inline]
     fn borrow_mut(&mut self) -> &mut [T] {
         self.as_mut_slice()
     }
 }
 
-impl<'a, T: Unpin> FusedIterator for IntoIter<'a, T> {}
+impl<'a, T: Unpin> FusedIterator for IntoIterHandles<'a, T> {}
 
-impl<'a, T> Drop for IntoIter<'a, T> {
+impl<'a, T> Drop for IntoIterHandles<'a, T> {
     #[inline]
     fn drop(&mut self) {
         let (front, back) = (self.front_idx, self.back_idx);

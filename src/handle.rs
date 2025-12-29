@@ -6,7 +6,7 @@
 
 use crate::{
     Arena,
-    buffer::Buffer,
+    buffer::{Buffer, IntoIterHandles},
     layout_repeat,
     rc_handle::RcHandle,
     string_buffer::{FromUtf8Error, StringBuffer},
@@ -864,6 +864,24 @@ impl<'a, T> Handle<'a, [T]> {
         let rhs = unsafe { ptr::slice_from_raw_parts_mut(ptr.add(mid), len.unchecked_sub(mid)) };
 
         unsafe { (Handle::from_raw(lhs), Handle::from_raw(rhs)) }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn iter(&self) -> <&'_ [T] as IntoIterator>::IntoIter {
+        self.as_ref().iter()
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn iter_mut(&mut self) -> <&'_ mut [T] as IntoIterator>::IntoIter {
+        self.as_mut().iter_mut()
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn iter_handles(this: Self) -> IntoIterHandles<'a, T> {
+        Handle::into_buffer(this).iter_handles()
     }
 
     /// Transpose a `Handle` of slice `T` into a slice of `Uninit<T>`.
