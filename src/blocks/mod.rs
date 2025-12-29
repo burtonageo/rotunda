@@ -83,24 +83,16 @@ impl Blocks {
     }
 
     #[track_caller]
-    pub(super) fn deallocate_current(&self, allocator: &dyn Allocator) {
-        self.ensure_unlocked();
-
-        debug_assert_eq!(self.curr_block_pos.get(), 0);
-        unsafe {
-            dealloc_blocks(self.block_layout(), &self.curr_block, allocator);
-        }
-    }
-
-    #[track_caller]
     #[inline]
-    pub(super) const fn push_used_block(&self, block: NonNull<Block>) {
+    pub(super) fn push_used_block(&self, block: NonNull<Block>) {
+        self.ensure_unlocked();
         push_block(&self.used_blocks, block);
     }
 
     #[track_caller]
     #[inline]
-    pub(super) const fn push_free_block(&self, block: NonNull<Block>) {
+    pub(super) fn push_free_block(&self, block: NonNull<Block>) {
+        self.ensure_unlocked();
         push_block(&self.free_blocks, block);
     }
 
