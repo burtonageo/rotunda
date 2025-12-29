@@ -387,28 +387,205 @@ impl<'a, T> Buffer<'a, T> {
         unsafe { slice::from_raw_parts_mut(ptr as *mut T, self.len) }
     }
 
+    /// Returns the number of elements in the `Buffer`, also known as its 'length'.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buf = Buffer::with_capacity_in(&arena, 20);
+    /// assert_eq!(buf.len(), 0);
+    /// 
+    /// buf.extend([1, 2, 3]);
+    /// assert_eq!(buf.len(), 3);
+    /// 
+    /// buf.push(5);
+    /// assert_eq!(buf.len(), 4);
+    /// ```
+    #[must_use]
+    #[inline]
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns `true` if the `Buffer` contains no elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buf = Buffer::with_capacity_in(&arena, 5);
+    /// assert!(buf.is_empty());
+    ///
+    /// buf.push(25);
+    /// assert!(!buf.is_empty());
+    /// ```
+    #[must_use]
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns a by-reference iterator over all elements of this `Buffer`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let array = [1, 2, 3, 4, 5];
+    /// let buffer = Buffer::new_in(&arena, array.iter().copied());
+    ///
+    /// for (buf_item, arr_item)  in buffer.iter().zip(array) {
+    ///     assert_eq!(buf_item, &arr_item);
+    /// }
+    /// ```
     #[must_use]
     #[inline]
     pub fn iter(&'_ self) -> <&'_ [T] as IntoIterator>::IntoIter {
         self.as_slice().iter()
     }
 
+    /// Returns a mutable iterator over all elements of this `Buffer`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5]);
+    ///
+    /// for item in buffer.iter_mut() {
+    ///     *item += 4;
+    /// }
+    ///
+    /// assert_eq!(buffer, &[5, 6, 7, 8, 9]);
+    /// ```
     #[must_use]
     #[inline]
     pub fn iter_mut(&'_ mut self) -> <&'_ mut [T] as IntoIterator>::IntoIter {
         self.as_mut_slice().iter_mut()
     }
 
+    /// Returns a raw pointer to the `Buffer`'s data, or a dangling pointer if this
+    /// `Buffer` has a capacity of `0`.
+    ///
+    /// The caller must ensure that the `Buffer` outlives the returned pointer,
+    /// or the pointer may dangle.
+    ///
+    /// The caller must also ensure that the contents of the buffer are never written to
+    /// (except inside an [`UnsafeCell`]) using this pointer, or another pointer derived
+    /// from this one. If the buffer contents need to be mutated, use [`Buffer::as_mut_ptr`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let buffer = Buffer::new_in(&arena, [1, 2, 4, 8]);
+    ///
+    /// let ptr = buffer.as_ptr();
+    /// 
+    /// let mut n = 1;
+    /// unsafe {
+    ///     for i in 0..buffer.len() {
+    ///         assert_eq!(*ptr.add(i), n);
+    ///         n *= 2;
+    ///     }
+    /// }
+    /// ```
+    /// 
+    /// [`UnsafeCell`]: https://doc.rust-lang.org/stable/core/cell/struct.UnsafeCell.html
+    /// [`Buffer::as_mut_ptr`]: ./struct.Buffer.html#method.as_mut_ptr
     #[must_use]
     #[inline]
     pub const fn as_ptr(&self) -> *const T {
-        Handle::<[MaybeUninit<T>]>::as_ptr(&self.handle).cast::<T>()
+        Handle::as_ptr(&self.handle).cast::<T>()
     }
 
+    /// Returns a raw mutable pointer to the `Buffer`'s data, or a dangling pointer if this
+    /// `Buffer` has a capacity of `0`.
+    ///
+    /// The caller must ensure that the `Buffer` outlives the returned pointer,
+    /// or the pointer may dangle.
+    ///
+    /// # Examples
+    /// 
+    /// ```
+    /// use core::ptr;
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let my_data = [0usize, 1, 2, 3, 4, 5];
+    /// 
+    /// let mut buffer = Buffer::with_capacity_in(&arena, my_data.len());
+    ///
+    /// let buffer_ptr = buffer.as_mut_ptr();
+    /// let data_ptr = my_data.as_ptr();
+    ///
+    /// unsafe {
+    ///     // Initialize buffer with a copy, then set length to initialize it.
+    ///     ptr::copy_nonoverlapping(data_ptr, buffer_ptr, my_data.len());
+    ///     buffer.set_len(my_data.len());
+    /// }
+    ///
+    /// assert_eq!(&buffer, &my_data);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn as_mut_ptr(&mut self) -> *mut T {
-        Handle::<[MaybeUninit<T>]>::as_mut_ptr(&mut self.handle).cast::<T>()
+        Handle::as_mut_ptr(&mut self.handle).cast::<T>()
+    }
+
+    /// Returns a [`NonNull`] pointer to the `Buffer`'s data, or a dangling pointer if this
+    /// `Buffer` has a capacity of `0`.
+    ///
+    /// The caller must ensure that the `Buffer` outlives the returned pointer,
+    /// or the pointer may dangle.
+    ///
+    /// # Examples
+    /// 
+    /// ```
+    /// use core::ptr;
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let my_data = [0usize, 1, 2, 3, 4, 5];
+    /// 
+    /// let mut buffer = Buffer::with_capacity_in(&arena, my_data.len());
+    ///
+    /// let buffer_ptr = buffer.as_non_null();
+    ///
+    /// unsafe {
+    ///     // Initialize buffer with pointer writes, then set length to initialize it.
+    ///     for i in 0..my_data.len() {
+    ///         buffer_ptr.add(i).write(my_data[i]);
+    ///     }
+    ///     buffer.set_len(my_data.len());
+    /// }
+    ///
+    /// assert_eq!(&buffer, &my_data);
+    /// ```
+    /// 
+    /// [`NonNull`]: https://doc.rust-lang.org/stable/core/ptr/struct.NonNull.html
+    #[must_use]
+    #[inline]
+    pub const fn as_non_null(&mut self) -> NonNull<T> {
+        Handle::as_nonnull(&mut self.handle).cast::<T>()
     }
 
     /// Append the given `value` to the end of the `Buffer`.
@@ -847,8 +1024,9 @@ impl<'a, T> Buffer<'a, T> {
     /// # Safety
     ///
     /// You must ensure that all of the items contained in the `Buffer` up to `new_len`
-    /// are fully initialized. If this does not happen, then it may be possible to access
-    /// uninitialized memory.
+    /// are fully initialized, and that `new_len` is less than or equal to `capacity`.
+    /// If this is not upheld, then it may be possible to access uninitialized memory
+    /// through the `Buffer`.
     ///
     /// # Examples
     ///
@@ -1297,7 +1475,7 @@ impl<'b: 'a, 'a, T> IntoIterator for &'b mut Buffer<'a, T> {
     }
 }
 
-impl<'a, T> IntoIterator for Buffer<'a, T> {
+impl<'a, T: Unpin> IntoIterator for Buffer<'a, T> {
     type IntoIter = IntoIter<'a, T>;
     type Item = T;
     #[inline]
@@ -2325,7 +2503,7 @@ impl<'a, T: fmt::Debug> fmt::Debug for IntoIter<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for IntoIter<'a, T> {
+impl<'a, T: Unpin> Iterator for IntoIter<'a, T> {
     type Item = T;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -2346,7 +2524,7 @@ impl<'a, T> Iterator for IntoIter<'a, T> {
     }
 }
 
-impl<'a, T> DoubleEndedIterator for IntoIter<'a, T> {
+impl<'a, T: Unpin> DoubleEndedIterator for IntoIter<'a, T> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.front_idx >= self.back_idx {
@@ -2363,7 +2541,7 @@ impl<'a, T> DoubleEndedIterator for IntoIter<'a, T> {
     }
 }
 
-impl<'a, T> ExactSizeIterator for IntoIter<'a, T> {
+impl<'a, T: Unpin> ExactSizeIterator for IntoIter<'a, T> {
     #[inline]
     fn len(&self) -> usize {
         self.len_const()
@@ -2398,7 +2576,7 @@ impl<'a, T> BorrowMut<[T]> for IntoIter<'a, T> {
     }
 }
 
-impl<'a, T> FusedIterator for IntoIter<'a, T> {}
+impl<'a, T: Unpin> FusedIterator for IntoIter<'a, T> {}
 
 impl<'a, T> Drop for IntoIter<'a, T> {
     #[inline]

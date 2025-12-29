@@ -1193,7 +1193,7 @@ impl<'sl: 'a, 'a, T: 'a> IntoIterator for &'sl mut Handle<'a, [T]> {
     }
 }
 
-impl<'a, T> IntoIterator for Handle<'a, [T]> {
+impl<'a, T: Unpin> IntoIterator for Handle<'a, [T]> {
     type Item = T;
     type IntoIter = <Buffer<'a, T> as IntoIterator>::IntoIter;
 

@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-#![warn(missing_docs, clippy::missing_safety_doc)]
-
 //! A doubly-linked owned list of nodes, backed by an `Arena`.
 //!
 //! The `LinkedList` allows pushing and popping elements at either end of the list in constant time.
@@ -1180,7 +1178,7 @@ impl<'a, 't, T: Copy, A: Allocator> Extend<&'t T> for LinkedList<'a, T, A> {
     #[track_caller]
     #[inline]
     fn extend<I: IntoIterator<Item = &'t T>>(&mut self, iter: I) {
-        Extend::extend(self, iter.into_iter().copied())
+        Extend::extend(self, iter.into_iter().copied());
     }
 }
 
@@ -1189,7 +1187,7 @@ impl<'a, 't, T: Copy, A: Allocator> Extend<&'t [T]> for LinkedList<'a, T, A> {
     #[inline]
     fn extend<I: IntoIterator<Item = &'t [T]>>(&mut self, iter: I) {
         for item in iter {
-            Extend::extend(self, item.iter().copied())
+            Extend::extend(self, item.iter().copied());
         }
     }
 }
