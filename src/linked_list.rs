@@ -1051,7 +1051,7 @@ impl<'a, T, A: Allocator> Drop for LinkedList<'a, T, A> {
     fn drop(&mut self) {
         let size_of_node = mem::size_of::<Node<T>>();
        
-        for node in NodeIter::new(self) {
+        for node in NodeIter::new(self).rev() {
             let data = Node::data_ptr(node).as_ptr();
 
             unsafe {

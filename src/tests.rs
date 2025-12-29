@@ -848,6 +848,21 @@ fn test_list_reassign_to() {
 }
 
 #[test]
+fn test_list_drop_reclaim() {
+    let mut arena = Arena::new();
+
+    arena.force_push_new_block();
+    let ptr = arena.curr_block().map(|b| b.as_mut_ptr()).unwrap_or(ptr::null_mut());
+
+    let mut list = LinkedList::new(&arena);
+    list.extend([1, 2, 3, 4 ,5, 6]);
+    drop(list);
+
+    let ptr_2 = arena.curr_block().map(|b| b.as_mut_ptr()).unwrap_or(ptr::null_mut());
+    assert!(ptr::eq(ptr, ptr_2));
+}
+
+#[test]
 fn test_growable_buffer() {
     let arena = Arena::with_block_size(5 * mem::size_of::<i32>());
 
