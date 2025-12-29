@@ -663,14 +663,56 @@ impl<A: Allocator> Arena<A> {
     ///
     /// let mut arena = Arena::new();
     /// {
-    ///     let _handle = Handle::new_in(&arena, 23);
+    ///     let handle_1 = Handle::new_in(&arena, 23);
+    ///     arena.force_push_new_block();
+    /// 
+    ///     let handle_2 = Handle::new_in(&arena, 45);
+    ///     arena.force_push_new_block();
+    ///
+    ///     let handle_2 = Handle::new_in(&arena, 67);
+    ///     arena.force_push_new_block();
     /// }
     ///
     /// arena.reset();
+    /// arena.trim();
+    ///
+    /// assert!(arena.curr_block().is_some());
     /// ```
     #[inline]
     pub fn reset(&mut self) {
         self.blocks.reset();
+    }
+
+    /// Resets the `Arena` so that all used blocks, and the current block, are moved into
+    /// the free list.
+    ///
+    /// This method does not use the `Arena`'s allocator to perform any memory
+    /// deallocation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let mut arena = Arena::new();
+    /// {
+    ///     let handle_1 = Handle::new_in(&arena, 123);
+    ///     arena.force_push_new_block();
+    /// 
+    ///     let handle_2 = Handle::new_in(&arena, 456);
+    ///     arena.force_push_new_block();
+    ///
+    ///     let handle_2 = Handle::new_in(&arena, 789);
+    ///     arena.force_push_new_block();
+    /// }
+    ///
+    /// arena.reset_all();
+    /// arena.trim();
+    ///
+    /// assert!(arena.curr_block().is_none());
+    #[inline]
+    pub fn reset_all(&mut self) {
+        self.blocks.reset_all();
     }
 
     /// Deallocates all blocks in the `Arena`'s free list.

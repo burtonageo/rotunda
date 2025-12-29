@@ -50,6 +50,17 @@ impl Blocks {
 
     #[track_caller]
     #[inline]
+    pub(super) fn reset_all(&mut self) {
+        self.ensure_unlocked();
+        self.reset();
+
+        if let Some(block) = self.curr_block.replace(None) {
+            self.push_free_block(block);
+        }
+    }
+
+    #[track_caller]
+    #[inline]
     pub(super) fn trim(&self, allocator: &dyn Allocator) {
         self.ensure_unlocked();
 
