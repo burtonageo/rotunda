@@ -8,10 +8,13 @@ use crate::{
     rc_handle::{RcHandle, WeakHandle},
     string_buffer::StringBuffer,
 };
-use alloc::alloc::{Allocator, Layout};
+use alloc::alloc::{Allocator, Global, Layout};
 #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
 use allocator_api2::alloc::System;
-use core::{mem::{ManuallyDrop, MaybeUninit}, sync::atomic::AtomicUsize};
+use core::{
+    mem::{ManuallyDrop, MaybeUninit},
+    sync::atomic::AtomicUsize,
+};
 #[cfg(feature = "nightly")]
 use std::alloc::System;
 use std::{
@@ -342,7 +345,7 @@ fn test_rc() {
         let mut weak = WeakHandle::<'_, i32>::new();
         {
             let ptr = weak.clone().into_raw();
-            let weak_2 = unsafe { WeakHandle::from_raw(ptr) };
+            let weak_2 = unsafe { WeakHandle::<'_, i32, Global>::from_raw(ptr) };
             assert_eq!(weak_2.upgrade(), None);
         }
 

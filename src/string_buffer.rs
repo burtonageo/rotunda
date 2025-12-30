@@ -15,7 +15,7 @@ use core::{
     cmp,
     error::Error as ErrorTrait,
     fmt,
-    hash::Hash,
+    hash::{Hash, Hasher},
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
     ptr,
@@ -25,11 +25,11 @@ use core::{
 use serde_core::{Serialize, Serializer};
 
 #[derive(Default)]
-pub struct StringBuffer<'a> {
-    inner: Buffer<'a, u8>,
+pub struct StringBuffer<'a, A: Allocator = Global> {
+    inner: Buffer<'a, u8, A>,
 }
 
-impl<'a> StringBuffer<'a> {
+impl<'a, A: Allocator> StringBuffer<'a, A> {
     #[must_use]
     #[inline]
     pub const fn new() -> Self {
@@ -40,21 +40,21 @@ impl<'a> StringBuffer<'a> {
 
     #[must_use]
     #[inline]
-    pub const unsafe fn from_handle(handle: Handle<'a, [MaybeUninit<u8>]>) -> Self {
+    pub const unsafe fn from_handle(handle: Handle<'a, [MaybeUninit<u8>], A>) -> Self {
         Self {
             inner: unsafe { Buffer::from_raw_parts(handle, 0) },
         }
     }
 
     #[inline]
-    pub const fn from_str_handle(handle: Handle<'a, str>) -> Self {
+    pub const fn from_str_handle(handle: Handle<'a, str, A>) -> Self {
         Self {
             inner: Buffer::from_slice_handle(Handle::into_bytes(handle)),
         }
     }
 
     #[inline]
-    pub fn try_with_growable_in<A, E, F>(arena: &'a Arena<A>, f: F) -> Result<Self, E>
+    pub fn try_with_growable_in<E, F>(arena: &'a Arena<A>, f: F) -> Result<Self, E>
     where
         A: Allocator,
         F: for<'buf> FnOnce(&'buf mut GrowableStringBuffer<'a, A>) -> Result<(), E>,
@@ -68,9 +68,8 @@ impl<'a> StringBuffer<'a> {
     }
 
     #[inline]
-    pub fn with_growable<A, F>(arena: &'a Arena<A>, f: F) -> Self
+    pub fn with_growable<F>(arena: &'a Arena<A>, f: F) -> Self
     where
-        A: Allocator,
         F: for<'buf> FnOnce(&'buf mut GrowableStringBuffer<'a, A>),
     {
         let buffer = Buffer::with_growable_in(arena, |buf| {
@@ -82,7 +81,7 @@ impl<'a> StringBuffer<'a> {
     }
 
     #[inline]
-    pub const fn from_utf8(bytes: Buffer<'a, u8>) -> Result<Self, FromUtf8Error<'a>> {
+    pub const fn from_utf8(bytes: Buffer<'a, u8, A>) -> Result<Self, FromUtf8Error<'a, A>> {
         match str::from_utf8(bytes.as_slice()) {
             Ok(_) => unsafe { Ok(Self::from_utf8_unchecked(bytes)) },
             Err(error) => Err(FromUtf8Error::new(bytes, error)),
@@ -90,26 +89,26 @@ impl<'a> StringBuffer<'a> {
     }
 
     #[inline]
-    pub const unsafe fn from_utf8_unchecked(bytes: Buffer<'a, u8>) -> Self {
+    pub const unsafe fn from_utf8_unchecked(bytes: Buffer<'a, u8, A>) -> Self {
         Self { inner: bytes }
     }
 
     #[inline]
-    pub fn into_bytes(self) -> Buffer<'a, u8> {
+    pub fn into_bytes(self) -> Buffer<'a, u8, A> {
         self.inner
     }
 
     #[track_caller]
     #[inline]
     #[must_use]
-    pub fn with_capacity_in_arena<A: Allocator>(capacity: usize, arena: &'a Arena<A>) -> Self {
+    pub fn with_capacity_in_arena(capacity: usize, arena: &'a Arena<A>) -> Self {
         unsafe { Self::from_handle(Handle::new_slice_uninit_in(arena, capacity)) }
     }
 
     #[track_caller]
     #[inline]
     #[must_use]
-    pub fn new_in<S: AsRef<str>, A: Allocator>(arena: &'a Arena<A>, s: &S) -> Self {
+    pub fn new_in<S: AsRef<str>>(arena: &'a Arena<A>, s: &S) -> Self {
         let s = s.as_ref();
         let mut buf = StringBuffer::with_capacity_in_arena(s.len(), arena);
         buf.push_str(s);
@@ -117,7 +116,7 @@ impl<'a> StringBuffer<'a> {
     }
 
     #[inline]
-    pub fn split_at_spare_capacity(self) -> (StringBuffer<'a>, Buffer<'a, MaybeUninit<u8>>) {
+    pub fn split_at_spare_capacity(self) -> (Self, Buffer<'a, MaybeUninit<u8>, A>) {
         let (string, spare_cap) = self.inner.split_at_spare_capacity();
         unsafe {
             (
@@ -219,16 +218,16 @@ impl<'a> StringBuffer<'a> {
 
     #[must_use]
     #[inline]
-    pub fn into_str_handle(self) -> Handle<'a, str> {
+    pub fn into_str_handle(self) -> Handle<'a, str, A> {
         let len = self.len();
         let handle = self.inner.into_slice_handle();
         let slice_ptr = Handle::into_raw(handle);
         let bytes = ptr::slice_from_raw_parts_mut(slice_ptr as *mut u8, len);
-        unsafe { Handle::from_raw(bytes as *mut str) }
+        unsafe { Handle::from_raw_with_alloc(bytes as *mut str) }
     }
 }
 
-impl<'a> Extend<char> for StringBuffer<'a> {
+impl<'a, A: Allocator> Extend<char> for StringBuffer<'a, A> {
     #[track_caller]
     #[inline]
     fn extend<I: IntoIterator<Item = char>>(&mut self, iter: I) {
@@ -238,7 +237,7 @@ impl<'a> Extend<char> for StringBuffer<'a> {
     }
 }
 
-impl<'a, 'c> Extend<&'c char> for StringBuffer<'a> {
+impl<'a, 'c, A: Allocator> Extend<&'c char> for StringBuffer<'a, A> {
     #[track_caller]
     #[inline]
     fn extend<I: IntoIterator<Item = &'c char>>(&mut self, iter: I) {
@@ -246,7 +245,7 @@ impl<'a, 'c> Extend<&'c char> for StringBuffer<'a> {
     }
 }
 
-impl<'a, 's> Extend<&'s str> for StringBuffer<'a> {
+impl<'a, 's, A: Allocator> Extend<&'s str> for StringBuffer<'a, A> {
     #[track_caller]
     #[inline]
     fn extend<I: IntoIterator<Item = &'s str>>(&mut self, iter: I) {
@@ -256,7 +255,7 @@ impl<'a, 's> Extend<&'s str> for StringBuffer<'a> {
     }
 }
 
-impl<'a> Deref for StringBuffer<'a> {
+impl<'a, A: Allocator> Deref for StringBuffer<'a, A> {
     type Target = str;
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -264,95 +263,95 @@ impl<'a> Deref for StringBuffer<'a> {
     }
 }
 
-impl<'a> DerefMut for StringBuffer<'a> {
+impl<'a, A: Allocator> DerefMut for StringBuffer<'a, A> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.as_mut_str()
     }
 }
 
-impl<'a> Borrow<str> for StringBuffer<'a> {
+impl<'a, A: Allocator> Borrow<str> for StringBuffer<'a, A> {
     #[inline]
     fn borrow(&self) -> &str {
         self.as_str()
     }
 }
 
-impl<'a> BorrowMut<str> for StringBuffer<'a> {
+impl<'a, A: Allocator> BorrowMut<str> for StringBuffer<'a, A> {
     #[inline]
     fn borrow_mut(&mut self) -> &mut str {
         self.as_mut_str()
     }
 }
 
-impl<'a> AsRef<str> for StringBuffer<'a> {
+impl<'a, A: Allocator> AsRef<str> for StringBuffer<'a, A> {
     #[inline]
     fn as_ref(&self) -> &str {
         self.as_str()
     }
 }
 
-impl<'a> AsMut<str> for StringBuffer<'a> {
+impl<'a, A: Allocator> AsMut<str> for StringBuffer<'a, A> {
     #[inline]
     fn as_mut(&mut self) -> &mut str {
         self.as_mut_str()
     }
 }
 
-impl<'a> AsRef<[u8]> for StringBuffer<'a> {
+impl<'a, A: Allocator> AsRef<[u8]> for StringBuffer<'a, A> {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         self.as_bytes()
     }
 }
 
-impl<'a> fmt::Debug for StringBuffer<'a> {
+impl<'a, A: Allocator> fmt::Debug for StringBuffer<'a, A> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.as_str(), fmtr)
     }
 }
 
-impl<'a> fmt::Display for StringBuffer<'a> {
+impl<'a, A: Allocator> fmt::Display for StringBuffer<'a, A> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self.as_str(), fmtr)
     }
 }
 
-impl<'a> fmt::Write for StringBuffer<'a> {
+impl<'a, A: Allocator> fmt::Write for StringBuffer<'a, A> {
     #[inline]
     fn write_str(&mut self, s: &str) -> fmt::Result {
         StringBuffer::try_push_str(self, s).map_err(|_| fmt::Error)
     }
 }
 
-impl<'a> PartialEq for StringBuffer<'a> {
+impl<'a, A: Allocator> PartialEq for StringBuffer<'a, A> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         PartialEq::eq(self.as_str(), other.as_str())
     }
 }
 
-impl<'a> PartialEq<str> for StringBuffer<'a> {
+impl<'a, A: Allocator> PartialEq<str> for StringBuffer<'a, A> {
     #[inline]
     fn eq(&self, other: &str) -> bool {
         PartialEq::eq(self.as_str(), other)
     }
 }
 
-impl<'a> PartialEq<Handle<'_, str>> for StringBuffer<'a> {
+impl<'a, A: Allocator, A2: Allocator> PartialEq<Handle<'_, str, A2>> for StringBuffer<'a, A> {
     #[inline]
-    fn eq(&self, other: &Handle<str>) -> bool {
+    fn eq(&self, other: &Handle<'_, str, A2>) -> bool {
         PartialEq::<str>::eq(self.as_str(), other.as_ref())
     }
 }
 
-impl<'a> Eq for StringBuffer<'a> {}
+impl<'a, A: Allocator> Eq for StringBuffer<'a, A> {}
 
-impl<'a> Hash for StringBuffer<'a> {
+impl<'a, A: Allocator> Hash for StringBuffer<'a, A> {
     #[inline]
-    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_str().hash(state);
     }
 }
@@ -637,15 +636,24 @@ impl<'a, A: Allocator> DerefMut for GrowableStringBuffer<'a, A> {
     }
 }
 
-#[derive(Debug)]
-pub struct FromUtf8Error<'a> {
-    bytes: Buffer<'a, u8>,
+pub struct FromUtf8Error<'a, A: Allocator = Global> {
+    bytes: Buffer<'a, u8, A>,
     error: Utf8Error,
 }
 
-impl<'a> FromUtf8Error<'a> {
+impl<'a, A: Allocator> fmt::Debug for FromUtf8Error<'a, A> {
     #[inline]
-    pub(crate) const fn new(bytes: Buffer<'a, u8>, error: Utf8Error) -> Self {
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmtr.debug_struct("FromUtf8Error")
+            .field("bytes", &self.bytes)
+            .field("error", &self.error)
+            .finish()
+    }
+}
+
+impl<'a, A: Allocator> FromUtf8Error<'a, A> {
+    #[inline]
+    pub(crate) const fn new(bytes: Buffer<'a, u8, A>, error: Utf8Error) -> Self {
         Self { bytes, error }
     }
 
@@ -657,7 +665,7 @@ impl<'a> FromUtf8Error<'a> {
 
     #[must_use]
     #[inline]
-    pub fn into_bytes(self) -> Buffer<'a, u8> {
+    pub fn into_bytes(self) -> Buffer<'a, u8, A> {
         self.bytes
     }
 
@@ -668,14 +676,14 @@ impl<'a> FromUtf8Error<'a> {
     }
 }
 
-impl<'a> fmt::Display for FromUtf8Error<'a> {
+impl<'a, A: Allocator> fmt::Display for FromUtf8Error<'a, A> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self.utf8_error(), fmtr)
     }
 }
 
-impl<'a> ErrorTrait for FromUtf8Error<'a> {
+impl<'a, A: Allocator> ErrorTrait for FromUtf8Error<'a, A> {
     #[inline]
     fn source(&self) -> Option<&(dyn ErrorTrait + 'static)> {
         Some(&self.error)

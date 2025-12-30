@@ -15,7 +15,7 @@
 //! [`Vec<T>`]: https://doc.rust-lang.org/stable/std/vec/struct.Vec.html
 
 use crate::{Arena, InvariantLifetime, blocks::lock::BlockLock, handle::Handle};
-use alloc::alloc::{Allocator, Layout};
+use alloc::alloc::{Allocator, Global, Layout};
 use core::{
     borrow::{Borrow, BorrowMut},
     error::{self, Error},
@@ -62,19 +62,19 @@ macro_rules! buf {
 ///
 /// [`capacity()`]: ./struct.Buffer.html#method.capacity
 /// [module documentation]: ./index.html
-pub struct Buffer<'a, T> {
-    handle: Handle<'a, [MaybeUninit<T>]>,
+pub struct Buffer<'a, T, A: Allocator = Global> {
+    handle: Handle<'a, [MaybeUninit<T>], A>,
     len: usize,
-    _boo: PhantomData<T>,
+    _boo: PhantomData<(T, &'a Arena<A>)>,
 }
 
 // A buffer can be sent to other threads if the type within is
 // thread-safe - it is guaranteed to drop before the arena is
 // deallocated thanks to borrowing rules.
-unsafe impl<'a, T: Send> Send for Buffer<'a, T> {}
-unsafe impl<'a, T: Sync> Sync for Buffer<'a, T> {}
+unsafe impl<'a, T: Send, A: Allocator> Send for Buffer<'a, T, A> {}
+unsafe impl<'a, T: Sync, A: Allocator> Sync for Buffer<'a, T, A> {}
 
-impl<'a, T> Buffer<'a, T> {
+impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     /// Creates a new `Buffer` containing the contents of `iter`.
     ///
     /// # Examples
@@ -90,7 +90,7 @@ impl<'a, T> Buffer<'a, T> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_in<I: IntoIterator<Item = T>, A: Allocator>(arena: &'a Arena<A>, iter: I) -> Self
+    pub fn new_in<I: IntoIterator<Item = T>>(arena: &'a Arena<A>, iter: I) -> Self
     where
         I::IntoIter: ExactSizeIterator,
     {
@@ -117,7 +117,7 @@ impl<'a, T> Buffer<'a, T> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn with_capacity_in<A: Allocator>(arena: &'a Arena<A>, capacity: usize) -> Self {
+    pub fn with_capacity_in(arena: &'a Arena<A>, capacity: usize) -> Self {
         let handle = Handle::new_slice_uninit_in(arena, capacity);
         unsafe { Self::from_raw_parts(handle, 0) }
     }
@@ -149,11 +149,7 @@ impl<'a, T> Buffer<'a, T> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn from_fn_in<A: Allocator, F: FnMut(usize) -> T>(
-        arena: &'a Arena<A>,
-        len: usize,
-        f: F,
-    ) -> Self {
+    pub fn from_fn_in<F: FnMut(usize) -> T>(arena: &'a Arena<A>, len: usize, f: F) -> Self {
         let mut buf = Buffer::with_capacity_in(arena, len);
         buf.extend((0..len).map(f));
         buf
@@ -161,9 +157,8 @@ impl<'a, T> Buffer<'a, T> {
 
     #[track_caller]
     #[inline]
-    pub fn try_with_growable_in<A, E, F>(arena: &'a Arena<A>, f: F) -> Result<Self, E>
+    pub fn try_with_growable_in<E, F>(arena: &'a Arena<A>, f: F) -> Result<Self, E>
     where
-        A: Allocator,
         F: for<'buf> FnOnce(&'buf mut GrowableBuffer<'a, T, A>) -> Result<(), E>,
     {
         let curr_block_cap = arena.curr_block_capacity();
@@ -238,13 +233,12 @@ impl<'a, T> Buffer<'a, T> {
     /// [`Buffer::try_with_growable_in`]: ./struct.Buffer.html#method.try_with_growable_in
     #[track_caller]
     #[inline]
-    pub fn with_growable_in<A, F>(arena: &'a Arena<A>, f: F) -> Self
+    pub fn with_growable_in<F>(arena: &'a Arena<A>, f: F) -> Self
     where
-        A: Allocator,
         F: for<'buf> FnOnce(&'buf mut GrowableBuffer<'a, T, A>),
     {
         enum Never {}
-        let result = Self::try_with_growable_in::<A, Never, _>(arena, |buffer| {
+        let result = Self::try_with_growable_in::<Never, _>(arena, |buffer| {
             f(buffer);
             Ok(())
         });
@@ -302,7 +296,10 @@ impl<'a, T> Buffer<'a, T> {
     /// ```
     #[must_use]
     #[inline]
-    pub const unsafe fn from_raw_parts(handle: Handle<'a, [MaybeUninit<T>]>, len: usize) -> Self {
+    pub const unsafe fn from_raw_parts(
+        handle: Handle<'a, [MaybeUninit<T>], A>,
+        len: usize,
+    ) -> Self {
         Self {
             handle,
             len,
@@ -333,7 +330,7 @@ impl<'a, T> Buffer<'a, T> {
     /// ```
     #[must_use]
     #[inline]
-    pub const fn into_raw_parts(self) -> (Handle<'a, [MaybeUninit<T>]>, usize) {
+    pub const fn into_raw_parts(self) -> (Handle<'a, [MaybeUninit<T>], A>, usize) {
         let handle = unsafe { mem::transmute_copy(&self.handle) };
         let len = self.len;
         let _this = ManuallyDrop::new(self);
@@ -501,7 +498,7 @@ impl<'a, T> Buffer<'a, T> {
     /// ```
     #[must_use]
     #[inline]
-    pub fn iter_handles(self) -> IntoIterHandles<'a, T> {
+    pub fn iter_handles(self) -> IntoIterHandles<'a, T, A> {
         IntoIterHandles::new(self)
     }
 
@@ -871,12 +868,12 @@ impl<'a, T> Buffer<'a, T> {
     /// ```
     #[must_use]
     #[inline]
-    pub const fn into_slice_handle(mut self) -> Handle<'a, [T]> {
+    pub const fn into_slice_handle(mut self) -> Handle<'a, [T], A> {
         let ptr = Handle::as_mut_ptr(&mut self.handle);
         let ptr = ptr::slice_from_raw_parts_mut(ptr as *const T as *mut T, self.len);
         let _this = ManuallyDrop::new(self);
 
-        unsafe { Handle::from_raw(ptr) }
+        unsafe { Handle::from_raw_with_alloc(ptr) }
     }
 
     /// Create a `Buffer` from the given `Handle`.
@@ -900,12 +897,12 @@ impl<'a, T> Buffer<'a, T> {
     /// [`len()`]: ./struct.Handle.html#method.len
     #[must_use]
     #[inline]
-    pub const fn from_slice_handle(mut handle: Handle<'a, [T]>) -> Self {
+    pub const fn from_slice_handle(mut handle: Handle<'a, [T], A>) -> Self {
         let ptr = Handle::as_mut_ptr(&mut handle);
         let len = ptr.len();
         let new_handle = unsafe {
             let ptr = ptr::slice_from_raw_parts_mut(ptr as *mut MaybeUninit<T>, len);
-            Handle::from_raw(ptr)
+            Handle::from_raw_with_alloc(ptr)
         };
 
         let _hndl = ManuallyDrop::new(handle);
@@ -914,7 +911,7 @@ impl<'a, T> Buffer<'a, T> {
     }
 
     #[inline]
-    pub fn split_at_spare_capacity(self) -> (Handle<'a, [T]>, Handle<'a, [MaybeUninit<T>]>) {
+    pub fn split_at_spare_capacity(self) -> (Handle<'a, [T], A>, Handle<'a, [MaybeUninit<T>], A>) {
         let (handle, len) = Self::into_raw_parts(self);
         if len == 0 {
             return (Handle::empty(), handle);
@@ -927,23 +924,20 @@ impl<'a, T> Buffer<'a, T> {
     }
 
     #[inline]
-    pub fn split_at(this: Self, mid: usize) -> (Buffer<'a, T>, Buffer<'a, T>) {
+    pub fn split_at(this: Self, mid: usize) -> (Self, Self) {
         let (lhs, rhs) = Handle::split_at(this.into(), mid);
         (Buffer::from(lhs), Buffer::from(rhs))
     }
 
     #[inline]
-    pub fn split_at_checked(
-        this: Self,
-        mid: usize,
-    ) -> Result<(Buffer<'a, T>, Buffer<'a, T>), Self> {
+    pub fn split_at_checked(this: Self, mid: usize) -> Result<(Self, Self), Self> {
         Handle::split_at_checked(this.into(), mid)
             .map_err(Buffer::from_slice_handle)
             .map(|(lhs, rhs)| (Buffer::from(lhs), Buffer::from(rhs)))
     }
 
     #[inline]
-    pub unsafe fn split_at_unchecked(this: Self, mid: usize) -> (Buffer<'a, T>, Buffer<'a, T>) {
+    pub unsafe fn split_at_unchecked(this: Self, mid: usize) -> (Self, Self) {
         let (lhs, rhs) = unsafe { Handle::split_at_unchecked(this.into(), mid) };
         (Buffer::from(lhs), Buffer::from(rhs))
     }
@@ -1228,7 +1222,7 @@ impl<'a, T> Buffer<'a, T> {
     }
 }
 
-impl<'a, T: Clone> Buffer<'a, T> {
+impl<'a, T: Clone, A: Allocator> Buffer<'a, T, A> {
     /// Resize the `Buffer` to the given `new_len`.
     ///
     /// If `new_len` is smaller than the current length, elements are dropped.
@@ -1323,7 +1317,7 @@ impl<'a, T: Clone> Buffer<'a, T> {
     }
 }
 
-impl<'a, T: Copy> Buffer<'a, T> {
+impl<'a, T: Copy, A: Allocator> Buffer<'a, T, A> {
     /// Create a new `Buffer` containing the contents of `slice`.
     ///
     /// # Panics
@@ -1344,7 +1338,7 @@ impl<'a, T: Copy> Buffer<'a, T> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_slice_copied_in<A: Allocator>(arena: &'a Arena<A>, slice: &'_ [T]) -> Self {
+    pub fn new_slice_copied_in(arena: &'a Arena<A>, slice: &'_ [T]) -> Self {
         let mut buf = Buffer::with_capacity_in(arena, slice.len());
         buf.extend_from_slice_copy(slice);
         buf
@@ -1388,114 +1382,118 @@ impl<'a, T: Copy> Buffer<'a, T> {
     }
 }
 
-impl<'a, T: fmt::Debug> fmt::Debug for Buffer<'a, T> {
+impl<'a, T: fmt::Debug, A: Allocator> fmt::Debug for Buffer<'a, T, A> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&self.as_slice(), fmtr)
     }
 }
 
-impl<'a, T> Default for Buffer<'a, T> {
+impl<'a, T, A: Allocator> Default for Buffer<'a, T, A> {
     #[inline]
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, T: PartialEq> PartialEq for Buffer<'a, T> {
+impl<'a, T: PartialEq, A: Allocator> PartialEq for Buffer<'a, T, A> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.as_slice().eq(other.as_slice())
     }
 }
 
-impl<'a, T: PartialEq> PartialEq<[T]> for Buffer<'a, T> {
+impl<'a, T: PartialEq, A: Allocator> PartialEq<[T]> for Buffer<'a, T, A> {
     #[inline]
     fn eq(&self, other: &[T]) -> bool {
         self.as_slice().eq(other)
     }
 }
 
-impl<'a, T: PartialEq, const N: usize> PartialEq<[T; N]> for Buffer<'a, T> {
+impl<'a, T: PartialEq, A: Allocator, const N: usize> PartialEq<[T; N]> for Buffer<'a, T, A> {
     #[inline]
     fn eq(&self, other: &[T; N]) -> bool {
         PartialEq::eq(self, &other[..])
     }
 }
 
-impl<'a, 's, T: PartialEq> PartialEq<&'s [T]> for Buffer<'a, T> {
+impl<'a, 's, T: PartialEq, A: Allocator> PartialEq<&'s [T]> for Buffer<'a, T, A> {
     #[inline]
     fn eq(&self, other: &&'s [T]) -> bool {
         self.as_slice().eq(*other)
     }
 }
 
-impl<'a, 's, T: PartialEq, const N: usize> PartialEq<&'s [T; N]> for Buffer<'a, T> {
+impl<'a, 's, T: PartialEq, A: Allocator, const N: usize> PartialEq<&'s [T; N]>
+    for Buffer<'a, T, A>
+{
     #[inline]
     fn eq(&self, other: &&'s [T; N]) -> bool {
         PartialEq::eq(self, &other[..])
     }
 }
 
-impl<'a, 's, T: PartialEq> PartialEq<&'s mut [T]> for Buffer<'a, T> {
+impl<'a, 's, T: PartialEq, A: Allocator> PartialEq<&'s mut [T]> for Buffer<'a, T, A> {
     #[inline]
     fn eq(&self, other: &&'s mut [T]) -> bool {
         self.as_slice().eq(*other)
     }
 }
 
-impl<'a, 's, T: PartialEq, const N: usize> PartialEq<&'s mut [T; N]> for Buffer<'a, T> {
+impl<'a, 's, T: PartialEq, A: Allocator, const N: usize> PartialEq<&'s mut [T; N]>
+    for Buffer<'a, T, A>
+{
     #[inline]
     fn eq(&self, other: &&'s mut [T; N]) -> bool {
         PartialEq::eq(self, &other[..])
     }
 }
 
-impl<'a, T: PartialEq> PartialEq<Handle<'_, [T]>> for Buffer<'a, T> {
+impl<'a, T: PartialEq, A: Allocator> PartialEq<Handle<'_, [T]>> for Buffer<'a, T, A> {
     #[inline]
     fn eq(&self, other: &Handle<'_, [T]>) -> bool {
         self.as_slice().eq(other.as_ref())
     }
 }
 
-impl<'a, T: Eq> Eq for Buffer<'a, T> {}
+impl<'a, T: Eq, A: Allocator> Eq for Buffer<'a, T, A> {}
 
-impl<'a, T: Hash> Hash for Buffer<'a, T> {
+impl<'a, T: Hash, A: Allocator> Hash for Buffer<'a, T, A> {
     #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_slice().hash(state)
     }
 }
 
-impl<'a, T> AsRef<[T]> for Buffer<'a, T> {
+impl<'a, T, A: Allocator> AsRef<[T]> for Buffer<'a, T, A> {
     #[inline]
     fn as_ref(&self) -> &[T] {
         self.as_slice()
     }
 }
 
-impl<'a, T> AsMut<[T]> for Buffer<'a, T> {
+impl<'a, T, A: Allocator> AsMut<[T]> for Buffer<'a, T, A> {
     #[inline]
     fn as_mut(&mut self) -> &mut [T] {
         self.as_mut_slice()
     }
 }
 
-impl<'a, T> Borrow<[T]> for Buffer<'a, T> {
+impl<'a, T, A: Allocator> Borrow<[T]> for Buffer<'a, T, A> {
     #[inline]
     fn borrow(&self) -> &[T] {
         self.as_slice()
     }
 }
 
-impl<'a, T> BorrowMut<[T]> for Buffer<'a, T> {
+impl<'a, T, A: Allocator> BorrowMut<[T]> for Buffer<'a, T, A> {
     #[inline]
     fn borrow_mut(&mut self) -> &mut [T] {
         self.as_mut_slice()
     }
 }
 
-impl<'a, T> Deref for Buffer<'a, T> {
+impl<'a, T, A: Allocator> Deref for Buffer<'a, T, A> {
     type Target = [T];
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -1503,14 +1501,14 @@ impl<'a, T> Deref for Buffer<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for Buffer<'a, T> {
+impl<'a, T, A: Allocator> DerefMut for Buffer<'a, T, A> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.as_mut_slice()
     }
 }
 
-impl<'a, T, I: SliceIndex<[T]>> Index<I> for Buffer<'a, T> {
+impl<'a, T, A: Allocator, I: SliceIndex<[T]>> Index<I> for Buffer<'a, T, A> {
     type Output = <[T] as Index<I>>::Output;
     #[track_caller]
     #[inline]
@@ -1519,7 +1517,7 @@ impl<'a, T, I: SliceIndex<[T]>> Index<I> for Buffer<'a, T> {
     }
 }
 
-impl<'a, T, I: SliceIndex<[T]>> IndexMut<I> for Buffer<'a, T> {
+impl<'a, T, A: Allocator, I: SliceIndex<[T]>> IndexMut<I> for Buffer<'a, T, A> {
     #[track_caller]
     #[inline]
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
@@ -1527,7 +1525,7 @@ impl<'a, T, I: SliceIndex<[T]>> IndexMut<I> for Buffer<'a, T> {
     }
 }
 
-impl<'b: 'a, 'a, T> IntoIterator for &'b Buffer<'a, T> {
+impl<'b: 'a, 'a, T, A: Allocator> IntoIterator for &'b Buffer<'a, T, A> {
     type IntoIter = <&'b [T] as IntoIterator>::IntoIter;
     type Item = &'a T;
     #[inline]
@@ -1536,7 +1534,7 @@ impl<'b: 'a, 'a, T> IntoIterator for &'b Buffer<'a, T> {
     }
 }
 
-impl<'b: 'a, 'a, T> IntoIterator for &'b mut Buffer<'a, T> {
+impl<'b: 'a, 'a, T, A: Allocator> IntoIterator for &'b mut Buffer<'a, T, A> {
     type IntoIter = <&'b mut [T] as IntoIterator>::IntoIter;
     type Item = &'a mut T;
     #[inline]
@@ -1545,8 +1543,8 @@ impl<'b: 'a, 'a, T> IntoIterator for &'b mut Buffer<'a, T> {
     }
 }
 
-impl<'a, T: Unpin> IntoIterator for Buffer<'a, T> {
-    type IntoIter = IntoIter<'a, T>;
+impl<'a, T: Unpin, A: Allocator> IntoIterator for Buffer<'a, T, A> {
+    type IntoIter = IntoIter<'a, T, A>;
     type Item = T;
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -1554,7 +1552,7 @@ impl<'a, T: Unpin> IntoIterator for Buffer<'a, T> {
     }
 }
 
-impl<'a, T> Extend<T> for Buffer<'a, T> {
+impl<'a, T, A: Allocator> Extend<T> for Buffer<'a, T, A> {
     #[track_caller]
     #[inline]
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
@@ -1562,7 +1560,7 @@ impl<'a, T> Extend<T> for Buffer<'a, T> {
     }
 }
 
-impl<'a, 't, T: Copy> Extend<&'t T> for Buffer<'a, T> {
+impl<'a, 't, T: Copy, A: Allocator> Extend<&'t T> for Buffer<'a, T, A> {
     #[track_caller]
     #[inline]
     fn extend<I: IntoIterator<Item = &'t T>>(&mut self, iter: I) {
@@ -1570,7 +1568,7 @@ impl<'a, 't, T: Copy> Extend<&'t T> for Buffer<'a, T> {
     }
 }
 
-impl<'a, 't, T: Copy> Extend<&'t [T]> for Buffer<'a, T> {
+impl<'a, 't, T: Copy, A: Allocator> Extend<&'t [T]> for Buffer<'a, T, A> {
     #[track_caller]
     #[inline]
     fn extend<I: IntoIterator<Item = &'t [T]>>(&mut self, iter: I) {
@@ -1580,22 +1578,22 @@ impl<'a, 't, T: Copy> Extend<&'t [T]> for Buffer<'a, T> {
     }
 }
 
-impl<'a, T> From<Handle<'a, [T]>> for Buffer<'a, T> {
+impl<'a, T, A: Allocator> From<Handle<'a, [T], A>> for Buffer<'a, T, A> {
     #[inline]
-    fn from(value: Handle<'a, [T]>) -> Self {
+    fn from(value: Handle<'a, [T], A>) -> Self {
         Handle::into_buffer(value)
     }
 }
 
-impl<'a, T> From<IntoIter<'a, T>> for Buffer<'a, T> {
+impl<'a, T, A: Allocator> From<IntoIter<'a, T, A>> for Buffer<'a, T, A> {
     #[inline]
-    fn from(value: IntoIter<'a, T>) -> Self {
+    fn from(value: IntoIter<'a, T, A>) -> Self {
         value.into_buffer()
     }
 }
 
 #[cfg(feature = "std")]
-impl<'a> Write for Buffer<'a, u8> {
+impl<'a, A: Allocator> Write for Buffer<'a, u8, A> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let space = self.capacity() - self.len();
@@ -1648,7 +1646,7 @@ impl<'a> Write for Buffer<'a, u8> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> Read for Buffer<'a, u8> {
+impl<'a, A: Allocator> Read for Buffer<'a, u8, A> {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.as_slice().read(buf)
@@ -1689,7 +1687,7 @@ impl<'a> Read for Buffer<'a, u8> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> BufRead for Buffer<'a, u8> {
+impl<'a, A: Allocator> BufRead for Buffer<'a, u8, A> {
     #[inline]
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         Ok(self.as_slice())
@@ -1712,18 +1710,18 @@ impl<'a> BufRead for Buffer<'a, u8> {
 }
 
 #[cfg(feature = "serde")]
-impl<'a, T: Serialize> Serialize for Buffer<'a, T> {
+impl<'a, T: Serialize, A: Allocator> Serialize for Buffer<'a, T, A> {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_seq(self.iter())
     }
 }
 
-impl<'a, T> Drop for Buffer<'a, T> {
+impl<'a, T, A: Allocator> Drop for Buffer<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            self.drop_initialized_contents(..self.len);
+            Buffer::drop_initialized_contents(self, ..self.len);
         }
     }
 }
@@ -2076,7 +2074,7 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     }
 
     #[inline]
-    fn into_buffer(self) -> Buffer<'a, T> {
+    fn into_buffer(self) -> Buffer<'a, T, A> {
         let data = self.backing_storage.as_ptr().cast::<MaybeUninit<T>>();
         let handle = unsafe { Handle::slice_from_raw_parts(data, self.cap) };
 
@@ -2436,11 +2434,11 @@ impl<I: IntoIterator> Error for TryExtendError<I> {}
 ///
 /// [`Buffer`]: ./struct.Buffer.html
 /// [`Buffer::into_iter`]: ./struct.Buffer.html#method.into_iter
-pub struct IntoIter<'a, T> {
-    iter: IntoIterHandles<'a, T>,
+pub struct IntoIter<'a, T, A: Allocator = Global> {
+    iter: IntoIterHandles<'a, T, A>,
 }
 
-impl<'a, T> IntoIter<'a, T> {
+impl<'a, T, A: Allocator> IntoIter<'a, T, A> {
     /// Access the elements yet to be iterated through an immutable slice.
     ///
     /// # Examples
@@ -2511,9 +2509,9 @@ impl<'a, T> IntoIter<'a, T> {
     /// ```
     #[must_use]
     #[inline]
-    pub fn into_buffer(self) -> Buffer<'a, T> {
+    pub fn into_buffer(self) -> Buffer<'a, T, A> {
         let IntoIter { iter } = self;
-        let cap = Handle::<'_, [MaybeUninit<T>]>::as_ptr(&iter.data).len();
+        let cap = Handle::as_ptr(&iter.data).len();
         let new_len = iter.len_const();
         let start = iter.front_idx;
 
@@ -2554,27 +2552,27 @@ impl<'a, T> IntoIter<'a, T> {
     /// ```
     #[must_use]
     #[inline]
-    pub fn into_slice_handle(self) -> Handle<'a, [T]> {
+    pub fn into_slice_handle(self) -> Handle<'a, [T], A> {
         self.into_buffer().into_slice_handle()
     }
 
     #[must_use]
     #[inline]
-    const fn new(buffer: Buffer<'a, T>) -> Self {
+    const fn new(buffer: Buffer<'a, T, A>) -> Self {
         Self {
             iter: IntoIterHandles::new(buffer),
         }
     }
 }
 
-impl<'a, T: fmt::Debug> fmt::Debug for IntoIter<'a, T> {
+impl<'a, T: fmt::Debug, A: Allocator> fmt::Debug for IntoIter<'a, T, A> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&self.iter, fmtr)
     }
 }
 
-impl<'a, T: Unpin> Iterator for IntoIter<'a, T> {
+impl<'a, T: Unpin, A: Allocator> Iterator for IntoIter<'a, T, A> {
     type Item = T;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -2587,49 +2585,49 @@ impl<'a, T: Unpin> Iterator for IntoIter<'a, T> {
     }
 }
 
-impl<'a, T: Unpin> DoubleEndedIterator for IntoIter<'a, T> {
+impl<'a, T: Unpin, A: Allocator> DoubleEndedIterator for IntoIter<'a, T, A> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         self.iter.next_back().map(Handle::into_inner)
     }
 }
 
-impl<'a, T: Unpin> ExactSizeIterator for IntoIter<'a, T> {
+impl<'a, T: Unpin, A: Allocator> ExactSizeIterator for IntoIter<'a, T, A> {
     #[inline]
     fn len(&self) -> usize {
         self.iter.len()
     }
 }
 
-impl<'a, T> AsRef<[T]> for IntoIter<'a, T> {
+impl<'a, T, A: Allocator> AsRef<[T]> for IntoIter<'a, T, A> {
     #[inline]
     fn as_ref(&self) -> &[T] {
         self.as_slice()
     }
 }
 
-impl<'a, T> AsMut<[T]> for IntoIter<'a, T> {
+impl<'a, T, A: Allocator> AsMut<[T]> for IntoIter<'a, T, A> {
     #[inline]
     fn as_mut(&mut self) -> &mut [T] {
         self.as_mut_slice()
     }
 }
 
-impl<'a, T> Borrow<[T]> for IntoIter<'a, T> {
+impl<'a, T, A: Allocator> Borrow<[T]> for IntoIter<'a, T, A> {
     #[inline]
     fn borrow(&self) -> &[T] {
         self.as_slice()
     }
 }
 
-impl<'a, T> BorrowMut<[T]> for IntoIter<'a, T> {
+impl<'a, T, A: Allocator> BorrowMut<[T]> for IntoIter<'a, T, A> {
     #[inline]
     fn borrow_mut(&mut self) -> &mut [T] {
         self.as_mut_slice()
     }
 }
 
-impl<'a, T: Unpin> FusedIterator for IntoIter<'a, T> {}
+impl<'a, T: Unpin, A: Allocator> FusedIterator for IntoIter<'a, T, A> {}
 
 /// An iterator over a [`Buffer`], yielding each element as a `Handle<T>`
 ///
@@ -2637,13 +2635,13 @@ impl<'a, T: Unpin> FusedIterator for IntoIter<'a, T> {}
 ///
 /// [`Buffer`]: ./struct.Buffer.html
 /// [`Buffer::iter_handles`]: ./struct.Buffer.html#method.iter_handles
-pub struct IntoIterHandles<'a, T> {
-    data: Handle<'a, [MaybeUninit<T>]>,
+pub struct IntoIterHandles<'a, T, A: Allocator = Global> {
+    data: Handle<'a, [MaybeUninit<T>], A>,
     front_idx: usize,
     back_idx: usize,
 }
 
-impl<'a, T> IntoIterHandles<'a, T> {
+impl<'a, T, A: Allocator> IntoIterHandles<'a, T, A> {
     /// Access the elements yet to be iterated through an immutable slice.
     ///
     /// # Examples
@@ -2721,7 +2719,7 @@ impl<'a, T> IntoIterHandles<'a, T> {
     /// ```
     #[must_use]
     #[inline]
-    pub fn into_buffer(self) -> Buffer<'a, T> {
+    pub fn into_buffer(self) -> Buffer<'a, T, A> {
         let new_len = self.len_const();
         let start = self.front_idx;
 
@@ -2730,7 +2728,7 @@ impl<'a, T> IntoIterHandles<'a, T> {
             mem::forget(self);
             let ptr = Handle::into_raw(data).cast::<MaybeUninit<T>>().add(start);
             let ptr = ptr::slice_from_raw_parts_mut(ptr, new_len);
-            let handle = Handle::from_raw(ptr);
+            let handle = Handle::from_raw_with_alloc(ptr);
             Buffer::from_raw_parts(handle, new_len)
         }
     }
@@ -2756,13 +2754,13 @@ impl<'a, T> IntoIterHandles<'a, T> {
     /// ```
     #[must_use]
     #[inline]
-    pub fn into_slice_handle(self) -> Handle<'a, [T]> {
+    pub fn into_slice_handle(self) -> Handle<'a, [T], A> {
         self.into_buffer().into_slice_handle()
     }
 
     #[must_use]
     #[inline]
-    const fn new(buffer: Buffer<'a, T>) -> Self {
+    const fn new(buffer: Buffer<'a, T, A>) -> Self {
         let len = buffer.as_slice().len();
         let data = Handle::transpose_into_uninit(buffer.into_slice_handle());
 
@@ -2796,8 +2794,8 @@ impl<'a, T> IntoIterHandles<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for IntoIterHandles<'a, T> {
-    type Item = Handle<'a, T>;
+impl<'a, T, A: Allocator> Iterator for IntoIterHandles<'a, T, A> {
+    type Item = Handle<'a, T, A>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -2809,7 +2807,7 @@ impl<'a, T> Iterator for IntoIterHandles<'a, T> {
             let ptr = Handle::as_mut_ptr(&mut self.data)
                 .cast::<T>()
                 .add(self.front_idx);
-            Handle::from_raw(ptr)
+            Handle::from_raw_with_alloc(ptr)
         };
 
         self.front_idx += 1;
@@ -2823,7 +2821,7 @@ impl<'a, T> Iterator for IntoIterHandles<'a, T> {
     }
 }
 
-impl<'a, T> DoubleEndedIterator for IntoIterHandles<'a, T> {
+impl<'a, T, A: Allocator> DoubleEndedIterator for IntoIterHandles<'a, T, A> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.front_idx >= self.back_idx {
@@ -2833,7 +2831,7 @@ impl<'a, T> DoubleEndedIterator for IntoIterHandles<'a, T> {
         let item = unsafe {
             let idx = self.back_idx.saturating_sub(1);
             let ptr = Handle::as_mut_ptr(&mut self.data).cast::<T>().add(idx);
-            Handle::from_raw(ptr)
+            Handle::from_raw_with_alloc(ptr)
         };
 
         self.back_idx -= 1;
@@ -2841,14 +2839,14 @@ impl<'a, T> DoubleEndedIterator for IntoIterHandles<'a, T> {
     }
 }
 
-impl<'a, T> ExactSizeIterator for IntoIterHandles<'a, T> {
+impl<'a, T, A: Allocator> ExactSizeIterator for IntoIterHandles<'a, T, A> {
     #[inline]
     fn len(&self) -> usize {
         self.len_const()
     }
 }
 
-impl<'a, T: fmt::Debug> fmt::Debug for IntoIterHandles<'a, T> {
+impl<'a, T: fmt::Debug, A: Allocator> fmt::Debug for IntoIterHandles<'a, T, A> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
         struct Ellipsis;
@@ -2876,37 +2874,37 @@ impl<'a, T: fmt::Debug> fmt::Debug for IntoIterHandles<'a, T> {
     }
 }
 
-impl<'a, T> AsRef<[T]> for IntoIterHandles<'a, T> {
+impl<'a, T, A: Allocator> AsRef<[T]> for IntoIterHandles<'a, T, A> {
     #[inline]
     fn as_ref(&self) -> &[T] {
         self.as_slice()
     }
 }
 
-impl<'a, T> AsMut<[T]> for IntoIterHandles<'a, T> {
+impl<'a, T, A: Allocator> AsMut<[T]> for IntoIterHandles<'a, T, A> {
     #[inline]
     fn as_mut(&mut self) -> &mut [T] {
         self.as_mut_slice()
     }
 }
 
-impl<'a, T> Borrow<[T]> for IntoIterHandles<'a, T> {
+impl<'a, T, A: Allocator> Borrow<[T]> for IntoIterHandles<'a, T, A> {
     #[inline]
     fn borrow(&self) -> &[T] {
         self.as_slice()
     }
 }
 
-impl<'a, T> BorrowMut<[T]> for IntoIterHandles<'a, T> {
+impl<'a, T, A: Allocator> BorrowMut<[T]> for IntoIterHandles<'a, T, A> {
     #[inline]
     fn borrow_mut(&mut self) -> &mut [T] {
         self.as_mut_slice()
     }
 }
 
-impl<'a, T> FusedIterator for IntoIterHandles<'a, T> {}
+impl<'a, T, A: Allocator> FusedIterator for IntoIterHandles<'a, T, A> {}
 
-impl<'a, T> Drop for IntoIterHandles<'a, T> {
+impl<'a, T, A: Allocator> Drop for IntoIterHandles<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
         let (front, back) = (self.front_idx, self.back_idx);
