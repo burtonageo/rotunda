@@ -157,16 +157,13 @@ fn test_arena_slice() {
         assert_eq!(*val, i + (LEN / 2));
     }
 
-    let mut handle = Handle::<[i32]>::default();
+    let mut handle = Handle::<[i32]>::empty_in(&arena);
     assert!(handle.is_empty());
 
     handle = Handle::<[i32]>::new_slice_from_iter_in(&arena, [1, 2, 3, 4, 5]);
     assert_eq!(&*handle, &[1, 2, 3, 4, 5]);
 
-    handle = Handle::empty();
-    assert!(handle.is_empty());
-
-    let handle = Handle::<str>::default();
+    handle = Handle::empty_in(&arena);
     assert!(handle.is_empty());
 }
 
@@ -557,7 +554,7 @@ fn test_buffer() {
     buffer.extend_from_slice(&[5, 6]);
     assert_eq!(&*buffer, &[1, 2, 3, 4, 5]);
 
-    let mut buffer = Buffer::<i32>::new();
+    let mut buffer = Buffer::<i32>::empty_in(&arena);
     let handle = Handle::new_in(&arena, 42);
 
     if *handle == 42 {
@@ -649,7 +646,7 @@ fn test_string_buffer() {
     let arena = Arena::new();
 
     arena.with_scope(|| {
-        let mut string_buf = StringBuffer::with_capacity_in_arena(200, &arena);
+        let mut string_buf = StringBuffer::with_capacity_in(200, &arena);
 
         string_buf.push_str("Lorem ipsum");
         string_buf.push_str(" dolor sit");

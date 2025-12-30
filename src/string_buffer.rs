@@ -24,7 +24,6 @@ use core::{
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
 
-#[derive(Default)]
 pub struct StringBuffer<'a, A: Allocator = Global> {
     inner: Buffer<'a, u8, A>,
 }
@@ -32,9 +31,9 @@ pub struct StringBuffer<'a, A: Allocator = Global> {
 impl<'a, A: Allocator> StringBuffer<'a, A> {
     #[must_use]
     #[inline]
-    pub const fn new() -> Self {
+    pub const fn empty_in(arena: &'a Arena<A>) -> Self {
         Self {
-            inner: const { Buffer::new() },
+            inner: Buffer::empty_in(arena)
         }
     }
 
@@ -101,7 +100,7 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     #[track_caller]
     #[inline]
     #[must_use]
-    pub fn with_capacity_in_arena(capacity: usize, arena: &'a Arena<A>) -> Self {
+    pub fn with_capacity_in(capacity: usize, arena: &'a Arena<A>) -> Self {
         unsafe { Self::from_handle(Handle::new_slice_uninit_in(arena, capacity)) }
     }
 
@@ -110,7 +109,7 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     #[must_use]
     pub fn new_in<S: AsRef<str>>(arena: &'a Arena<A>, s: &S) -> Self {
         let s = s.as_ref();
-        let mut buf = StringBuffer::with_capacity_in_arena(s.len(), arena);
+        let mut buf = StringBuffer::with_capacity_in(s.len(), arena);
         buf.push_str(s);
         buf
     }
@@ -221,9 +220,9 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     pub fn into_str_handle(self) -> Handle<'a, str, A> {
         let len = self.len();
         let handle = self.inner.into_slice_handle();
-        let slice_ptr = Handle::into_raw(handle);
+        let (slice_ptr, arena) = Handle::into_raw(handle);
         let bytes = ptr::slice_from_raw_parts_mut(slice_ptr as *mut u8, len);
-        unsafe { Handle::from_raw_with_alloc(bytes as *mut str) }
+        unsafe { Handle::from_raw_in(bytes as *mut str, arena) }
     }
 }
 

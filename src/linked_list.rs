@@ -242,7 +242,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// assert_eq!(linked_list.pop_front(), None);
     /// ```
     #[inline]
-    pub fn pop_front(&'_ mut self) -> Option<Handle<'a, T>> {
+    pub fn pop_front(&'_ mut self) -> Option<Handle<'a, T, A>> {
         self.remove(0)
     }
 
@@ -308,7 +308,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// assert_eq!(linked_list.pop_back(), None);
     /// ```
     #[inline]
-    pub fn pop_back(&'_ mut self) -> Option<Handle<'a, T>> {
+    pub fn pop_back(&'_ mut self) -> Option<Handle<'a, T, A>> {
         self.remove(self.len.saturating_sub(1))
     }
 
@@ -402,9 +402,9 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// assert_eq!(&list, &[1, 3, 4]);
     /// ```
     #[inline]
-    pub fn remove(&'_ mut self, index: usize) -> Option<Handle<'a, T>> {
+    pub fn remove(&'_ mut self, index: usize) -> Option<Handle<'a, T, A>> {
         self.remove_node_by_index(index)
-            .map(|node| unsafe { Node::into_handle(node) })
+            .map(|node| unsafe { Node::into_handle(node, self.arena) })
     }
 
     /// Swap the elements at `first_index` and `second_index` in the `LinkedList`.
@@ -772,7 +772,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
 
             if should_drop {
                 unsafe {
-                    let _ = Node::into_handle(self.remove_node(node, i));
+                    let _ = Node::into_handle(self.remove_node(node, i), self.arena);
                 }
             } else {
                 i += 1;
@@ -1161,7 +1161,7 @@ impl<'a, T, A: Allocator> IntoIterator for &'_ mut LinkedList<'a, T, A> {
 
 impl<'a, T, A: Allocator> IntoIterator for LinkedList<'a, T, A> {
     type IntoIter = IntoIter<'a, T, A>;
-    type Item = Handle<'a, T>;
+    type Item = Handle<'a, T, A>;
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
         IntoIter { list: self }
@@ -1360,7 +1360,7 @@ impl<'a, T: 'a + fmt::Debug, A: Allocator> fmt::Debug for IntoIter<'a, T, A> {
 }
 
 impl<'a, T: 'a, A: Allocator> Iterator for IntoIter<'a, T, A> {
-    type Item = Handle<'a, T>;
+    type Item = Handle<'a, T, A>;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.list.pop_front()
@@ -1515,7 +1515,10 @@ impl<T> Node<T> {
 
     #[must_use]
     #[inline]
-    unsafe fn into_handle<'a>(node: NonNull<Node<T>>) -> Handle<'a, T> {
-        unsafe { Handle::from_raw(Node::data_ptr(node).as_ptr()) }
+    unsafe fn into_handle<'a, A: Allocator>(
+        node: NonNull<Node<T>>,
+        arena: &'a Arena<A>,
+    ) -> Handle<'a, T, A> {
+        unsafe { Handle::from_raw_in(Node::data_ptr(node).as_ptr(), arena) }
     }
 }

@@ -187,6 +187,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
             backing_storage,
             len: 0,
             cap: 0,
+            arena,
             _boo: PhantomData,
         };
 
@@ -248,22 +249,23 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
         }
     }
 
-    /// Create a new empty `Buffer` not backed by any `Arena`
+    /// Create a new empty `Buffer`.
     ///
     /// # Examples
     ///
     /// ```
-    /// use rotunda::buffer::Buffer;
+    /// use rotunda::{Arena, buffer::Buffer};
     ///
-    /// let buffer = Buffer::<u8>::new();
+    /// let arena = Arena::new();
+    ///
+    /// let buffer = Buffer::<u8>::empty_in(&arena);
     ///
     /// assert_eq!(buffer.capacity(), 0);
     /// assert_eq!(&buffer, &[]);
     /// ```
-    #[must_use]
     #[inline]
-    pub const fn new() -> Self {
-        unsafe { Self::from_raw_parts(Handle::empty(), 0) }
+    pub const fn empty_in(arena: &'a Arena<A>) -> Self {
+        unsafe { Self::from_raw_parts(Handle::empty_in(arena), 0) }
     }
 
     /// Compose a `Buffer` from its constituent parts.
@@ -427,6 +429,11 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[inline]
     pub const fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    #[inline]
+    pub const fn arena(&self) -> &'a Arena<A> {
+        self.handle.arena()
     }
 
     /// Returns a by-reference iterator over all elements of this `Buffer`.
@@ -869,11 +876,12 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn into_slice_handle(mut self) -> Handle<'a, [T], A> {
+        let arena = self.arena();
         let ptr = Handle::as_mut_ptr(&mut self.handle);
         let ptr = ptr::slice_from_raw_parts_mut(ptr as *const T as *mut T, self.len);
         let _this = ManuallyDrop::new(self);
 
-        unsafe { Handle::from_raw_with_alloc(ptr) }
+        unsafe { Handle::from_raw_in(ptr, arena) }
     }
 
     /// Create a `Buffer` from the given `Handle`.
@@ -898,11 +906,12 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn from_slice_handle(mut handle: Handle<'a, [T], A>) -> Self {
+        let arena = handle.arena();
         let ptr = Handle::as_mut_ptr(&mut handle);
         let len = ptr.len();
         let new_handle = unsafe {
             let ptr = ptr::slice_from_raw_parts_mut(ptr as *mut MaybeUninit<T>, len);
-            Handle::from_raw_with_alloc(ptr)
+            Handle::from_raw_in(ptr, arena)
         };
 
         let _hndl = ManuallyDrop::new(handle);
@@ -912,9 +921,10 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
 
     #[inline]
     pub fn split_at_spare_capacity(self) -> (Handle<'a, [T], A>, Handle<'a, [MaybeUninit<T>], A>) {
+        let arena = self.arena();
         let (handle, len) = Self::into_raw_parts(self);
         if len == 0 {
-            return (Handle::empty(), handle);
+            return (Handle::empty_in(arena), handle);
         }
 
         unsafe {
@@ -1389,13 +1399,6 @@ impl<'a, T: fmt::Debug, A: Allocator> fmt::Debug for Buffer<'a, T, A> {
     }
 }
 
-impl<'a, T, A: Allocator> Default for Buffer<'a, T, A> {
-    #[inline]
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl<'a, T: PartialEq, A: Allocator> PartialEq for Buffer<'a, T, A> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
@@ -1737,6 +1740,7 @@ pub struct GrowableBuffer<'a, T, A: Allocator> {
     backing_storage: NonNull<[MaybeUninit<T>]>,
     len: usize,
     cap: usize,
+    arena: &'a Arena<A>,
     _boo: InvariantLifetime<'a, Arena<A>>,
 }
 
@@ -2075,10 +2079,9 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
 
     #[inline]
     fn into_buffer(self) -> Buffer<'a, T, A> {
+        let Self { len, arena, .. } = self;
         let data = self.backing_storage.as_ptr().cast::<MaybeUninit<T>>();
-        let handle = unsafe { Handle::slice_from_raw_parts(data, self.cap) };
-
-        let len = self.len;
+        let handle = unsafe { Handle::slice_from_raw_parts_in(data, self.cap, arena) };
 
         mem::forget(self);
 
@@ -2637,6 +2640,7 @@ impl<'a, T: Unpin, A: Allocator> FusedIterator for IntoIter<'a, T, A> {}
 /// [`Buffer::iter_handles`]: ./struct.Buffer.html#method.iter_handles
 pub struct IntoIterHandles<'a, T, A: Allocator = Global> {
     data: Handle<'a, [MaybeUninit<T>], A>,
+    arena: &'a Arena<A>,
     front_idx: usize,
     back_idx: usize,
 }
@@ -2726,9 +2730,10 @@ impl<'a, T, A: Allocator> IntoIterHandles<'a, T, A> {
         unsafe {
             let data = ptr::read(&self.data);
             mem::forget(self);
-            let ptr = Handle::into_raw(data).cast::<MaybeUninit<T>>().add(start);
-            let ptr = ptr::slice_from_raw_parts_mut(ptr, new_len);
-            let handle = Handle::from_raw_with_alloc(ptr);
+            let (ptr, arena) = Handle::into_raw(data);
+            let ptr =
+                ptr::slice_from_raw_parts_mut(ptr.cast::<MaybeUninit<T>>().add(start), new_len);
+            let handle = Handle::from_raw_in(ptr, arena);
             Buffer::from_raw_parts(handle, new_len)
         }
     }
@@ -2761,11 +2766,13 @@ impl<'a, T, A: Allocator> IntoIterHandles<'a, T, A> {
     #[must_use]
     #[inline]
     const fn new(buffer: Buffer<'a, T, A>) -> Self {
+        let arena = buffer.arena();
         let len = buffer.as_slice().len();
         let data = Handle::transpose_into_uninit(buffer.into_slice_handle());
 
         Self {
             data,
+            arena,
             front_idx: 0,
             back_idx: len,
         }
@@ -2807,7 +2814,7 @@ impl<'a, T, A: Allocator> Iterator for IntoIterHandles<'a, T, A> {
             let ptr = Handle::as_mut_ptr(&mut self.data)
                 .cast::<T>()
                 .add(self.front_idx);
-            Handle::from_raw_with_alloc(ptr)
+            Handle::from_raw_in(ptr, self.arena)
         };
 
         self.front_idx += 1;
@@ -2831,7 +2838,7 @@ impl<'a, T, A: Allocator> DoubleEndedIterator for IntoIterHandles<'a, T, A> {
         let item = unsafe {
             let idx = self.back_idx.saturating_sub(1);
             let ptr = Handle::as_mut_ptr(&mut self.data).cast::<T>().add(idx);
-            Handle::from_raw_with_alloc(ptr)
+            Handle::from_raw_in(ptr, self.arena)
         };
 
         self.back_idx -= 1;

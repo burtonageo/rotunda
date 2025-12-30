@@ -6,7 +6,9 @@
     feature(
         ptr_metadata,
         derive_coerce_pointee,
+        coerce_unsized,
         allocator_api,
+        unsize,
         read_buf,
         core_io_borrowed_buf
     )
@@ -25,7 +27,6 @@
 #![doc = include_str!("../Readme.md")]
 //!
 //! [`Arena`]: ./struct.Arena.html
-
 
 #[cfg(not(any(feature = "allocator-api2", feature = "nightly")))]
 compile_error!("An allocator must be provided, either through `nightly` or `allocator-api2`");
