@@ -344,15 +344,20 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
         }
     }
 
-     #[inline]
+    #[inline]
     pub unsafe fn increment_count_in(raw: *const T, arena: &'a Arena<A>) {
         let _ = arena;
-        unsafe { Self::increment_count_with_alloc(raw); }
+        unsafe {
+            Self::increment_count_with_alloc(raw);
+        }
     }
 
+    #[inline]
     pub unsafe fn decrement_count_in(raw: *const T, arena: &'a Arena<A>) {
         let _ = arena;
-        unsafe { Self::decrement_count_with_alloc(raw); }
+        unsafe {
+            Self::decrement_count_with_alloc(raw);
+        }
     }
 
     #[inline]
@@ -1983,7 +1988,6 @@ impl<'a, T: ?Sized + Pointee> WeakHandle<'a, T, Global> {
         unsafe { Self::from_raw_with_alloc(ptr) }
     }
 }
-
 
 impl<'a, T: ?Sized + fmt::Debug, A: Allocator> fmt::Debug for WeakHandle<'a, T, A> {
     #[inline]

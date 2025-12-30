@@ -48,7 +48,7 @@ use std::io::{self, BufRead, IoSlice, IoSliceMut, Read, Write};
 /// [module documentation]: ./index.html
 #[repr(transparent)]
 #[cfg_attr(feature = "nightly", derive(CoercePointee))]
-pub struct Handle<'a, #[cfg_attr(feature ="nightly", pointee)] T: ?Sized, A: Allocator = Global> {
+pub struct Handle<'a, #[cfg_attr(feature = "nightly", pointee)] T: ?Sized, A: Allocator = Global> {
     ptr: NonNull<T>,
     _boo: PhantomData<(&'a Arena<A>, T)>,
 }
@@ -136,10 +136,7 @@ impl<'a, T, A: Allocator> Handle<'a, T, A> {
     /// ```
     #[must_use]
     #[inline]
-    pub unsafe fn init_with<F: FnOnce(&mut MaybeUninit<T>)>(
-        arena: &'a Arena<A>,
-        f: F,
-    ) -> Self {
+    pub unsafe fn init_with<F: FnOnce(&mut MaybeUninit<T>)>(arena: &'a Arena<A>, f: F) -> Self {
         let mut handle = Handle::new_uninit_in(arena);
         f(handle.as_mut());
         unsafe { Handle::assume_init(handle) }
@@ -313,10 +310,7 @@ impl<'a, T, const N: usize, A: Allocator> Handle<'a, [T; N], A> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_array_from_fn_in<F: FnMut(usize) -> T>(
-        arena: &'a Arena<A>,
-        f: F,
-    ) -> Self {
+    pub fn new_array_from_fn_in<F: FnMut(usize) -> T>(arena: &'a Arena<A>, f: F) -> Self {
         let buffer = Buffer::from_fn_in(arena, N, f);
         unsafe { Handle::into_array_unchecked::<N>(buffer.into_slice_handle()) }
     }
@@ -544,7 +538,8 @@ impl<'a, T: Unpin, A: Allocator> Handle<'a, T, A> {
     #[inline]
     pub const fn extract_inner(this: Self) -> (T, Handle<'a, MaybeUninit<T>, A>) {
         let inner = unsafe { this.ptr.read() };
-        let handle = unsafe { Handle::from_raw_with_alloc(this.ptr.cast::<MaybeUninit<T>>().as_ptr()) };
+        let handle =
+            unsafe { Handle::from_raw_with_alloc(this.ptr.cast::<MaybeUninit<T>>().as_ptr()) };
 
         let _this = ManuallyDrop::new(this);
         (inner, handle)
@@ -576,7 +571,7 @@ impl<'a, T: Unpin, A: Allocator> Handle<'a, T, A> {
     }
 }
 
-impl<'a, T: ?Sized,> Handle<'a, T, Global> {
+impl<'a, T: ?Sized> Handle<'a, T, Global> {
     /// Take ownership of the given `raw` pointer.
     ///
     /// # Safety
@@ -653,7 +648,9 @@ impl<'a, A: Allocator> Handle<'a, dyn Any + Send, A> {
 
 impl<'a, A: Allocator> Handle<'a, dyn Any + Send + Sync, A> {
     #[inline]
-    pub fn downcast<T: Any>(self) -> Result<Handle<'a, T, A>, Handle<'a, dyn Any + Send + Sync, A>> {
+    pub fn downcast<T: Any>(
+        self,
+    ) -> Result<Handle<'a, T, A>, Handle<'a, dyn Any + Send + Sync, A>> {
         if self.is::<T>() {
             unsafe { Ok(Self::downcast_unchecked::<T>(self)) }
         } else {
@@ -749,10 +746,7 @@ impl<'a, T, A: Allocator> Handle<'a, [T], A> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_slice_from_iter_in<I: IntoIterator<Item = T>>(
-        arena: &'a Arena<A>,
-        iter: I,
-    ) -> Self
+    pub fn new_slice_from_iter_in<I: IntoIterator<Item = T>>(arena: &'a Arena<A>, iter: I) -> Self
     where
         I::IntoIter: ExactSizeIterator,
     {
@@ -902,7 +896,12 @@ impl<'a, T, A: Allocator> Handle<'a, [T], A> {
         let lhs = ptr::slice_from_raw_parts_mut(ptr, mid);
         let rhs = unsafe { ptr::slice_from_raw_parts_mut(ptr.add(mid), len.unchecked_sub(mid)) };
 
-        unsafe { (Handle::from_raw_with_alloc(lhs), Handle::from_raw_with_alloc(rhs)) }
+        unsafe {
+            (
+                Handle::from_raw_with_alloc(lhs),
+                Handle::from_raw_with_alloc(rhs),
+            )
+        }
     }
 
     #[must_use]
@@ -987,11 +986,7 @@ impl<'a, T: Copy, A: Allocator> Handle<'a, [T], A> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_slice_splat_in(
-        arena: &'a Arena<A>,
-        slice_len: usize,
-        value: T,
-    ) -> Self {
+    pub fn new_slice_splat_in(arena: &'a Arena<A>, slice_len: usize, value: T) -> Self {
         let mut buf = Buffer::with_capacity_in(arena, slice_len);
         buf.extend((0..slice_len).map(|_| value));
         buf.into_slice_handle()
@@ -1086,10 +1081,7 @@ impl<'a, A: Allocator> Handle<'a, str, A> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_str_in<S: ?Sized + AsRef<str>>(
-        arena: &'a Arena<A>,
-        string: &S,
-    ) -> Self {
+    pub fn new_str_in<S: ?Sized + AsRef<str>>(arena: &'a Arena<A>, string: &S) -> Self {
         fn inner<'a, A: Allocator>(arena: &'a Arena<A>, string: &str) -> Handle<'a, str, A> {
             let len = string.len();
             let hndl = Handle::<'_, [MaybeUninit<u8>], A>::new_slice_uninit_in(arena, len);
@@ -1338,7 +1330,6 @@ impl<'a, T: ?Sized, A: Allocator> TryFrom<RcHandle<'a, T, A>> for Handle<'a, T, 
     }
 }
 
-
 impl<'a, T, const N: usize, A: Allocator> TryFrom<Handle<'a, [T], A>> for Handle<'a, [T; N], A> {
     type Error = Handle<'a, [T], A>;
     #[inline]
@@ -1383,7 +1374,9 @@ impl<'a, T: ?Sized + PartialEq, A: Allocator> PartialEq<T> for Handle<'a, T, A> 
     }
 }
 
-impl<'a, 'h, T: ?Sized + PartialEq, A: Allocator> PartialEq<&'h Handle<'h, T>> for Handle<'a, T, A> {
+impl<'a, 'h, T: ?Sized + PartialEq, A: Allocator> PartialEq<&'h Handle<'h, T>>
+    for Handle<'a, T, A>
+{
     #[inline]
     fn eq(&self, other: &&'h Handle<'h, T>) -> bool {
         self.as_ref().eq(other.as_ref())
