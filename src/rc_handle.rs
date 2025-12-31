@@ -1445,7 +1445,7 @@ impl<'a, T, A: Allocator> WeakHandle<'a, T, A> {
     /// ```
     #[inline]
     pub fn try_resurrect_with<F: FnOnce() -> T>(&self, f: F) -> Result<RcHandle<'a, T, A>, F> {
-        if !self.is_accessible() {
+        if !self.is_accessible() || self.is_valid() {
             return Err(f);
         }
 
@@ -1737,6 +1737,11 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
     /// # Examples
     ///
     /// ```
+    /// # #![cfg_attr(feature = "nightly", feature(allocator_api))]
+    /// # #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
+    /// # use allocator_api2::alloc::Global;
+    /// # #[cfg(feature = "nightly")]
+    /// # use std::alloc::Global;
     /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
     ///
     /// let arena = Arena::new();
@@ -1748,7 +1753,7 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
     /// let weak_raw = WeakHandle::into_raw(weak);
     /// unsafe { assert_eq!(*weak_raw, 127); }
     ///
-    /// # let _ = unsafe { WeakHandle::from_raw(weak_raw) };
+    /// # let _ = unsafe { WeakHandle::<'_, _, Global>::from_raw(weak_raw) };
     /// ```
     #[must_use]
     #[inline]
