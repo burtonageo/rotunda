@@ -47,6 +47,16 @@ fn test_arena_alloc() {
     assert!(Handle::as_ptr(&fifteen).is_aligned());
     assert_eq!(*fifteen, 15);
 
+    {
+        let before_head = arena.curr_block_head().unwrap().addr();
+
+        let handle = Handle::new_in(&arena, 25);
+        drop(handle);
+
+        let after_head = arena.curr_block_head().unwrap().addr();
+        assert_eq!(&before_head, &after_head);
+    }
+
     let mut value = Handle::new_in(&arena, 21);
     let new_value = Handle::replace(&mut value, 42);
     assert_eq!(new_value, 21);

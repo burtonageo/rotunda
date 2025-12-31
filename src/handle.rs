@@ -1247,10 +1247,12 @@ impl<'a, T: ?Sized, A: Allocator> Drop for Handle<'a, T, A> {
         let p = self.ptr.as_ptr();
         unsafe {
             ptr::drop_in_place(p);
-        }
 
-        if self.arena.blocks.is_last_allocation(self.ptr.cast::<()>()) {
-            unsafe {
+            if self
+                .arena
+                .blocks
+                .is_last_allocation(self.ptr.cast::<()>().byte_add(size_of_val))
+            {
                 self.arena.blocks.unbump(size_of_val);
             }
         }
