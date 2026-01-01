@@ -2921,22 +2921,21 @@ impl<'a, T, A: Allocator> Drop for IntoIterHandles<'a, T, A> {
         }
 
         unsafe {
-            let slice =
-                ptr::slice_from_raw_parts_mut(self.data_start_mut().add(front), len);
+            let slice = ptr::slice_from_raw_parts_mut(self.data_start_mut().add(front), len);
             ptr::drop_in_place(slice);
         }
 
         unsafe {
             let arena = self.data.arena();
-            let mut data = 
-                Handle::from_raw_in(slice::from_raw_parts_mut(ptr::dangling_mut(), 0), arena)
-            ;
+            let mut data =
+                Handle::from_raw_in(slice::from_raw_parts_mut(ptr::dangling_mut(), 0), arena);
 
             mem::swap(&mut self.data, &mut data);
 
             let (mut data_ptr, arena) = Handle::into_raw(data);
 
-            data_ptr = ptr::slice_from_raw_parts_mut(data_ptr.cast::<MaybeUninit<T>>().add(front), len);
+            data_ptr =
+                ptr::slice_from_raw_parts_mut(data_ptr.cast::<MaybeUninit<T>>().add(front), len);
 
             let mut data = Handle::from_raw_in(data_ptr, arena);
 

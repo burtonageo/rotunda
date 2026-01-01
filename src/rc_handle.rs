@@ -41,7 +41,8 @@ use serde_core::ser::{Serialize, Serializer};
 /// [module documentation]: ./index.html
 #[cfg_attr(feature = "nightly", derive(CoercePointee))]
 #[repr(transparent)]
-pub struct RcHandle<'a, #[cfg_attr(feature = "nightly", pointee)] T: ?Sized, A: Allocator = Global> {
+pub struct RcHandle<'a, #[cfg_attr(feature = "nightly", pointee)] T: ?Sized, A: Allocator = Global>
+{
     ptr: NonNull<RcHandleInner<'a, T, A>>,
     _boo: PhantomData<RcHandleInner<'a, T, A>>,
 }
@@ -362,9 +363,7 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn downgrade(this: &Self) -> WeakHandle<'a, T, A> {
-        WeakHandle {
-            ptr: this.ptr,
-        }
+        WeakHandle { ptr: this.ptr }
     }
 
     /// Returns a mutable reference to the contents of this `RcHandle` if
@@ -659,9 +658,7 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
 
     #[must_use]
     #[inline]
-    const unsafe fn from_raw_inner(
-        raw: *const RcHandleInner<'a, T, A>,
-    ) -> Self {
+    const unsafe fn from_raw_inner(raw: *const RcHandleInner<'a, T, A>) -> Self {
         let ptr = unsafe { NonNull::new_unchecked(raw.cast_mut()) };
         let handle = Self {
             ptr,
@@ -1019,8 +1016,9 @@ impl<'a, A: Allocator> RcHandle<'a, str, A> {
             slice.copy_from_slice(string_bytes);
         }
 
-        let ptr =
-            unsafe { NonNull::new_unchecked(rc_handle.ptr.as_ptr() as *mut RcHandleInner<'_, str, A>) };
+        let ptr = unsafe {
+            NonNull::new_unchecked(rc_handle.ptr.as_ptr() as *mut RcHandleInner<'_, str, A>)
+        };
         mem::forget(rc_handle);
 
         RcHandle {
@@ -1369,9 +1367,7 @@ impl<'a, T, A: Allocator> WeakHandle<'a, T, A> {
             NonNull::new_unchecked(sentinel)
         };
 
-        Self {
-            ptr,
-        }
+        Self { ptr }
     }
 
     /// Reinitializes the shared slot with the given `value` if it has
@@ -1676,7 +1672,8 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
         } else {
             self.ptr
                 .as_ptr()
-                .map_addr(|addr| addr + offset_of!(RcHandleInner<'_, (), A>, data)) as *const _
+                .map_addr(|addr| addr + offset_of!(RcHandleInner<'_, (), A>, data))
+                as *const _
         }
     }
 
@@ -1798,9 +1795,7 @@ impl<'a, T> WeakHandle<'a, T, Global> {
 
         let ptr = unsafe { NonNull::new_unchecked(ptr.cast_mut() as *mut _) };
 
-        Self {
-            ptr,
-        }
+        Self { ptr }
     }
 }
 
@@ -1888,9 +1883,7 @@ impl<'a, T, A: Allocator> Default for WeakHandle<'a, T, A> {
 impl<'a, T: ?Sized, A: Allocator> Clone for WeakHandle<'a, T, A> {
     #[inline]
     fn clone(&self) -> Self {
-        WeakHandle {
-            ptr: self.ptr,
-        }
+        WeakHandle { ptr: self.ptr }
     }
 }
 
@@ -1925,13 +1918,17 @@ impl<'a, T: ?Sized, A: Allocator> RcHandleInner<'a, T, A> {
             .map_addr(|addr| addr.saturating_add(offset_of!(RcHandleInner<'_, T, A>, count)))
             .cast::<Cell<usize>>();
 
-        unsafe { ptr::write(count_ptr.as_ptr(), Cell::new(1)); }
+        unsafe {
+            ptr::write(count_ptr.as_ptr(), Cell::new(1));
+        }
 
         let arena_ptr = this
             .map_addr(|addr| addr.saturating_add(offset_of!(RcHandleInner<'_, T, A>, arena)))
             .cast::<&'a Arena<A>>();
 
-        unsafe { ptr::write(arena_ptr.as_ptr(), arena); }
+        unsafe {
+            ptr::write(arena_ptr.as_ptr(), arena);
+        }
     }
 
     #[inline]
