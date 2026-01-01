@@ -1635,8 +1635,17 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
     #[inline]
     pub fn ref_count(&self) -> usize {
         match self.inner() {
-            Some(inner) if inner.is_live() => inner.count.get(),
+            Some(inner) if inner.is_accessible() => inner.count.get(),
             _ => 0,
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn arena(&self) -> Option<&'a Arena<A>> {
+        match self.inner() {
+            Some(inner) if inner.is_live() => Some(&inner.arena),
+            _ => None,
         }
     }
 
@@ -1756,6 +1765,33 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
     fn is_dangling(&self) -> bool {
         is_dangling(self.ptr.as_ptr())
     }
+
+    #[must_use]
+    #[inline]
+    pub fn into_raw_in(self) -> (*const T, Option<&'a Arena<A>>) {
+        let (data_ptr, arena) = (Self::as_ptr(&self), Self::arena(&self));
+        let _this = ManuallyDrop::new(self);
+        (data_ptr, arena)
+    }
+
+    #[inline]
+    pub unsafe fn from_raw_in(raw: *const T, arena: &'a Arena<A>) -> Self {
+        let _ = arena;
+        unsafe { Self::from_raw_with_alloc(raw) }
+    }
+
+    #[inline]
+    unsafe fn from_raw_with_alloc(raw: *const T) -> Self {
+        let ptr = if is_dangling(raw) {
+            raw.with_addr(DANGLING_SENTINEL)
+        } else {
+            raw.map_addr(|addr| addr - offset_of!(RcHandleInner<'a, (), Global>, data))
+        };
+
+        let ptr = unsafe { NonNull::new_unchecked(ptr.cast_mut() as *mut _) };
+
+        Self { ptr }
+    }
 }
 
 impl<'a, T> WeakHandle<'a, T, Global> {
@@ -1780,22 +1816,13 @@ impl<'a, T> WeakHandle<'a, T, Global> {
     #[must_use]
     #[inline]
     pub fn into_raw(self) -> *const T {
-        let data_ptr = Self::as_ptr(&self);
-        let _this = ManuallyDrop::new(self);
-        data_ptr
+        let (ptr, _) = Self::into_raw_in(self);
+        ptr
     }
 
     #[inline]
     pub unsafe fn from_raw(raw: *const T) -> Self {
-        let ptr = if is_dangling(raw) {
-            raw.with_addr(DANGLING_SENTINEL)
-        } else {
-            raw.map_addr(|addr| addr - offset_of!(RcHandleInner<'a, (), Global>, data))
-        };
-
-        let ptr = unsafe { NonNull::new_unchecked(ptr.cast_mut() as *mut _) };
-
-        Self { ptr }
+        unsafe { Self::from_raw_with_alloc(raw) }
     }
 }
 
