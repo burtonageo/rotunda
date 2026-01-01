@@ -65,7 +65,7 @@ macro_rules! buf {
 pub struct Buffer<'a, T, A: Allocator = Global> {
     handle: Handle<'a, [MaybeUninit<T>], A>,
     len: usize,
-    _boo: PhantomData<(T, &'a Arena<A>)>,
+    _boo: PhantomData<[T]>,
 }
 
 // A buffer can be sent to other threads if the type within is
