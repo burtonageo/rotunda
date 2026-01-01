@@ -1732,52 +1732,6 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
         ptr::hash(WeakHandle::as_ptr(this), hasher);
     }
 
-    /// Consumes the `WeakHandle`, returning the underlying wrapped pointer.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #![cfg_attr(feature = "nightly", feature(allocator_api))]
-    /// # #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
-    /// # use allocator_api2::alloc::Global;
-    /// # #[cfg(feature = "nightly")]
-    /// # use std::alloc::Global;
-    /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
-    ///
-    /// let arena = Arena::new();
-    ///
-    /// let rc = RcHandle::new_in(&arena, 127i8);
-    ///
-    /// let weak = RcHandle::downgrade(&rc);
-    ///
-    /// let weak_raw = WeakHandle::into_raw(weak);
-    /// unsafe { assert_eq!(*weak_raw, 127); }
-    ///
-    /// # let _ = unsafe { WeakHandle::<'_, _, Global>::from_raw(weak_raw) };
-    /// ```
-    #[must_use]
-    #[inline]
-    pub fn into_raw(self) -> *const T {
-        let data_ptr = Self::as_ptr(&self);
-        let _this = ManuallyDrop::new(self);
-        data_ptr
-    }
-
-    #[inline]
-    pub unsafe fn from_raw(raw: *const T) -> Self {
-        let ptr = if is_dangling(raw) {
-            raw.with_addr(DANGLING_SENTINEL)
-        } else {
-            raw.map_addr(|addr| addr - offset_of!(RcHandleInner<'a, (), A>, data))
-        };
-
-        let ptr = unsafe { NonNull::new_unchecked(ptr.cast_mut() as *mut _) };
-
-        Self {
-            ptr,
-        }
-    }
-
     #[must_use]
     #[inline]
     fn inner(&self) -> Option<&RcHandleInner<'a, T, A>> {
@@ -1804,6 +1758,49 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
     #[inline]
     fn is_dangling(&self) -> bool {
         is_dangling(self.ptr.as_ptr())
+    }
+}
+
+impl<'a, T> WeakHandle<'a, T, Global> {
+    /// Consumes the `WeakHandle`, returning the underlying wrapped pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let rc = RcHandle::new_in(&arena, 127i8);
+    ///
+    /// let weak = RcHandle::downgrade(&rc);
+    ///
+    /// let weak_raw = WeakHandle::into_raw(weak);
+    /// unsafe { assert_eq!(*weak_raw, 127); }
+    ///
+    /// # let _ = unsafe { WeakHandle::<'_, _>::from_raw(weak_raw) };
+    /// ```
+    #[must_use]
+    #[inline]
+    pub fn into_raw(self) -> *const T {
+        let data_ptr = Self::as_ptr(&self);
+        let _this = ManuallyDrop::new(self);
+        data_ptr
+    }
+
+    #[inline]
+    pub unsafe fn from_raw(raw: *const T) -> Self {
+        let ptr = if is_dangling(raw) {
+            raw.with_addr(DANGLING_SENTINEL)
+        } else {
+            raw.map_addr(|addr| addr - offset_of!(RcHandleInner<'a, (), Global>, data))
+        };
+
+        let ptr = unsafe { NonNull::new_unchecked(ptr.cast_mut() as *mut _) };
+
+        Self {
+            ptr,
+        }
     }
 }
 
