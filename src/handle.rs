@@ -477,9 +477,23 @@ impl<'a, T: ?Sized, A: Allocator> Handle<'a, T, A> {
         }
     }
 
+    /// Access the contained value through a `NonNull` pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use core::ptr;
+    /// use rotunda::{Arena, handle::Handle};
+    ///
+    /// let arena = Arena::new();
+    /// let mut handle = Handle::new_in(&arena, 42);
+    ///
+    /// let ptr = Handle::as_non_null(&mut handle);
+    /// # let _ = ptr;
+    /// ```
     #[must_use]
     #[inline]
-    pub(crate) const fn as_nonnull(this: &Self) -> NonNull<T> {
+    pub const fn as_non_null(this: &Self) -> NonNull<T> {
         this.ptr
     }
 

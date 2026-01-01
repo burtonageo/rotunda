@@ -617,7 +617,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn as_non_null(&mut self) -> NonNull<T> {
-        Handle::as_nonnull(&mut self.handle).cast::<T>()
+        Handle::as_non_null(&mut self.handle).cast::<T>()
     }
 
     /// Append the given `value` to the end of the `Buffer`.
@@ -752,7 +752,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
 
         unsafe {
             self.set_len(self.len - 1);
-            let value = Handle::as_nonnull(&self.handle)
+            let value = Handle::as_non_null(&self.handle)
                 .cast::<MaybeUninit<T>>()
                 .add(self.len)
                 .as_ref()
@@ -1221,7 +1221,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
         }
 
         unsafe {
-            Handle::as_nonnull(&self.handle)
+            Handle::as_non_null(&self.handle)
                 .cast::<MaybeUninit<T>>()
                 .add(self.len)
                 .as_mut()
