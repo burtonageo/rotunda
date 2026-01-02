@@ -1794,7 +1794,7 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
     }
 }
 
-impl<'a, T> WeakHandle<'a, T, Global> {
+impl<'a, T: ?Sized> WeakHandle<'a, T, Global> {
     /// Consumes the `WeakHandle`, returning the underlying wrapped pointer.
     ///
     /// # Examples
@@ -1835,16 +1835,16 @@ impl<'a, T: ?Sized + Pointee, A: Allocator> WeakHandle<'a, T, A> {
         metadata: <T as Pointee>::Metadata,
         arena: &'a Arena<A>,
     ) -> Self {
-        let _ = arena;
         let ptr = ptr::from_raw_parts(ptr, metadata);
-        unsafe { Self::from_raw(ptr) }
+        unsafe { Self::from_raw_in(ptr, arena) }
     }
 
     #[must_use]
     #[inline]
-    pub fn to_raw_parts(self) -> (*const (), <T as Pointee>::Metadata) {
-        let raw = Self::into_raw(self);
-        <*const T>::to_raw_parts(raw)
+    pub fn to_raw_parts_in(self) -> (*const (), <T as Pointee>::Metadata, Option<&'a Arena<A>>) {
+        let (raw, arena) = Self::into_raw_in(self);
+        let (data, meta) =  <*const T>::to_raw_parts(raw);
+        (data, meta, arena)
     }
 }
 #[cfg(feature = "nightly")]
@@ -1856,7 +1856,7 @@ impl<'a, T: ?Sized + Pointee> WeakHandle<'a, T, Global> {
         metadata: <T as Pointee>::Metadata,
     ) -> Self {
         let ptr = ptr::from_raw_parts(ptr, metadata);
-        unsafe { Self::from_raw(ptr) }
+        unsafe { WeakHandle::from_raw(ptr) }
     }
 }
 
