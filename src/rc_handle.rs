@@ -782,7 +782,7 @@ impl<'a, T, A: Allocator> RcHandle<'a, MaybeUninit<T>, A> {
             .cast::<RcHandleInner<'a, MaybeUninit<T>, A>>();
 
         unsafe {
-            RcHandleInner::init_raw(ptr, arena);
+            RcHandleInner::init_header_raw(ptr, arena);
             RcHandle::from_raw_inner(ptr.as_ptr().cast_const())
         }
     }
@@ -798,7 +798,7 @@ impl<'a, T, A: Allocator> RcHandle<'a, MaybeUninit<T>, A> {
             .cast::<RcHandleInner<'_, MaybeUninit<T>, A>>();
 
         unsafe {
-            RcHandleInner::init_raw(ptr, arena);
+            RcHandleInner::init_header_raw(ptr, arena);
             RcHandle::from_raw_inner(ptr.as_ptr().cast_const())
         }
     }
@@ -904,7 +904,7 @@ impl<'a, T, A: Allocator> RcHandle<'a, [MaybeUninit<T>], A> {
                 .alloc_raw(inner_layout)
                 .cast::<RcHandleInner<'_, MaybeUninit<T>, A>>();
 
-            RcHandleInner::init_raw(ptr, arena);
+            RcHandleInner::init_header_raw(ptr, arena);
 
             let ptr = RcHandleInner::cast_to_slice(ptr.as_ptr(), slice_len);
             RcHandle::from_raw_inner(ptr)
@@ -1843,7 +1843,7 @@ impl<'a, T: ?Sized + Pointee, A: Allocator> WeakHandle<'a, T, A> {
     #[inline]
     pub fn to_raw_parts_in(self) -> (*const (), <T as Pointee>::Metadata, Option<&'a Arena<A>>) {
         let (raw, arena) = Self::into_raw_in(self);
-        let (data, meta) =  <*const T>::to_raw_parts(raw);
+        let (data, meta) = <*const T>::to_raw_parts(raw);
         (data, meta, arena)
     }
 }
@@ -1940,21 +1940,23 @@ impl<'a, T: ?Sized, A: Allocator> RcHandleInner<'a, T, A> {
     const COUNT_INACCESSIBLE: usize = usize::MAX;
 
     #[inline]
-    unsafe fn init_raw(this: NonNull<Self>, arena: &'a Arena<A>) {
-        let count_ptr = this
-            .map_addr(|addr| addr.saturating_add(offset_of!(RcHandleInner<'_, T, A>, count)))
-            .cast::<Cell<usize>>();
+    const unsafe fn init_header_raw(this: NonNull<Self>, arena: &'a Arena<A>) {
+        let count_ptr = unsafe {
+            this.byte_add(offset_of!(RcHandleInner<'_, T, A>, count))
+                .cast::<Cell<usize>>()
+        };
 
         unsafe {
-            ptr::write(count_ptr.as_ptr(), Cell::new(1));
+            count_ptr.write(Cell::new(1));
         }
 
-        let arena_ptr = this
-            .map_addr(|addr| addr.saturating_add(offset_of!(RcHandleInner<'_, T, A>, arena)))
-            .cast::<&'a Arena<A>>();
+        let arena_ptr = unsafe {
+            this.byte_add(offset_of!(RcHandleInner<'_, T, A>, arena))
+                .cast::<&'a Arena<A>>()
+        };
 
         unsafe {
-            ptr::write(arena_ptr.as_ptr(), arena);
+            arena_ptr.write(arena);
         }
     }
 
