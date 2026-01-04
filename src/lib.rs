@@ -9,11 +9,12 @@
         coerce_unsized,
         allocator_api,
         unsize,
-        read_buf,
-        core_io_borrowed_buf
     )
 )]
-#![cfg_attr(all(feature = "nightly", feature = "std"), feature(can_vector))]
+#![cfg_attr(
+    all(feature = "nightly", feature = "std"),
+    feature(can_vector, read_buf, core_io_borrowed_buf)
+)]
 #![warn(
     missing_docs,
     clippy::empty_line_after_doc_comments,
