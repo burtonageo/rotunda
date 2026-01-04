@@ -128,13 +128,13 @@ impl Blocks {
         fmtr: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         #[repr(transparent)]
-        struct DebugPtrChain(BlockCellPtr);
+        struct DebugPtrChain(Option<NonNull<Block>>);
 
         impl fmt::Debug for DebugPtrChain {
             fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
                 let mut list = fmtr.debug_list();
 
-                for ptr in BlockIter(self.0.get()) {
+                for ptr in BlockIter::new(self.0) {
                     list.entry(&ptr);
                 }
 
@@ -160,8 +160,8 @@ impl Blocks {
             .field("block_size", &self.block_size)
             .field("curr_block_pos", &self.curr_block_pos.get())
             .field("curr_block", curr_block)
-            .field("used_blocks", &DebugPtrChain(self.used_blocks.clone()))
-            .field("free_blocks", &DebugPtrChain(self.free_blocks.clone()))
+            .field("used_blocks", &DebugPtrChain(self.used_blocks.get()))
+            .field("free_blocks", &DebugPtrChain(self.free_blocks.get()))
             .finish()
     }
 
@@ -406,7 +406,7 @@ pub(super) unsafe fn dealloc_blocks_n(
     block_start: &BlockCellPtr,
     allocator: &dyn Allocator,
 ) {
-    let mut iter = BlockIter(block_start.get()).enumerate();
+    let mut iter = BlockIter::new(block_start.get()).enumerate();
     for (i, block) in iter.by_ref() {
         if i >= n {
             block_start.set(Some(block));
@@ -456,7 +456,7 @@ impl<'a> Drop for ScopedRestore<'a> {
         }
 
         let free_block = self.blocks.used_blocks.replace(self.old_used_blocks);
-        for block in BlockIter(free_block) {
+        for block in BlockIter::new(free_block) {
             if self
                 .old_curr_block
                 .is_none_or(|old_block| !NonNull::eq(&old_block, &block))
@@ -477,6 +477,7 @@ impl<'a> Drop for ScopedRestore<'a> {
     }
 }
 
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 #[repr(transparent)]
 pub(crate) struct BlockIter(Option<NonNull<Block>>);
 
