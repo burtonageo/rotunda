@@ -499,6 +499,12 @@ impl<'a, T: ?Sized, A: Allocator> Handle<'a, T, A> {
 
     #[must_use]
     #[inline]
+    pub fn hash_ptr<H: Hasher>(this: &Self, into: &mut H) {
+        ptr::hash(Handle::as_ptr(this), into);
+    }
+
+    #[must_use]
+    #[inline]
     const fn as_ref_const(&self) -> &T {
         unsafe { self.ptr.as_ref() }
     }
