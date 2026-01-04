@@ -367,16 +367,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     pub fn insert_mut(&mut self, index: usize, value: T) -> &mut T {
         assert!(index <= self.len, "index out of bounds");
 
-        let mut node_ptr = self
-            .arena
-            .alloc_raw(Layout::new::<Node<T>>())
-            .cast::<Node<T>>();
-
-        unsafe {
-            ptr::write(&raw mut node_ptr.as_mut().next, NonNull::dangling());
-            ptr::write(&raw mut node_ptr.as_mut().prev, NonNull::dangling());
-            ptr::write(&raw mut node_ptr.as_mut().data, value);
-        }
+        let mut node_ptr = Node::alloc(&self.arena, value);
 
         self.insert_node(index, node_ptr);
         unsafe { &mut node_ptr.as_mut().data }
@@ -1506,6 +1497,38 @@ struct Node<T> {
 }
 
 impl<T> Node<T> {
+    #[must_use]
+    #[inline]
+    fn alloc<A: Allocator>(arena: &Arena<A>, value: T) -> NonNull<Self> {
+        let node_ptr = arena
+            .alloc_raw(Layout::new::<Node<T>>())
+            .cast::<Node<T>>();
+
+        unsafe { Self::init(node_ptr, value); }
+
+        node_ptr
+    }
+
+    #[inline]
+    unsafe fn init(this: NonNull<Self>, value: T) {
+        unsafe {
+            this
+                .byte_add(offset_of!(Node<T>, next))
+                .cast::<NonNull<Node<T>>>()
+                .write(NonNull::dangling());
+
+            this
+                .byte_add(offset_of!(Node<T>, prev))
+                .cast::<NonNull<Node<T>>>()
+                .write(NonNull::dangling());
+
+            this
+                .byte_add(offset_of!(Node<T>, data))
+                .cast::<T>()
+                .write(value);
+        }
+    }
+
     #[must_use]
     #[inline]
     fn data_ptr(this: NonNull<Node<T>>) -> NonNull<T> {
