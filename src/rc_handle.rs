@@ -112,35 +112,12 @@ impl<'a, T, A: Allocator> RcHandle<'a, [T], A> {
         slice_len: usize,
         mut f: F,
     ) -> Self {
-        struct Guard<'a, T> {
-            slice: &'a mut [MaybeUninit<T>],
-            len: usize,
-        }
-
-        impl<'a, T> Drop for Guard<'a, T> {
-            #[inline]
-            fn drop(&mut self) {
-                let slice = unsafe {
-                    let ptr = self.slice.as_mut_ptr().cast::<T>();
-                    slice::from_raw_parts_mut(ptr, self.len)
-                };
-                unsafe { ptr::drop_in_place(slice) };
-            }
-        }
-
         let mut handle = RcHandle::new_slice_uninit_in(arena, slice_len);
 
-        let slice = unsafe { RcHandle::get_mut_unchecked(&mut handle) };
-
-        let mut guard = Guard { slice, len: 0 };
-
-        for i in 0..slice_len {
-            let slot = unsafe { guard.slice.get_unchecked_mut(i) };
-            slot.write(f(i));
-            guard.len += 1;
+        unsafe {
+            let slice = RcHandle::get_mut_unchecked(&mut handle);
+            RcHandle::<'_, _, A>::write_slice_from_fn(slice, &mut f);
         }
-
-        mem::forget(guard);
 
         unsafe { RcHandle::assume_init_slice(handle) }
     }
@@ -173,35 +150,17 @@ impl<'a, T, const N: usize, A: Allocator> RcHandle<'a, [T; N], A> {
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_array_from_fn_in<F: FnMut(usize) -> T>(arena: &'a Arena<A>, f: F) -> Self {
-        let rc = RcHandle::new_slice_from_fn_in(arena, N, f);
-        let ptr = rc.ptr.cast::<RcHandleInner<'_, [T; N], A>>();
-        mem::forget(rc);
-        RcHandle {
-            ptr,
-            _boo: PhantomData,
+    pub fn new_array_from_fn_in<F: FnMut(usize) -> T>(arena: &'a Arena<A>, mut f: F) -> Self {
+        let mut rc = RcHandle::transpose_inner_uninit(
+            RcHandle::<'_, MaybeUninit<[T; N]>, A>::new_uninit_in(arena),
+        );
+
+        unsafe {
+            let slice = RcHandle::get_mut_unchecked(&mut rc);
+
+            RcHandle::<'_, _, A>::write_slice_from_fn(slice, &mut f);
+            RcHandle::assume_init_array(rc)
         }
-    }
-}
-
-impl<'a, T: Copy, A: Allocator, const N: usize> RcHandle<'a, [T; N], A> {
-    #[track_caller]
-    #[must_use]
-    #[inline]
-    pub fn new_array_splat_in(arena: &'a Arena<A>, value: T) -> Self {
-        let handle = RcHandle::<'_, MaybeUninit<[T; N]>, A>::new_uninit_in(arena);
-        let mut handle = RcHandle::<'_, MaybeUninit<[T; N]>, A>::transpose_inner_uninit(handle);
-
-        {
-            let handle_ref = unsafe { RcHandle::get_mut_unchecked(&mut handle) };
-
-            for i in 0..N {
-                let slot = unsafe { handle_ref.get_unchecked_mut(i) };
-                slot.write(value);
-            }
-        }
-
-        unsafe { RcHandle::assume_init_array(handle) }
     }
 }
 
@@ -678,8 +637,10 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
     #[must_use]
     #[inline]
     const fn clone_const(&self) -> RcHandle<'a, T, A> {
-        let inner = Self::inner(self);
-        inner.increment_refcount();
+        {
+            let inner = Self::inner(self);
+            inner.increment_refcount();
+        }
 
         Self {
             ptr: self.ptr,
@@ -922,6 +883,36 @@ impl<'a, T, A: Allocator> RcHandle<'a, [MaybeUninit<T>], A> {
             ptr,
             _boo: PhantomData,
         }
+    }
+
+    unsafe fn write_slice_from_fn(slice: &mut [MaybeUninit<T>], f: &mut dyn FnMut(usize) -> T) {
+        let slice_len = slice.len();
+
+        struct Guard<'a, T> {
+            slice: &'a mut [MaybeUninit<T>],
+            len: usize,
+        }
+
+        impl<'a, T> Drop for Guard<'a, T> {
+            #[inline]
+            fn drop(&mut self) {
+                let slice = unsafe {
+                    let ptr = self.slice.as_mut_ptr().cast::<T>();
+                    slice::from_raw_parts_mut(ptr, self.len)
+                };
+                unsafe { ptr::drop_in_place(slice) };
+            }
+        }
+
+        let mut guard = Guard { slice, len: 0 };
+
+        for i in 0..slice_len {
+            let slot = unsafe { guard.slice.get_unchecked_mut(i) };
+            slot.write(f(i));
+            guard.len += 1;
+        }
+
+        mem::forget(guard);
     }
 }
 
