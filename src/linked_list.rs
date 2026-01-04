@@ -4,9 +4,10 @@
 //!
 //! The `LinkedList` allows pushing and popping elements at either end of the list in constant time.
 
-use crate::{Arena, InvariantLifetime, handle::Handle};
+use crate::{Arena, Error, InvariantLifetime, handle::Handle};
 use alloc::alloc::{Allocator, Global, Layout};
 use core::{
+    error::Error as ErrorTrait,
     fmt,
     iter::{DoubleEndedIterator, FusedIterator, Iterator},
     marker::PhantomData,
@@ -337,6 +338,35 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         let _ = self.insert_mut(index, value);
     }
 
+    /// Attempt to insert the given `value` into the `LinkedList` at position `index`.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    ///
+    /// * The given `index` is out of bounds of the `LinkedList`.
+    /// * The `Arena` throws an error while attempting to allocate space for the value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::from_iter_in(&arena, [0, 2]);
+    ///
+    /// list.try_insert(1, 1).unwrap();
+    ///
+    /// assert_eq!(&list, &[0, 1, 2]);
+    ///
+    /// let result = list.try_insert(200, 14).unwrap_err();
+    /// ``` 
+    #[inline]
+    pub fn try_insert(&mut self, index: usize, value: T) -> Result<(), TryInsertError<T>> {
+        self.try_insert_mut(index, value).map(|_|())
+    }
+
     /// Insert the given `value` into the `LinkedList` at position `index`.
     ///
     /// A mutable reference to the newly-inserted `value` is returned.
@@ -371,6 +401,51 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
 
         self.insert_node(index, node_ptr);
         unsafe { &mut node_ptr.as_mut().data }
+    }
+
+    /// Attempt to insert the given `value` into the `LinkedList` at position `index`.
+    ///
+    /// A mutable reference to the newly-inserted `value` is returned.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    ///
+    /// * The given `index` is out of bounds of the `LinkedList`.
+    /// * The `Arena` throws an error while attempting to allocate space for the value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, linked_list::LinkedList};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut list = LinkedList::from_iter_in(&arena, [0, 2]);
+    ///
+    /// let value = list.try_insert_mut(1, 1).unwrap();
+    /// assert_eq!(*value, 1);
+    /// *value = 400;
+    ///
+    /// assert_eq!(&list, &[0, 400, 2]);
+    ///
+    /// let result = list.try_insert(200, 14).unwrap_err();
+    /// ``` 
+    #[inline]
+    pub fn try_insert_mut(&mut self, index: usize, value: T) -> Result<&mut T, TryInsertError<T>> {
+        if index > self.len {
+            return Err(TryInsertError { data: value, kind: TryInsertErrorKind::OutOfBounds });
+        }
+
+        match Node::try_alloc(&self.arena, value) {
+            Ok(mut node_ptr) => {
+                self.insert_node(index, node_ptr);
+                unsafe { Ok(&mut node_ptr.as_mut().data) }
+            }
+            Err((value, e)) => {
+                Err(TryInsertError { data: value, kind: TryInsertErrorKind::ArenaError(e) })
+            }
+        }
     }
 
     /// Removes the element at `index` from the list.
@@ -1467,6 +1542,52 @@ impl<T: fmt::Debug> fmt::Debug for NodeIter<T> {
     }
 }
 
+/// An error type returned by `LinkedList::try_insert_mut`.
+///
+/// The element to be inserted can be recovered using the [`into_inner()`] method.
+///
+/// [`into_inner()`]: ./struct.TryInsertError.html#method.into_inner
+#[derive(Debug)]
+pub struct TryInsertError<T> {
+    data: T,
+    kind: TryInsertErrorKind,
+}
+
+#[derive(Debug)]
+enum TryInsertErrorKind {
+    OutOfBounds,
+    ArenaError(Error),
+}
+
+impl<T> TryInsertError<T> {
+    /// Extract the inner value which was to be inserted into the `LinkedList`.
+    #[inline]
+    pub fn into_inner(self) -> T {
+        self.data
+    }
+}
+
+impl<T> fmt::Display for TryInsertError<T> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            TryInsertErrorKind::ArenaError(ref e) => fmt::Display::fmt(e, fmtr),
+            TryInsertErrorKind::OutOfBounds => fmtr.write_str("index was out of bounds"),
+        }
+    }
+}
+
+impl<T: fmt::Debug> ErrorTrait for TryInsertError<T> {
+    #[inline]
+    fn source(&self) -> Option<&(dyn ErrorTrait + 'static)> {
+        if let TryInsertErrorKind::ArenaError(ref e) = self.kind {
+            Some(e)
+        } else {
+            None
+        }
+    }
+}
+
 #[allow(dead_code, unused)]
 struct CursorMut<'l, 'a, T> {
     before_idx: usize,
@@ -1497,6 +1618,7 @@ struct Node<T> {
 }
 
 impl<T> Node<T> {
+    #[track_caller]
     #[must_use]
     #[inline]
     fn alloc<A: Allocator>(arena: &Arena<A>, value: T) -> NonNull<Self> {
@@ -1507,6 +1629,21 @@ impl<T> Node<T> {
         unsafe { Self::init(node_ptr, value); }
 
         node_ptr
+    }
+
+    #[must_use]
+    #[inline]
+    fn try_alloc<A: Allocator>(arena: &Arena<A>, value: T) -> Result<NonNull<Self>, (T, Error)> {
+        let node_result = arena.try_alloc_raw(Layout::new::<Node<T>>());
+
+        let node_ptr = match node_result {
+            Ok(node_ptr) => node_ptr.cast::<Node<T>>(),
+            Err(e) => return Err((value, e)),
+        };
+
+        unsafe { Self::init(node_ptr, value); }
+
+        Ok(node_ptr)
     }
 
     #[inline]
