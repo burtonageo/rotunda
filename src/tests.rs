@@ -269,7 +269,7 @@ fn test_scoped() {
     drop(handle_2);
     drop(arena);
 
-    let arena = Arena::new();
+    let mut arena = Arena::new();
     const SIZE: usize = 124;
     let _value = Handle::new_in(&arena, [0u8; SIZE]);
 
@@ -295,6 +295,21 @@ fn test_scoped() {
     let value = unsafe { Handle::assume_init(value) };
     let _data = Handle::new_in(&arena, [0i32; 16]);
     assert_eq!(*value, 6);
+
+    drop((_value, value, _data));
+
+    arena.reset();
+    let head_before = arena.curr_block_head().unwrap().cast::<u8>();
+
+    arena.with_scope(|| {
+        let rc = RcHandle::new_in(&arena, 51u128);
+        let rc_2 = RcHandle::new_str_in(&arena, "This is a cool message which takes up a lot of data");
+        let _ = (rc, rc_2);
+    });
+
+    let head_after = arena.curr_block_head().unwrap().cast::<u8>();
+
+    assert!(NonNull::eq(&head_before, &head_after));
 }
 
 #[test]
