@@ -426,8 +426,8 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
         if Self::is_unique(&this) {
             let arena = RcHandle::arena(&this);
 
-            // Decrement the ref count to `0` to invalidate all
-            // `WeakHandle`s which point here.
+            // Mark the `RcHandle` as inaccessible to invalidate all `WeakHandle`s,
+            // and to ensure that no values can be written into the data slot.
             Self::inner(&this).mark_inaccessible();
 
             let raw = this
