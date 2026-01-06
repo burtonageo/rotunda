@@ -1017,12 +1017,14 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         self.len = self.len.checked_add(1).expect("list overflow");
     }
 
+    #[track_caller]
     #[inline]
     fn remove_node_by_index(&mut self, index: usize) -> Option<NonNull<Node<T>>> {
         let node = self.get_node(index)?;
         unsafe { Some(self.remove_node(node, index)) }
     }
 
+    #[track_caller]
     #[inline]
     unsafe fn remove_node(&mut self, mut node: NonNull<Node<T>>, index: usize) -> NonNull<Node<T>> {
         unsafe {
@@ -1047,6 +1049,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         node
     }
 
+    #[track_caller]
     unsafe fn swap_nodes(
         &mut self,
         mut first_node: NonNull<Node<T>>,
