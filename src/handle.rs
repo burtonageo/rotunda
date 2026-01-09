@@ -497,7 +497,6 @@ impl<'a, T: ?Sized, A: Allocator> Handle<'a, T, A> {
         this.ptr
     }
 
-    #[must_use]
     #[inline]
     pub fn hash_ptr<H: Hasher>(this: &Self, into: &mut H) {
         ptr::hash(Handle::as_ptr(this), into);
