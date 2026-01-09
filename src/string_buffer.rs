@@ -24,11 +24,20 @@ use core::{
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
 
+/// An owned, growable utf8 string `Buffer`, backed by an [`Arena`].
+///
+/// See the [module documentation] for more details.
+///
+/// [`Arena`]: ../struct.Arena.html
+/// [module documentation]: ./index.html
 pub struct StringBuffer<'a, A: Allocator = Global> {
     inner: Buffer<'a, u8, A>,
 }
 
 impl<'a, A: Allocator> StringBuffer<'a, A> {
+    /// Create a new, empty `StringBuffer` in the given `Arena`.
+    ///
+    /// This `Buffer`
     #[must_use]
     #[inline]
     pub const fn empty_in(arena: &'a Arena<A>) -> Self {
