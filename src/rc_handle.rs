@@ -1635,7 +1635,7 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
     #[inline]
     pub fn arena(&self) -> Option<&'a Arena<A>> {
         match self.inner() {
-            Some(inner) if inner.is_live() => Some(&inner.arena),
+            Some(inner) if inner.is_live() => Some(inner.arena),
             _ => None,
         }
     }
