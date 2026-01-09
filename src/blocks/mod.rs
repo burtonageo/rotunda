@@ -312,7 +312,9 @@ impl Blocks {
 
     #[inline(never)]
     pub(super) fn is_last_allocation(&self, ptr: NonNull<()>) -> bool {
-        let Some(block) = self.curr_block.get() else { return false; };
+        let Some(block) = self.curr_block.get() else {
+            return false;
+        };
         let end = unsafe { Block::data_start(block).byte_add(self.curr_block_pos.get()) };
         NonNull::eq(&end, &ptr.cast())
     }
@@ -343,11 +345,13 @@ impl Block {
 
     #[must_use]
     #[inline]
-    pub(super) unsafe fn data_ptr(this: NonNull<Self>, len: usize) -> NonNull<[MaybeUninit<u8>]> {
-        let ptr = this
-            .map_addr(|addr| addr.saturating_add(offset_of!(Block, data)))
-            .cast::<MaybeUninit<u8>>();
-        unsafe { NonNull::new_unchecked(ptr::slice_from_raw_parts_mut(ptr.as_ptr(), len)) }
+    pub(super) const unsafe fn data_ptr(this: NonNull<Self>, len: usize) -> NonNull<[MaybeUninit<u8>]> {
+        unsafe {
+            let ptr = this
+                .byte_add(offset_of!(Block, data))
+                .cast::<MaybeUninit<u8>>();
+            NonNull::new_unchecked(ptr::slice_from_raw_parts_mut(ptr.as_ptr(), len))
+        }
     }
 
     #[track_caller]
