@@ -319,8 +319,11 @@ impl<A: Allocator> Arena<A> {
     /// assert_eq!(block.len(), capacity - mem::size_of::<i32>());
     /// ```
     #[inline]
-    pub fn curr_block_head(&self) -> Option<NonNull<[MaybeUninit<u8>]>> {
-        let curr_block = self.blocks.curr_block().get()?;
+    pub const fn curr_block_head(&self) -> Option<NonNull<[MaybeUninit<u8>]>> {
+        let curr_block = match self.blocks.curr_block().get() {
+            Some(block) => block,
+            None => return None,
+        };
 
         let (block_size, block_pos) = (self.block_size(), self.blocks.curr_block_pos().get());
 
@@ -328,7 +331,7 @@ impl<A: Allocator> Arena<A> {
             Block::data_ptr(curr_block, block_size)
                 .cast::<MaybeUninit<u8>>()
                 .as_ptr()
-                .map_addr(|data| data + block_pos)
+                .byte_add(block_pos)
         };
 
         NonNull::new(ptr::slice_from_raw_parts_mut(data, block_size - block_pos))
@@ -740,7 +743,7 @@ impl<A: Allocator> Arena<A> {
     /// [`Arena::with_block_size_in()`]:
     #[must_use]
     #[inline]
-    pub fn block_size(&self) -> usize {
+    pub const fn block_size(&self) -> usize {
         self.blocks.block_size()
     }
 
