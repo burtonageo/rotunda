@@ -397,7 +397,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     pub fn insert_mut(&mut self, index: usize, value: T) -> &mut T {
         assert!(index <= self.len, "index out of bounds");
 
-        let mut node_ptr = Node::alloc(&self.arena, value);
+        let mut node_ptr = Node::alloc(self.arena, value);
 
         self.insert_node(index, node_ptr);
         unsafe { &mut node_ptr.as_mut().data }
@@ -437,7 +437,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             return Err(TryInsertError { data: value, kind: TryInsertErrorKind::OutOfBounds });
         }
 
-        match Node::try_alloc(&self.arena, value) {
+        match Node::try_alloc(self.arena, value) {
             Ok(mut node_ptr) => {
                 self.insert_node(index, node_ptr);
                 unsafe { Ok(&mut node_ptr.as_mut().data) }
@@ -1634,7 +1634,6 @@ impl<T> Node<T> {
         node_ptr
     }
 
-    #[must_use]
     #[inline]
     fn try_alloc<A: Allocator>(arena: &Arena<A>, value: T) -> Result<NonNull<Self>, (T, Error)> {
         let node_result = arena.try_alloc_raw(Layout::new::<Node<T>>());
