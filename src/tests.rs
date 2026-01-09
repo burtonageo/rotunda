@@ -632,17 +632,18 @@ fn test_buffer() {
         assert_eq!(&lhs, &[1, 2, 3, 4, 5]);
         assert_eq!(&rhs, &[6, 7, 8, 9, 10]);
     });
-}
 
-#[test]
-#[should_panic]
-fn test_buf_overflow() {
-    const CAP: usize = 10;
-    let arena = Arena::new();
-    let mut buf = Buffer::with_capacity_in(&arena, CAP);
+    arena.with_scope(|| {
+        let mut buffer: Buffer<'_, i32> = Buffer::new_in(&arena, []);
+        assert_eq!(buffer.capacity(), 0);
+        buffer.try_reserve(5).unwrap();
+        assert_eq!(buffer.capacity(), 5);
 
-    let data = [0i32; CAP + 1];
-    buf.extend(data.iter().copied());
+        let _handle = Handle::new_in(&arena, 244);
+        assert!(buffer.try_reserve(1).is_err());
+
+        assert!(buffer.try_push(13).is_ok());
+    });
 }
 
 #[test]

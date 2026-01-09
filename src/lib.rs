@@ -761,10 +761,6 @@ impl<A: Allocator> Arena<A> {
     #[track_caller]
     #[must_use]
     pub fn alloc_raw(&self, layout: Layout) -> NonNull<c_void> {
-        if layout.size() == 0 {
-            return self.alloc_zst(layout.align());
-        }
-
         #[cold]
         #[track_caller]
         #[inline(never)]
@@ -824,10 +820,6 @@ impl<A: Allocator> Arena<A> {
     /// ```
     #[inline]
     pub fn try_alloc_raw(&self, layout: Layout) -> Result<NonNull<c_void>, Error> {
-        if layout.size() == 0 {
-            return Ok(self.alloc_zst(layout.align()));
-        }
-
         self.get_block_for_layout(layout)?;
 
         unsafe {
@@ -1082,18 +1074,6 @@ impl<A: Allocator> Arena<A> {
         }
 
         block
-    }
-
-    #[must_use]
-    fn alloc_zst(&self, align: usize) -> NonNull<c_void> {
-        let mut ptr = NonNull::dangling();
-        let offset = ptr.align_offset(align);
-
-        if offset != 0 || offset != usize::MAX {
-            ptr = ptr.map_addr(|addr| addr.saturating_add(offset));
-        }
-
-        ptr
     }
 }
 

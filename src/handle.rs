@@ -678,7 +678,11 @@ impl<'a, T: ?Sized + Pointee, A: Allocator> Handle<'a, T, A> {
 impl<'a, T, A: Allocator> Handle<'a, [T], A> {
     #[inline]
     pub const fn empty_in(arena: &'a Arena<A>) -> Self {
-        unsafe { Self::slice_from_raw_parts_in(ptr::dangling_mut(), 0, arena) }
+        let ptr = match arena.curr_block_head() {
+            Some(ptr) => ptr.as_ptr().cast(),
+            None => ptr::dangling_mut(),
+        };
+        unsafe { Self::slice_from_raw_parts_in(ptr, 0, arena) }
     }
 
     #[must_use]
@@ -1270,7 +1274,7 @@ impl<'a, T: ?Sized, A: Allocator> Drop for Handle<'a, T, A> {
             if self
                 .arena
                 .blocks
-                .is_last_allocation(self.ptr.cast::<()>().byte_add(size_of_val))
+                .is_last_allocation(self.ptr.cast::<()>().byte_add(size_of_val).as_ptr())
             {
                 self.arena.blocks.unbump(size_of_val);
             }

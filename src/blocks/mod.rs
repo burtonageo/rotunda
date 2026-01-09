@@ -311,12 +311,12 @@ impl Blocks {
     }
 
     #[inline(never)]
-    pub(super) fn is_last_allocation(&self, ptr: NonNull<()>) -> bool {
+    pub(super) fn is_last_allocation(&self, ptr: *const ()) -> bool {
         let Some(block) = self.curr_block.get() else {
             return false;
         };
         let end = unsafe { Block::data_start(block).byte_add(self.curr_block_pos.get()) };
-        NonNull::eq(&end, &ptr.cast())
+        ptr::addr_eq(end.as_ptr(), ptr.cast::<c_void>())
     }
 
     #[track_caller]

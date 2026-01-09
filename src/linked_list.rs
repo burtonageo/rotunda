@@ -1129,7 +1129,7 @@ impl<'a, T, A: Allocator> Drop for LinkedList<'a, T, A> {
                 if self
                     .arena
                     .blocks
-                    .is_last_allocation(node.byte_add(size_of_node).cast())
+                    .is_last_allocation(node.byte_add(size_of_node).cast().as_ptr())
                 {
                     self.arena.blocks.unbump(size_of_node);
                 }

@@ -617,7 +617,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn as_non_null(&mut self) -> NonNull<T> {
-        Handle::as_non_null(&mut self.handle).cast::<T>()
+        Handle::as_non_null(&self.handle).cast::<T>()
     }
 
     /// Append the given `value` to the end of the `Buffer`.
@@ -642,7 +642,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     /// ```
     #[track_caller]
     #[inline]
-    pub const fn push(&mut self, value: T) {
+    pub fn push(&mut self, value: T) {
         let result = self.try_push(value);
         match result {
             Ok(()) => {
@@ -660,7 +660,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     /// # Examples
     ///
     /// ```
-    /// use rotunda::{Arena, buffer::Buffer};
+    /// use rotunda::{Arena, buffer::{Buffer, TryPushError}, handle::Handle};
     ///
     /// let arena = Arena::new();
     ///
@@ -669,14 +669,24 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     /// buffer.try_push(42).unwrap();
     /// buffer.try_push(58).unwrap();
     ///
-    /// assert_eq!(buffer.try_push(100), Err(100));
+    /// let other_data = Handle::new_str_in(&arena, "Some Other Data");
+    ///
+    /// assert_eq!(buffer.try_push(100).map_err(TryPushError::into_inner), Err(100));
     ///
     /// assert_eq!(&buffer, &[42, 58]);
     /// ```
     #[inline]
-    pub const fn try_push(&mut self, value: T) -> Result<(), T> {
+    pub fn try_push(&mut self, value: T) -> Result<(), TryPushError<T>> {
         if self.is_full() {
-            return Err(value);
+            match self.try_reserve(1) {
+                Err(e) => {
+                    return Err(TryPushError {
+                        value,
+                        try_reserve_err: e,
+                    });
+                }
+                _ => (),
+            }
         }
         // @SAFETY: the capacity is checked above
         unsafe {
@@ -688,7 +698,9 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     /// Attempt to extend the `Buffer` with the contents of the given `iter`.
     ///
     /// If the `Buffer`'s capacity is exhausted before the iterator is finished,
-    /// this method will return an error.
+    /// this method will return an error. Note that if the `Buffer` is the last
+    /// allocation in the current block, then the `Buffer`'s capacity can be
+    /// extended.
     ///
     /// # Examples
     ///
@@ -699,7 +711,9 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     ///
     /// let mut buffer = Buffer::with_capacity_in(&arena, 8);
     ///
-    /// let _ = buffer.try_extend(1..5).unwrap();
+    /// buffer.try_extend(1..5).unwrap();
+    ///
+    /// let other_data = arena.alloc_ref::<i32>(21);
     ///
     /// let err = buffer.try_extend(0..130).unwrap_err();
     ///
@@ -718,7 +732,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
                 Ok(()) => (),
                 Err(item) => {
                     return Err(TryExtendError {
-                        curr: item,
+                        curr: item.into_inner(),
                         rest: iter,
                     });
                 }
@@ -919,6 +933,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
         unsafe { Buffer::from_raw_parts(new_handle, len) }
     }
 
+    #[allow(clippy::type_complexity)]
     #[inline]
     pub fn split_at_spare_capacity(self) -> (Handle<'a, [T], A>, Handle<'a, [MaybeUninit<T>], A>) {
         let arena = self.arena();
@@ -1046,6 +1061,46 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
         Handle::as_ptr(&self.handle).len()
     }
 
+    #[inline]
+    pub const unsafe fn set_capacity(&mut self, new_capacity: usize) {
+        unsafe {
+            Handle::set_len(&mut self.handle, new_capacity);
+        }
+    }
+
+    #[inline]
+    pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
+        let arena = self.arena();
+
+        let end = self.as_ptr_range().end;
+        if !arena.blocks.is_last_allocation(end.cast()) {
+            return Err(TryReserveError {
+                requested: additional,
+                available: 41,
+            });
+        }
+
+        let cap = self.capacity();
+
+        let (new_cap, max_cap) = (
+            cap + additional,
+            arena.curr_block_capacity().unwrap_or_default(),
+        );
+
+        if new_cap > max_cap {
+            Err(TryReserveError {
+                requested: additional,
+                available: new_cap - max_cap,
+            })
+        } else {
+            unsafe {
+                self.set_capacity(new_cap);
+            }
+
+            Ok(())
+        }
+    }
+
     /// Sets the length of the `Buffer` to `new_len` without modifying
     /// the contents of the `Buffer`.
     ///
@@ -1095,13 +1150,6 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
             assert_unchecked(new_len <= self.capacity());
         }
         self.len = new_len;
-    }
-
-    #[inline]
-    pub const unsafe fn set_capacity(&mut self, new_capacity: usize) {
-        unsafe {
-            Handle::set_len(&mut self.handle, new_capacity);
-        }
     }
 
     /// Removes all elements from the `Buffer`.
@@ -1893,16 +1941,27 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     }
 
     #[inline]
-    pub fn try_push(&mut self, value: T) -> Result<(), T> {
+    pub fn try_push(&mut self, value: T) -> Result<(), TryPushError<T>> {
         if self.is_full() {
-            return Err(value);
+            return Err(TryPushError {
+                value,
+                try_reserve_err: TryReserveError {
+                    requested: 1,
+                    available: 0,
+                },
+            });
         }
 
         // Because this method doesn't need to hit the system memory allocator,
         // it don't need to grow by a growth factor.
         match self.ensure_capacity(1) {
             Ok(_) => (),
-            Err(_) => return Err(value),
+            Err(e) => {
+                return Err(TryPushError {
+                    value,
+                    try_reserve_err: e,
+                });
+            }
         }
 
         unsafe {
@@ -1925,7 +1984,7 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
         while let Some(item) = iter.next() {
             match self.try_push(item) {
                 Ok(()) => (),
-                Err(item) => return Err((item, iter)),
+                Err(item) => return Err((item.into_inner(), iter)),
             }
         }
 
@@ -2401,6 +2460,46 @@ impl fmt::Display for TryReserveError {
 }
 
 impl error::Error for TryReserveError {}
+
+#[derive(Debug)]
+pub struct TryPushError<T> {
+    value: T,
+    try_reserve_err: TryReserveError,
+}
+
+impl<T> TryPushError<T> {
+    #[must_use]
+    #[inline]
+    pub fn into_inner(self) -> T {
+        self.value
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn inner(&self) -> &T {
+        &self.value
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn try_reserve_error(&self) -> &TryReserveError {
+        &self.try_reserve_err
+    }
+}
+
+impl<T> fmt::Display for TryPushError<T> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmtr, "could not append item: {}", self.try_reserve_err)
+    }
+}
+
+impl<T: fmt::Debug> Error for TryPushError<T> {
+    #[inline]
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(self.try_reserve_error())
+    }
+}
 
 pub struct TryExtendError<I: IntoIterator> {
     curr: I::Item,
@@ -2928,7 +3027,7 @@ impl<'a, T, A: Allocator> Drop for IntoIterHandles<'a, T, A> {
         unsafe {
             let arena = self.data.arena();
             let mut data =
-                Handle::from_raw_in(slice::from_raw_parts_mut(ptr::dangling_mut(), 0), arena);
+                Handle::from_raw_in(ptr::slice_from_raw_parts_mut(ptr::dangling_mut(), 0), arena);
 
             mem::swap(&mut self.data, &mut data);
 
