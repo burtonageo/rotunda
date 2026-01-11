@@ -1093,6 +1093,64 @@ impl<A: Allocator> fmt::Debug for Arena<A> {
 
 unsafe impl<A: Allocator + Sync> Send for Arena<A> {}
 
+#[cfg(feature = "allocator-api2")]
+unsafe impl<'a, A: Allocator> allocator_api2::alloc::Allocator for &'a Arena<A> {
+    #[inline]
+    fn allocate(
+        &self,
+        layout: allocator_api2::alloc::Layout,
+    ) -> Result<NonNull<[u8]>, allocator_api2::alloc::AllocError> {
+        match self.try_alloc_raw(layout) {
+            Ok(ptr) => Ok(NonNull::slice_from_raw_parts(
+                ptr.cast::<u8>(),
+                layout.size(),
+            )),
+            Err(_) => Err(allocator_api2::alloc::AllocError),
+        }
+    }
+
+    #[inline]
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: allocator_api2::alloc::Layout) {
+        unsafe {
+            if self
+                .blocks
+                .is_last_allocation(ptr.as_ptr().byte_add(layout.size()).cast())
+            {
+                self.blocks.unbump(layout.size());
+            }
+        }
+    }
+}
+
+#[cfg(feature = "nightly")]
+unsafe impl<'a, A: Allocator> alloc::alloc::Allocator for &'a Arena<A> {
+    #[inline]
+    fn allocate(
+        &self,
+        layout: alloc::alloc::Layout,
+    ) -> Result<NonNull<[u8]>, alloc::alloc::AllocError> {
+        match self.try_alloc_raw(layout) {
+            Ok(ptr) => Ok(NonNull::slice_from_raw_parts(
+                ptr.cast::<u8>(),
+                layout.size(),
+            )),
+            Err(_) => Err(alloc::alloc::AllocError),
+        }
+    }
+
+    #[inline]
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: alloc::alloc::Layout) {
+        unsafe {
+            if self
+                .blocks
+                .is_last_allocation(ptr.as_ptr().byte_add(layout.size()).cast())
+            {
+                self.blocks.unbump(layout.size());
+            }
+        }
+    }
+}
+
 impl<A: Allocator> Drop for Arena<A> {
     #[inline]
     fn drop(&mut self) {
