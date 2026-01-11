@@ -1145,13 +1145,17 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
 
     #[inline]
     pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
+        if additional == 0 {
+            return Ok(());
+        }
+
         let arena = self.arena();
 
-        let end = self.as_ptr_range().end;
+        let end = unsafe { self.as_ptr().add(self.capacity()) };
         if !arena.blocks.is_last_allocation(end.cast()) {
             return Err(TryReserveError {
                 requested: additional,
-                available: 41,
+                available: self.capacity() - self.len(),
             });
         }
 
@@ -1169,7 +1173,9 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
             })
         } else {
             unsafe {
+                let old_cap = self.capacity();
                 self.set_capacity(new_cap);
+                self.arena().blocks.bump((new_cap - old_cap) * mem::size_of::<T>());
             }
 
             Ok(())
@@ -1417,6 +1423,11 @@ impl<'a, T: Clone, A: Allocator> Buffer<'a, T, A> {
     ///     RcHandle::new_str_in(&arena, "box"),
     /// ];
     ///
+    /// let data_2 = [
+    ///     RcHandle::new_str_in(&arena, "with"),
+    ///     RcHandle::new_str_in(&arena, "complements"),
+    /// ];
+    ///
     /// let mut buffer = Buffer::<RcHandle<str>>::with_capacity_in(&arena, 5);
     ///
     /// buffer.extend_from_slice(&data);
@@ -1427,20 +1438,35 @@ impl<'a, T: Clone, A: Allocator> Buffer<'a, T, A> {
     /// assert_eq!(buffer.get(3).map(|rc| &**rc), Some("box"));
     /// assert_eq!(buffer.get(4), None);
     ///
-    /// let data_2 = [
-    ///     RcHandle::new_str_in(&arena, "with"),
-    ///     RcHandle::new_str_in(&arena, "complements"),
-    /// ];
-    ///
     /// buffer.extend_from_slice(&data_2);
     /// assert_eq!(buffer.get(4).map(|rc| &**rc), Some("with"));
-    /// assert_eq!(buffer.get(5), None);
+    /// assert_eq!(buffer.get(5).map(|rc| &**rc), Some("complements"));
+    /// assert_eq!(buffer.get(6), None);
+    ///
+    /// buffer.try_reserve(1).unwrap();
+    ///
+    /// let data_3 = [
+    ///     RcHandle::new_str_in(&arena, "from"),
+    ///     RcHandle::new_str_in(&arena, "steve"),
+    /// ];
+    ///
+    /// buffer.extend_from_slice(&data_3);
+    /// assert_eq!(buffer.get(6).map(|rc| &**rc), Some("from"));
+    /// assert_eq!(buffer.get(7), None);
     /// ```
     #[track_caller]
     #[inline]
     pub fn extend_from_slice(&mut self, slice: &[T]) {
+        let slice_len = slice.len();
         let spare_cap = self.capacity() - self.len;
-        let count = usize_min(spare_cap, slice.len());
+        let count = if spare_cap > slice_len {
+            slice_len
+        } else {
+            match self.try_reserve(slice_len - spare_cap) {
+                Ok(_) => slice_len,
+                Err(e) => e.available(),
+            }
+        };
 
         for item in slice.iter().take(count).cloned() {
             unsafe {
@@ -1996,6 +2022,10 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
     /// ```
     #[inline]
     pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
+        if additional == 0 {
+            return Ok(());
+        }
+
         let cap = self.capacity();
 
         let (new_cap, max_cap) = (cap + additional, self.max_capacity());

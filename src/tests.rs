@@ -303,7 +303,10 @@ fn test_scoped() {
 
     arena.with_scope(|| {
         let rc = RcHandle::new_in(&arena, 51u128);
-        let rc_2 = RcHandle::new_str_in(&arena, "This is a cool message which takes up a lot of data");
+        let rc_2 = RcHandle::new_str_in(
+            &arena,
+            "This is a cool message which takes up a lot of data",
+        );
         let _ = (rc, rc_2);
     });
 
@@ -663,6 +666,38 @@ fn test_buffer() {
         let (lhs, rhs) = Buffer::merge_checked(lhs, rhs).unwrap_err();
         assert_eq!(&lhs, &[1, 2]);
         assert_eq!(&rhs, &[3, 4]);
+    });
+
+    arena.with_scope(|| {
+        let arena = Arena::new();
+
+        let data = [
+            RcHandle::new_str_in(&arena, "Message"),
+            RcHandle::new_str_in(&arena, "in"),
+            RcHandle::new_str_in(&arena, "a"),
+            RcHandle::new_str_in(&arena, "box"),
+        ];
+
+        let data_2 = [
+            RcHandle::new_str_in(&arena, "with"),
+            RcHandle::new_str_in(&arena, "complements"),
+        ];
+
+        let mut buffer = Buffer::<RcHandle<str>>::with_capacity_in(&arena, 5);
+
+        buffer.extend_from_slice(&data);
+        assert_eq!(buffer.get(0).map(|rc| &**rc), Some("Message"));
+        assert_eq!(buffer.get(1).map(|rc| &**rc), Some("in"));
+        assert_eq!(buffer.get(2).map(|rc| &**rc), Some("a"));
+        assert_eq!(buffer.get(3).map(|rc| &**rc), Some("box"));
+        assert_eq!(buffer.get(4), None);
+
+        buffer.try_reserve(1).unwrap();
+
+        buffer.extend_from_slice(&data_2);
+        assert_eq!(buffer.get(4).map(|rc| &**rc), Some("with"));
+        assert_eq!(buffer.get(5).map(|rc| &**rc), Some("complements"));
+        assert_eq!(buffer.get(6), None);
     });
 }
 
