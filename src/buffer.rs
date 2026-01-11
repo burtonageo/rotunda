@@ -967,6 +967,81 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
         (Buffer::from(lhs), Buffer::from(rhs))
     }
 
+    /// Merges two adjacent `Buffer`s together.
+    ///
+    /// If the `Buffer`s are not adjacent, then the parameters are returned in the `Err` variant.
+    ///
+    /// The order in which the `Buffer`s are passed does not affect the behavior of this function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5]);
+    /// let (lhs, rhs) = Buffer::split_at(buffer, 3);
+    ///
+    /// assert_eq!(&lhs, &[1, 2, 3]);
+    /// assert_eq!(&rhs, &[4, 5]);
+    ///
+    /// let merged = Buffer::merge_checked(rhs, lhs).unwrap();
+    ///
+    /// assert_eq!(&merged, &[1, 2, 3, 4, 5]);
+    ///
+    /// let lhs = Buffer::new_in(&arena, [1, 2]);
+    /// let _ref = arena.alloc_ref(3i32);
+    /// let rhs = Buffer::new_in(&arena, [3, 4]);
+    ///
+    /// let (lhs, rhs) = Buffer::merge_checked(lhs, rhs).unwrap_err();
+    /// assert_eq!(&lhs, &[1, 2]);
+    /// assert_eq!(&rhs, &[3, 4]);
+    /// ```
+    #[inline]
+    pub fn merge_checked(mut lhs: Self, mut rhs: Self) -> Result<Self, (Self, Self)> {
+        let get_range = |b: &Buffer<'_, T, A>| -> (_, _) {
+            let start = b.handle.as_ptr();
+            let end = unsafe { start.add(b.capacity()) };
+
+            (start.addr(), end.addr())
+        };
+
+        let (lhs_l, lhs_r) = get_range(&lhs);
+        let (rhs_l, rhs_r) = get_range(&rhs);
+
+        if !(lhs_l == rhs_r || lhs_r == rhs_l) {
+            return Err((lhs, rhs));
+        }
+
+        if lhs_l == rhs_r {
+            mem::swap(&mut lhs, &mut rhs)
+        }
+
+        let merged_cap = lhs.capacity() + rhs.capacity();
+        let (lhs_len, rhs_len) = (lhs.len(), rhs.len());
+        let merged_len = lhs_len + rhs_len;
+
+        let (lhs_handle, rhs_start) = Buffer::into_raw_parts(lhs);
+        let (lhs_ptr, arena) = Handle::into_raw(lhs_handle);
+        mem::forget(rhs);
+
+        let lhs_ptr = lhs_ptr.cast::<MaybeUninit<T>>();
+        let merged_handle = unsafe { Handle::slice_from_raw_parts_in(lhs_ptr, merged_cap, arena) };
+
+        let mut merged_buffer = unsafe { Buffer::from_raw_parts(merged_handle, 0) };
+        unsafe {
+            ptr::copy(
+                merged_buffer.as_ptr().add(rhs_start),
+                merged_buffer.as_mut_ptr().add(lhs_len),
+                rhs_len,
+            );
+            merged_buffer.set_len(merged_len);
+        }
+
+        Ok(merged_buffer)
+    }
+
     /// Access the spare capacity of the `Buffer` as a mutable slice.
     ///
     /// The returned slice will have a length of `self.capacity() - self.len()`.

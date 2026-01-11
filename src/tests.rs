@@ -644,6 +644,26 @@ fn test_buffer() {
 
         assert!(buffer.try_push(13).is_ok());
     });
+
+    arena.with_scope(|| {
+        let buffer = Buffer::new_in(&arena, [1, 2, 3, 4, 5]);
+        let (lhs, rhs) = Buffer::split_at(buffer, 3);
+
+        assert_eq!(&lhs, &[1, 2, 3]);
+        assert_eq!(&rhs, &[4, 5]);
+
+        let merged = Buffer::merge_checked(lhs, rhs).unwrap();
+
+        assert_eq!(&merged, &[1, 2, 3, 4, 5]);
+
+        let lhs = Buffer::new_in(&arena, [1, 2]);
+        let _ref = arena.alloc_ref(3i32);
+        let rhs = Buffer::new_in(&arena, [3, 4]);
+
+        let (lhs, rhs) = Buffer::merge_checked(lhs, rhs).unwrap_err();
+        assert_eq!(&lhs, &[1, 2]);
+        assert_eq!(&rhs, &[3, 4]);
+    });
 }
 
 #[test]
