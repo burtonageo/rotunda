@@ -1116,7 +1116,8 @@ unsafe impl<'a, A: Allocator> allocator_api2::alloc::Allocator for &'a Arena<A> 
                 .blocks
                 .is_last_allocation(ptr.as_ptr().byte_add(layout.size()).cast())
             {
-                self.blocks.unbump(layout.size());
+                let size = layout.size() + self.blocks.offset_to_align_for(&layout);
+                self.blocks.unbump(size);
             }
         }
     }
@@ -1145,7 +1146,8 @@ unsafe impl<'a, A: Allocator> alloc::alloc::Allocator for &'a Arena<A> {
                 .blocks
                 .is_last_allocation(ptr.as_ptr().byte_add(layout.size()).cast())
             {
-                self.blocks.unbump(layout.size());
+                let size = layout.size() + self.blocks.offset_to_align_for(&layout);
+                self.blocks.unbump(size);
             }
         }
     }

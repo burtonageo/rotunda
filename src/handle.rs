@@ -1265,7 +1265,10 @@ impl<'a, T: ?Sized, A: Allocator> Drop for Handle<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
         // Size of value must be calculated before it is dropped.
-        let size_of_val = mem::size_of_val(self.as_ref_const());
+        let size = {
+            let layout = Layout::for_value(self.as_ref_const());
+            layout.size() + self.arena.blocks.offset_to_align_for(&layout)
+        };
 
         let p = self.ptr.as_ptr();
         unsafe {
@@ -1274,9 +1277,9 @@ impl<'a, T: ?Sized, A: Allocator> Drop for Handle<'a, T, A> {
             if self
                 .arena
                 .blocks
-                .is_last_allocation(self.ptr.cast::<()>().byte_add(size_of_val).as_ptr())
+                .is_last_allocation(self.ptr.cast::<()>().byte_add(size).as_ptr())
             {
-                self.arena.blocks.unbump(size_of_val);
+                self.arena.blocks.unbump(size);
             }
         }
     }
