@@ -1704,6 +1704,13 @@ impl<'a, 't, T: Copy, A: Allocator> Extend<&'t [T]> for Buffer<'a, T, A> {
     }
 }
 
+impl<'a, T, A: Allocator> From<Handle<'a, T, A>> for Buffer<'a, T, A> {
+    #[inline]
+    fn from(value: Handle<'a, T, A>) -> Self {
+        Handle::into_buffer(Handle::into_slice(value))
+    }
+}
+
 impl<'a, T, A: Allocator> From<Handle<'a, [T], A>> for Buffer<'a, T, A> {
     #[inline]
     fn from(value: Handle<'a, [T], A>) -> Self {
