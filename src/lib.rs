@@ -780,8 +780,7 @@ impl<A: Allocator> Arena<A> {
         }
 
         unsafe {
-            let slot = self.blocks.bump_layout(layout);
-            NonNull::new_unchecked(slot.as_ptr())
+            self.blocks.bump_layout(layout)
         }
     }
 
@@ -823,8 +822,7 @@ impl<A: Allocator> Arena<A> {
         self.get_block_for_layout(layout)?;
 
         unsafe {
-            let slot = self.blocks.bump_layout(layout);
-            Ok(NonNull::new_unchecked(slot.as_ptr()))
+            Ok(self.blocks.bump_layout(layout))
         }
     }
 
@@ -847,7 +845,7 @@ impl<A: Allocator> Arena<A> {
     pub fn alloc_raw_zeroed(&self, layout: Layout) -> NonNull<c_void> {
         let slot = self.alloc_raw(layout);
         unsafe {
-            ptr::write_bytes(slot.as_ptr().cast::<u8>(), b'\0', layout.size());
+            slot.write_bytes(b'\0', layout.size());
         }
         slot
     }
