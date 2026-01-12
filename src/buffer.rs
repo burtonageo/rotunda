@@ -968,7 +968,8 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     ///
     /// If the `Buffer`s are not adjacent, then the parameters are returned in the `Err` variant.
     ///
-    /// The order in which the `Buffer`s are passed does not affect the behavior of this function.
+    /// The order in which the `Buffer`s are passed does not affect the mergiong behavior, but if they
+    /// are not adjacent, then they will be returned in the same order they were passed.
     ///
     /// # Examples
     ///
