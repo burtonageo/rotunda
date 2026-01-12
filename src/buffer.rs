@@ -1320,7 +1320,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     ///
     /// `idx` must be in range of the `Buffer`.
     #[inline]
-    unsafe fn shift_down(&mut self, idx: usize) {
+    const unsafe fn shift_down(&mut self, idx: usize) {
         unsafe {
             let ptr = self.as_mut_ptr().add(idx);
             let count = self.len().unchecked_sub(idx + 1);
@@ -1330,7 +1330,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
 
     #[must_use]
     #[inline]
-    unsafe fn remove_unchecked(&mut self, idx: usize) -> T {
+    const unsafe fn remove_unchecked(&mut self, idx: usize) -> T {
         let value = unsafe { ptr::read(self.as_ptr().add(idx)) };
         let len = self.len();
         unsafe {
