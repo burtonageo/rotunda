@@ -1094,7 +1094,7 @@ impl<A: Allocator> fmt::Debug for Arena<A> {
 unsafe impl<A: Allocator + Sync> Send for Arena<A> {}
 
 #[cfg(feature = "allocator-api2")]
-unsafe impl<'a, A: Allocator> allocator_api2::alloc::Allocator for &'a Arena<A> {
+unsafe impl<A: Allocator> allocator_api2::alloc::Allocator for &'_ Arena<A> {
     #[inline]
     fn allocate(
         &self,
@@ -1124,7 +1124,7 @@ unsafe impl<'a, A: Allocator> allocator_api2::alloc::Allocator for &'a Arena<A> 
 }
 
 #[cfg(feature = "nightly")]
-unsafe impl<'a, A: Allocator> alloc::alloc::Allocator for &'a Arena<A> {
+unsafe impl<A: Allocator> alloc::alloc::Allocator for &'_ Arena<A> {
     #[inline]
     fn allocate(
         &self,

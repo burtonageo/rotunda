@@ -677,16 +677,13 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     /// ```
     #[inline]
     pub fn try_push(&mut self, value: T) -> Result<(), TryPushError<T>> {
-        if self.is_full() {
-            match self.try_reserve(1) {
-                Err(e) => {
-                    return Err(TryPushError {
-                        value,
-                        try_reserve_err: e,
-                    });
-                }
-                _ => (),
-            }
+        if self.is_full()
+            && let Err(e) = self.try_reserve(1)
+        {
+            return Err(TryPushError {
+                value,
+                try_reserve_err: e,
+            });
         }
         // @SAFETY: the capacity is checked above
         unsafe {
@@ -1175,7 +1172,9 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
             unsafe {
                 let old_cap = self.capacity();
                 self.set_capacity(new_cap);
-                self.arena().blocks.bump((new_cap - old_cap) * mem::size_of::<T>());
+                self.arena()
+                    .blocks
+                    .bump((new_cap - old_cap) * mem::size_of::<T>());
             }
 
             Ok(())
