@@ -387,6 +387,58 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
         unsafe { slice::from_raw_parts_mut(ptr as *mut T, self.len) }
     }
 
+    /// Access the initialized contents of the `Buffer`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 25);
+    ///
+    /// buffer.extend([1, 2, 3]);
+    ///
+    /// let ptr = buffer.as_slice_ptr();
+    /// assert_eq!(ptr.len(), 3);
+    /// unsafe { assert_eq!(ptr.as_ref(), Some(&[1, 2, 3][..])); }
+    /// ```
+    #[must_use]
+    #[inline]
+    pub const fn as_slice_ptr(&self) -> *const [T] {
+        let data = self.as_ptr();
+        ptr::slice_from_raw_parts(data, self.len)
+    }
+
+    /// Access the initialized contents of `Buffer` through a mutable pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, buffer::Buffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut buffer = Buffer::with_capacity_in(&arena, 25);
+    ///
+    /// buffer.extend([1, 2, 3]);
+    ///
+    /// let ptr = buffer.as_mut_slice_ptr();
+    /// assert_eq!(ptr.len(), 3);
+    /// unsafe {
+    ///     *ptr.cast::<i32>().add(1) = 6;
+    /// }
+    ///
+    /// assert_eq!(&buffer, &[1, 6, 3]);
+    /// ```
+    #[must_use]
+    #[inline]
+    pub const fn as_mut_slice_ptr(&mut self) -> *mut [T] {
+        let data = self.as_mut_ptr();
+        ptr::slice_from_raw_parts_mut(data, self.len)
+    }
+
     /// Returns the number of elements in the `Buffer`, also known as its 'length'.
     ///
     /// # Examples
@@ -1258,11 +1310,35 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[inline]
     pub fn clear(&mut self) {
         unsafe {
+            let initialized_data = self.as_mut_slice_ptr();
+
             // Pre-set the length to `0` so that contents are inaccessible
             // if there is a `panic!()` while dropping.
-            let old_len = self.len;
             self.set_len(0);
-            self.drop_initialized_contents(..old_len);
+
+            ptr::drop_in_place(initialized_data);
+        }
+    }
+
+    #[inline]
+    pub fn shrink_to_fit(&mut self) {
+        let arena = self.arena();
+
+        let is_last_alloc = unsafe {
+            arena
+                .blocks
+                .is_last_allocation(self.as_ptr().add(self.capacity()).cast())
+        };
+
+        unsafe {
+            let old_cap = self.capacity();
+            self.set_capacity(self.len());
+
+            if is_last_alloc {
+                arena
+                    .blocks
+                    .unbump((old_cap - self.len()) * mem::size_of::<T>());
+            }
         }
     }
 
@@ -1295,20 +1371,11 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
         if new_len < old_len {
             unsafe {
                 self.set_len(new_len);
-                self.drop_initialized_contents(new_len..old_len);
-            }
-        }
-    }
-
-    #[inline(always)]
-    unsafe fn drop_initialized_contents<S>(&mut self, range: S)
-    where
-        S: SliceIndex<[MaybeUninit<T>], Output = [MaybeUninit<T>]>,
-    {
-        let contents = unsafe { self.handle.as_mut().get_unchecked_mut(range) };
-        for item in contents {
-            unsafe {
-                MaybeUninit::assume_init_drop(item);
+                let ptr = ptr::slice_from_raw_parts_mut(
+                    self.as_mut_ptr().add(new_len),
+                    old_len - new_len,
+                );
+                ptr::drop_in_place(ptr);
             }
         }
     }
@@ -1881,7 +1948,7 @@ impl<'a, T, A: Allocator> Drop for Buffer<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            Buffer::drop_initialized_contents(self, ..self.len);
+            ptr::drop_in_place(self.as_mut_slice_ptr());
         }
     }
 }
@@ -2213,6 +2280,20 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
 
     #[must_use]
     #[inline]
+    pub const fn as_slice_ptr(&self) -> *const [T] {
+        let data = self.as_ptr();
+        ptr::slice_from_raw_parts(data, self.len)
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn as_mut_slice_ptr(&mut self) -> *mut [T] {
+        let data = self.as_mut_ptr();
+        ptr::slice_from_raw_parts_mut(data, self.len)
+    }
+
+    #[must_use]
+    #[inline]
     pub const fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
         unsafe {
             let data = self
@@ -2464,7 +2545,7 @@ impl<'a, T, A: Allocator> Drop for GrowableBuffer<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            ptr::drop_in_place(self.as_mut_slice());
+            ptr::drop_in_place(self.as_mut_slice_ptr());
         }
     }
 }

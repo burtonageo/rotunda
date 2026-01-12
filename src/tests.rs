@@ -699,6 +699,27 @@ fn test_buffer() {
         assert_eq!(buffer.get(5).map(|rc| &**rc), Some("complements"));
         assert_eq!(buffer.get(6), None);
     });
+
+    arena.with_scope(|| {
+        static NUM_DROPS: AtomicUsize = AtomicUsize::new(0);
+
+        struct CountDrops(usize);
+
+        impl Drop for CountDrops {
+            fn drop(&mut self) {
+                NUM_DROPS.fetch_add(1, AtomicOrdering::SeqCst);
+            }
+        }
+
+        let mut buffer = Buffer::from_fn_in(&arena, 5, |i| CountDrops(i));
+
+        buffer.truncate(3);
+        assert_eq!(NUM_DROPS.load(AtomicOrdering::SeqCst), 2);
+
+        for (item, expected) in buffer.iter().zip([0, 1, 2]) {
+            assert_eq!(item.0, expected);
+        }
+    });
 }
 
 #[test]
