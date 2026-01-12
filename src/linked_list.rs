@@ -361,10 +361,10 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// assert_eq!(&list, &[0, 1, 2]);
     ///
     /// let result = list.try_insert(200, 14).unwrap_err();
-    /// ``` 
+    /// ```
     #[inline]
     pub fn try_insert(&mut self, index: usize, value: T) -> Result<(), TryInsertError<T>> {
-        self.try_insert_mut(index, value).map(|_|())
+        self.try_insert_mut(index, value).map(|_| ())
     }
 
     /// Insert the given `value` into the `LinkedList` at position `index`.
@@ -430,11 +430,14 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// assert_eq!(&list, &[0, 400, 2]);
     ///
     /// let result = list.try_insert(200, 14).unwrap_err();
-    /// ``` 
+    /// ```
     #[inline]
     pub fn try_insert_mut(&mut self, index: usize, value: T) -> Result<&mut T, TryInsertError<T>> {
         if index > self.len {
-            return Err(TryInsertError { data: value, kind: TryInsertErrorKind::OutOfBounds });
+            return Err(TryInsertError {
+                data: value,
+                kind: TryInsertErrorKind::OutOfBounds,
+            });
         }
 
         match Node::try_alloc(self.arena, value) {
@@ -442,9 +445,10 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
                 self.insert_node(index, node_ptr);
                 unsafe { Ok(&mut node_ptr.as_mut().data) }
             }
-            Err((value, e)) => {
-                Err(TryInsertError { data: value, kind: TryInsertErrorKind::ArenaError(e) })
-            }
+            Err((value, e)) => Err(TryInsertError {
+                data: value,
+                kind: TryInsertErrorKind::ArenaError(e),
+            }),
         }
     }
 
@@ -1625,11 +1629,11 @@ impl<T> Node<T> {
     #[must_use]
     #[inline]
     fn alloc<A: Allocator>(arena: &Arena<A>, value: T) -> NonNull<Self> {
-        let node_ptr = arena
-            .alloc_raw(Layout::new::<Node<T>>())
-            .cast::<Node<T>>();
+        let node_ptr = arena.alloc_raw(Layout::new::<Node<T>>()).cast::<Node<T>>();
 
-        unsafe { Self::init(node_ptr, value); }
+        unsafe {
+            Self::init(node_ptr, value);
+        }
 
         node_ptr
     }
@@ -1643,7 +1647,9 @@ impl<T> Node<T> {
             Err(e) => return Err((value, e)),
         };
 
-        unsafe { Self::init(node_ptr, value); }
+        unsafe {
+            Self::init(node_ptr, value);
+        }
 
         Ok(node_ptr)
     }
@@ -1651,18 +1657,15 @@ impl<T> Node<T> {
     #[inline]
     unsafe fn init(this: NonNull<Self>, value: T) {
         unsafe {
-            this
-                .byte_add(offset_of!(Node<T>, next))
+            this.byte_add(offset_of!(Node<T>, next))
                 .cast::<NonNull<Node<T>>>()
                 .write(NonNull::dangling());
 
-            this
-                .byte_add(offset_of!(Node<T>, prev))
+            this.byte_add(offset_of!(Node<T>, prev))
                 .cast::<NonNull<Node<T>>>()
                 .write(NonNull::dangling());
 
-            this
-                .byte_add(offset_of!(Node<T>, data))
+            this.byte_add(offset_of!(Node<T>, data))
                 .cast::<T>()
                 .write(value);
         }
