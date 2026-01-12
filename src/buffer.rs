@@ -311,8 +311,9 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
 
     /// Decompose a `Buffer` into its constituent parts.
     ///
-    /// Ownership of the data is relinquished to the developer. It is the developer's responsibility
-    /// to ensure that the initialized elements are dropped, otherwise this method will lead to a memory leak.
+    /// Ownership of the data is relinquished to the caller. It is the caller's responsibility
+    /// to ensure that the initialized elements are dropped, otherwise this method will lead
+    /// to a memory leak.
     ///
     /// # Examples
     ///
