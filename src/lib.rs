@@ -884,7 +884,7 @@ impl<A: Allocator> Arena<A> {
     #[must_use]
     #[inline]
     pub fn alloc_ref<T>(&self, value: T) -> &mut ManuallyDrop<T> {
-        let mut slot = self.alloc_raw(Layout::new::<T>()).cast::<ManuallyDrop<T>>();
+        let mut slot = self.alloc_raw(Layout::new::<T>()).cast();
         unsafe {
             slot.write(ManuallyDrop::new(value));
             slot.as_mut()
