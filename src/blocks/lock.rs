@@ -5,10 +5,16 @@ use crate::{
     blocks::{Block, LockData},
 };
 use alloc::alloc::Allocator;
-use core::ptr::{self, NonNull};
+use core::{num::NonZeroUsize, ptr::NonNull};
 
-pub(crate) const LOCKED_PTR: NonNull<Block> =
-    unsafe { NonNull::new_unchecked(ptr::without_provenance_mut(usize::MAX)) };
+pub(crate) const LOCKED_PTR: NonNull<Block> = const {
+    let addr = match NonZeroUsize::new(usize::MAX) {
+        Some(n) => n,
+        None => unreachable!(),
+    };
+
+    NonNull::without_provenance(addr)
+};
 
 pub(crate) struct BlockLock<'a, A: Allocator> {
     arena: &'a Arena<A>,
