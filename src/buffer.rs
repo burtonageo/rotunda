@@ -357,8 +357,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn as_slice(&self) -> &[T] {
-        let ptr = Handle::as_ptr(&self.handle);
-        unsafe { slice::from_raw_parts(ptr as *const T, self.len) }
+        unsafe { &*self.as_slice_ptr() }
     }
 
     /// Access the contents of the `Buffer` as a mutable slice.
@@ -383,8 +382,7 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn as_mut_slice(&mut self) -> &mut [T] {
-        let ptr = Handle::as_mut_ptr(&mut self.handle);
-        unsafe { slice::from_raw_parts_mut(ptr as *mut T, self.len) }
+        unsafe { &mut *self.as_mut_slice_ptr() }
     }
 
     /// Access the initialized contents of the `Buffer`.
