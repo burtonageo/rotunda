@@ -107,6 +107,25 @@ fn test_arena_clear() {
 
     assert_eq!(num_free_blocks, 2);
     assert!(arena.blocks.curr_block().get().is_some());
+
+    arena.with_scope(|| {
+        let get_arena_head = || {
+            arena
+                .curr_block_head()
+                .map(NonNull::as_ptr)
+                .map(<*mut _>::cast::<u8>)
+                .unwrap_or_else(ptr::null_mut)
+        };
+
+        let head = get_arena_head();
+        {
+            let value = Handle::new_in(&arena, 255u8);
+            let inner = Handle::into_inner(value);
+            assert_eq!(inner, 255);
+        }
+        let head_2 = get_arena_head();
+        assert!(ptr::eq(head, head_2));
+    });
 }
 
 #[test]

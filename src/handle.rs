@@ -531,9 +531,8 @@ impl<'a, T: Unpin, A: Allocator> Handle<'a, T, A> {
     /// assert_eq!(&data, &[1, 2, 3, 4]);
     /// ```
     #[inline]
-    pub const fn into_inner(this: Self) -> T {
-        let inner = unsafe { this.ptr.read() };
-        let _this = ManuallyDrop::new(this);
+    pub fn into_inner(this: Self) -> T {
+        let (inner, _) = Self::extract_inner(this);
         inner
     }
 
