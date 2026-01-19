@@ -17,6 +17,7 @@
 use crate::{Arena, InvariantLifetime, blocks::lock::BlockLock, handle::Handle};
 use alloc::alloc::{Allocator, Global, Layout};
 use core::{
+    any::Any,
     borrow::{Borrow, BorrowMut},
     error::{self, Error},
     fmt,
@@ -122,6 +123,15 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
         unsafe { Self::from_raw_parts(handle, 0) }
     }
 
+    #[inline]
+    pub fn try_with_capacity_in(
+        arena: &'a Arena<A>,
+        capacity: usize,
+    ) -> Result<Self, crate::Error> {
+        let handle = Handle::try_new_slice_uninit_in(arena, capacity)?;
+        unsafe { Ok(Self::from_raw_parts(handle, 0)) }
+    }
+
     /// Create a new `Buffer` from the given function.
     ///
     /// The function `f()` will be called `len` times with the index of each
@@ -153,6 +163,20 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
         let mut buf = Buffer::with_capacity_in(arena, len);
         buf.extend((0..len).map(f));
         buf
+    }
+
+    #[inline]
+    pub fn try_from_fn_in<E, F: FnMut(usize) -> Result<T, E>>(
+        arena: &'a Arena<A>,
+        len: usize,
+        mut f: F,
+    ) -> Result<Buffer<'a, T, A>, TryFromFnError<E>> {
+        let mut buf = Buffer::try_with_capacity_in(arena, len)?;
+        for i in 0..len {
+            let elem = f(i).map_err(TryFromFnError::Callback)?;
+            buf.push(elem);
+        }
+        Ok(buf)
     }
 
     #[track_caller]
@@ -2721,6 +2745,39 @@ impl<I: IntoIterator> fmt::Display for TryExtendError<I> {
 }
 
 impl<I: IntoIterator> Error for TryExtendError<I> {}
+
+#[derive(Debug)]
+pub enum TryFromFnError<E> {
+    Callback(E),
+    Arena(crate::Error),
+}
+
+impl<E: fmt::Display> fmt::Display for TryFromFnError<E> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::Callback(ref e) => fmt::Display::fmt(e, fmtr),
+            Self::Arena(ref e) => fmt::Display::fmt(e, fmtr),
+        }
+    }
+}
+
+impl<E: Any + fmt::Debug + fmt::Display + Error> Error for TryFromFnError<E> {
+    #[inline]
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match *self {
+            Self::Callback(ref e) => Some(e),
+            Self::Arena(ref e) => Some(e),
+        }
+    }
+}
+
+impl<E> From<crate::Error> for TryFromFnError<E> {
+    #[inline]
+    fn from(value: crate::Error) -> Self {
+        Self::Arena(value)
+    }
+}
 
 /// A by-value iterator over a [`Buffer`].
 ///
