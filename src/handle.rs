@@ -1463,3 +1463,11 @@ impl<'a, T: Serialize, A: Allocator> Serialize for Handle<'a, T, A> {
         self.as_ref().serialize(serializer)
     }
 }
+
+#[cfg(feature = "serde")]
+impl<'a, T: Serialize, A: Allocator> Serialize for Handle<'a, [T], A> {
+    #[inline]
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.iter())
+    }
+}
