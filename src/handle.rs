@@ -706,14 +706,14 @@ impl<'a, T, A: Allocator> Handle<'a, [T], A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let handle = Handle::new_slice_with_fn_in(&arena, 5, |i| i * 2);
+    /// let handle = Handle::new_slice_from_fn_in(&arena, 5, |i| i * 2);
     ///
     /// assert_eq!(handle.as_ref(), &[0, 2, 4, 6, 8]);
     /// ```
     #[track_caller]
     #[must_use]
     #[inline]
-    pub fn new_slice_with_fn_in<F: FnMut(usize) -> T>(
+    pub fn new_slice_from_fn_in<F: FnMut(usize) -> T>(
         arena: &'a Arena<A>,
         slice_len: usize,
         f: F,

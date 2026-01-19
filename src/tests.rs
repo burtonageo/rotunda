@@ -170,7 +170,7 @@ fn test_arena_slice() {
 
     let arena = Arena::new();
 
-    let array = Handle::new_slice_with_fn_in(&arena, LEN, identity);
+    let array = Handle::new_slice_from_fn_in(&arena, LEN, identity);
     assert_eq!(array.len(), LEN);
 
     for (idx, elem) in array.iter().enumerate() {
@@ -444,7 +444,7 @@ fn test_rc() {
         let sv_3 = RcHandle::new_in(&arena, CountDrops(21));
         assert_eq!(DROP_COUNT.load(AtomicOrdering::SeqCst), 0);
 
-        let values = Handle::new_slice_with_fn_in(&arena, 21, |_| sv_3.clone());
+        let values = Handle::new_slice_from_fn_in(&arena, 21, |_| sv_3.clone());
 
         assert_eq!(DROP_COUNT.load(AtomicOrdering::SeqCst), 0);
         drop(values);
