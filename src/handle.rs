@@ -1470,17 +1470,9 @@ impl<'a, W: ?Sized + Write, A: Allocator> Write for Handle<'a, W, A> {
 }
 
 #[cfg(feature = "serde")]
-impl<'a, T: Serialize, A: Allocator> Serialize for Handle<'a, T, A> {
+impl<'a, T: ?Sized + Serialize, A: Allocator> Serialize for Handle<'a, T, A> {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.as_ref().serialize(serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'a, T: Serialize, A: Allocator> Serialize for Handle<'a, [T], A> {
-    #[inline]
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.collect_seq(self.iter())
     }
 }
