@@ -7,7 +7,6 @@
 use crate::{
     Arena,
     buffer::{Buffer, IntoIterHandles},
-    layout_repeat,
     rc_handle::RcHandle,
     string_buffer::{FromUtf8Error, StringBuffer},
 };
@@ -291,7 +290,7 @@ impl<'a, T, A: Allocator> Handle<'a, [MaybeUninit<T>], A> {
     #[must_use]
     pub fn new_slice_uninit_in(arena: &'a Arena<A>, slice_len: usize) -> Self {
         let type_layout = Layout::new::<T>();
-        let (array_layout, ..) = layout_repeat(&type_layout, slice_len).expect("size overflow");
+        let (array_layout, ..) = type_layout.repeat(slice_len).expect("size overflow");
 
         let ptr = {
             let ptr = arena.alloc_raw(array_layout).cast::<MaybeUninit<T>>();
@@ -302,9 +301,12 @@ impl<'a, T, A: Allocator> Handle<'a, [MaybeUninit<T>], A> {
     }
 
     #[inline]
-    pub fn try_new_slice_uninit_in(arena: &'a Arena<A>, slice_len: usize) -> Result<Self, crate::Error> {
+    pub fn try_new_slice_uninit_in(
+        arena: &'a Arena<A>,
+        slice_len: usize,
+    ) -> Result<Self, crate::Error> {
         let type_layout = Layout::new::<T>();
-        let (array_layout, ..) = layout_repeat(&type_layout, slice_len)?;
+        let (array_layout, ..) = type_layout.repeat(slice_len)?;
 
         let ptr = {
             let ptr = arena.try_alloc_raw(array_layout)?.cast::<MaybeUninit<T>>();

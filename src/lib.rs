@@ -1311,14 +1311,3 @@ impl ErrorTrait for Error {
 }
 
 pub(crate) type InvariantLifetime<'a, T> = PhantomData<fn(&'a T) -> &'a T>;
-
-#[inline]
-fn layout_repeat(layout: &Layout, n: usize) -> Result<(Layout, usize), LayoutError> {
-    let padded = layout.pad_to_align();
-    match layout.size().checked_mul(n) {
-        Some(array_size) => Layout::from_size_align(array_size, layout.align())
-            .map(|layout| (layout, padded.size())),
-        // Generate a guaranteed `LayoutError` by creating a `Layout` with alignment `0`.
-        None => Layout::from_size_align(1, 0).map(|layout| (layout, 0)),
-    }
-}

@@ -4,7 +4,7 @@
 
 //! Single-threaded reference-counting pointer types backed by an `Arena`.
 
-use crate::{Arena, buffer::Buffer, handle::Handle, layout_repeat};
+use crate::{Arena, buffer::Buffer, handle::Handle};
 use alloc::alloc::{Allocator, Global, Layout};
 use core::{
     any::Any,
@@ -856,8 +856,7 @@ impl<'a, T, A: Allocator> RcHandle<'a, [MaybeUninit<T>], A> {
     #[must_use]
     #[inline]
     pub fn new_slice_uninit_in(arena: &'a Arena<A>, slice_len: usize) -> Self {
-        let (array_layout, ..) =
-            layout_repeat(&Layout::new::<T>(), slice_len).expect("size overflow");
+        let (array_layout, ..) = Layout::new::<T>().repeat(slice_len).expect("size overflow");
         let inner_layout = rc_inner_layout_for_value_layout(array_layout);
 
         unsafe {
