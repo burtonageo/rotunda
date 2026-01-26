@@ -634,6 +634,7 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
         unsafe { this.ptr.as_ref() }
     }
 
+    #[track_caller]
     #[must_use]
     #[inline]
     const fn clone_const(&self) -> RcHandle<'a, T, A> {
