@@ -157,7 +157,7 @@ impl<A: Allocator> Arena<A> {
     #[must_use]
     #[inline]
     pub const fn new_in(allocator: A) -> Self {
-        let default_block_size = i16::MAX as usize + 1;
+        let default_block_size = const { 2usize.strict_pow(16) };
         Self::with_block_size_in(default_block_size, allocator)
     }
 
