@@ -49,7 +49,7 @@ use core::{
     fmt,
     iter::FusedIterator,
     marker::PhantomData,
-    mem::{ManuallyDrop, MaybeUninit},
+    mem::{self, ManuallyDrop, MaybeUninit},
     ptr::{self, NonNull},
     str,
 };
@@ -157,7 +157,13 @@ impl<A: Allocator> Arena<A> {
     #[must_use]
     #[inline]
     pub const fn new_in(allocator: A) -> Self {
-        let default_block_size = const { 2usize.strict_pow(16) };
+        let default_block_size = const {
+            if mem::size_of::<*mut ()>() >= 4 {
+                2usize.strict_pow(16)
+            } else {
+                2usize.strict_pow(8)
+            }
+        };
         Self::with_block_size_in(default_block_size, allocator)
     }
 
@@ -779,9 +785,7 @@ impl<A: Allocator> Arena<A> {
             }
         }
 
-        unsafe {
-            self.blocks.bump_layout(layout)
-        }
+        unsafe { self.blocks.bump_layout(layout) }
     }
 
     /// Returns a new allocation matching `layout` in the `Arena`.
@@ -821,9 +825,7 @@ impl<A: Allocator> Arena<A> {
     pub fn try_alloc_raw(&self, layout: Layout) -> Result<NonNull<c_void>, Error> {
         self.get_block_for_layout(layout)?;
 
-        unsafe {
-            Ok(self.blocks.bump_layout(layout))
-        }
+        unsafe { Ok(self.blocks.bump_layout(layout)) }
     }
 
     /// Returns a new zeroed allocation from the current block in the `Arena`.

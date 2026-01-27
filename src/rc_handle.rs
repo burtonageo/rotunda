@@ -1189,7 +1189,7 @@ impl<'a, T: ?Sized, A: Allocator> Clone for RcHandle<'a, T, A> {
     /// ```
     /// use rotunda::{Arena, rc_handle::RcHandle};
     ///
-    /// let arena = Arena::with_block_size(u32::MAX as usize);
+    /// let arena = Arena::new();
     ///
     /// let rc = RcHandle::new_splat_in(&arena, 1024 * 2, 0u8);
     ///
