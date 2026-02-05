@@ -767,7 +767,7 @@ fn test_string_buffer() {
     let arena = Arena::new();
 
     arena.with_scope(|| {
-        let mut string_buf = StringBuffer::with_capacity_in(200, &arena);
+        let mut string_buf = StringBuffer::with_capacity_in(&arena, 200);
 
         string_buf.push_str("Lorem ipsum");
         string_buf.push_str(" dolor sit");

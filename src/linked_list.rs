@@ -88,18 +88,24 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// # Examples
     ///
     /// ```
-    /// use rotunda::{Arena, handle::Handle, linked_list::LinkedList};
+    /// use core::fmt::Write;
+    /// use rotunda::{Arena, handle::Handle, linked_list::LinkedList, string_buffer::StringBuffer};
+    ///
     /// let arena = Arena::new();
     ///
+    /// let mut string_buffer = StringBuffer::with_capacity_in(&arena, 20);
+    ///
     /// let linked_list = LinkedList::from_fn_in(&arena, 5, |elem| {
-    ///     Handle::new_str_in(&arena, &format!("{}", elem))
+    ///     string_buffer.clear();
+    ///     write!(string_buffer, "Handle {}", elem);
+    ///     Handle::new_str_in(&arena, string_buffer.as_str())
     /// });
     ///
-    /// assert_eq!(linked_list.get(0).unwrap(), "0");
-    /// assert_eq!(linked_list.get(1).unwrap(), "1");
-    /// assert_eq!(linked_list.get(2).unwrap(), "2");
-    /// assert_eq!(linked_list.get(3).unwrap(), "3");
-    /// assert_eq!(linked_list.get(4).unwrap(), "4");
+    /// assert_eq!(linked_list.get(0).unwrap(), "Handle 0");
+    /// assert_eq!(linked_list.get(1).unwrap(), "Handle 1");
+    /// assert_eq!(linked_list.get(2).unwrap(), "Handle 2");
+    /// assert_eq!(linked_list.get(3).unwrap(), "Handle 3");
+    /// assert_eq!(linked_list.get(4).unwrap(), "Handle 4");
     /// ```
     #[track_caller]
     #[must_use]

@@ -37,7 +37,15 @@ pub struct StringBuffer<'a, A: Allocator = Global> {
 impl<'a, A: Allocator> StringBuffer<'a, A> {
     /// Create a new, empty `StringBuffer` in the given `Arena`.
     ///
-    /// This `Buffer`
+    /// # Examples
+    /// 
+    /// ```
+    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let string_buffer = StringBuffer::empty_in(&arena);
+    /// ```
     #[must_use]
     #[inline]
     pub const fn empty_in(arena: &'a Arena<A>) -> Self {
@@ -48,9 +56,17 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
 
     #[must_use]
     #[inline]
-    pub const unsafe fn from_handle(handle: Handle<'a, [MaybeUninit<u8>], A>) -> Self {
+    pub const fn from_handle(handle: Handle<'a, [MaybeUninit<u8>], A>) -> Self {
         Self {
             inner: unsafe { Buffer::from_raw_parts(handle, 0) },
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const unsafe fn from_raw_parts(handle: Handle<'a, [MaybeUninit<u8>], A>, len: usize) -> Self {
+        Self {
+            inner: unsafe { Buffer::from_raw_parts(handle, len) },
         }
     }
 
@@ -109,16 +125,16 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     #[track_caller]
     #[inline]
     #[must_use]
-    pub fn with_capacity_in(capacity: usize, arena: &'a Arena<A>) -> Self {
-        unsafe { Self::from_handle(Handle::new_slice_uninit_in(arena, capacity)) }
+    pub fn with_capacity_in(arena: &'a Arena<A>, capacity: usize) -> Self {
+        Self::from_handle(Handle::new_slice_uninit_in(arena, capacity))
     }
 
     #[track_caller]
     #[inline]
     #[must_use]
-    pub fn new_in<S: AsRef<str>>(arena: &'a Arena<A>, s: &S) -> Self {
+    pub fn new_in<S: ?Sized + AsRef<str>>(arena: &'a Arena<A>, s: &S) -> Self {
         let s = s.as_ref();
-        let mut buf = StringBuffer::with_capacity_in(s.len(), arena);
+        let mut buf = StringBuffer::with_capacity_in(arena, s.len());
         buf.push_str(s);
         buf
     }
@@ -172,6 +188,16 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     }
 
     #[inline]
+    pub fn shrink_to_fit(&mut self) {
+        self.inner.shrink_to_fit();
+    }
+
+    #[inline]
+    pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
+        self.inner.try_reserve(additional)
+    }
+
+    #[inline]
     pub fn truncate(&mut self, new_len: usize) {
         if new_len < self.len() {
             assert!(self.as_str().is_char_boundary(new_len));
@@ -193,13 +219,57 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
         self.inner.extend(string.as_ref().bytes());
     }
 
+    /// Appends the character to the end of the string.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if there is no reserved space available for the
+    /// `char`.
+    ///
+    /// # Examples
+    /// 
+    /// ```
+    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut string = StringBuffer::new_in(&arena, "Hello");
+    /// 
+    /// string.push_char('!');
+    /// assert_eq!(&string, "Hello!");
+    /// ```
     #[inline]
     pub fn push_char(&mut self, ch: char) {
         let mut ch_bytes = [0u8; 4];
         self.push_str(ch.encode_utf8(&mut ch_bytes));
     }
 
-    #[must_use]
+    #[inline]
+    pub fn try_push_char(&mut self, ch: char) -> Result<(), char> {
+        let mut ch_bytes = [0u8; 4];
+        match self.try_push_str(ch.encode_utf8(&mut ch_bytes)) {
+            Ok(()) => Ok(()),
+            Err(_) => Err(ch),
+        }
+    }
+
+    /// Removes the last character from the string and returns it.
+    ///
+    /// Returns `None` if the string is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut string = StringBuffer::new_in(&arena, "Hello 明日");
+    /// 
+    /// let last = string.pop();
+    /// assert_eq!(last.unwrap(), '日');
+    /// assert_eq!(string.as_str(), "Hello 明");
+    /// ```
     #[inline]
     pub fn pop(&mut self) -> Option<char> {
         let ch = self.as_str().chars().next_back()?;
