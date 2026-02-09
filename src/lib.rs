@@ -440,7 +440,6 @@ impl<A: Allocator> Arena<A> {
     /// Checks whether the current block has the capacity to allocate up to `block_capacity_bytes`,
     /// and allocates a new block if it doesn't.
     ///
-    ///
     /// # Examples
     ///
     /// ```
