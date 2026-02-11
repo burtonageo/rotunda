@@ -18,6 +18,7 @@ use core::{
     hash::{Hash, Hasher},
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
+    panic::{RefUnwindSafe, UnwindSafe},
     ptr,
     str::{self, Utf8Error},
 };
@@ -38,7 +39,7 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     /// Create a new, empty `StringBuffer` in the given `Arena`.
     ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use rotunda::{Arena, string_buffer::StringBuffer};
     ///
@@ -50,7 +51,7 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     #[inline]
     pub const fn empty_in(arena: &'a Arena<A>) -> Self {
         Self {
-            inner: Buffer::empty_in(arena)
+            inner: Buffer::empty_in(arena),
         }
     }
 
@@ -64,7 +65,10 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
 
     #[must_use]
     #[inline]
-    pub const unsafe fn from_raw_parts(handle: Handle<'a, [MaybeUninit<u8>], A>, len: usize) -> Self {
+    pub const unsafe fn from_raw_parts(
+        handle: Handle<'a, [MaybeUninit<u8>], A>,
+        len: usize,
+    ) -> Self {
         Self {
             inner: unsafe { Buffer::from_raw_parts(handle, len) },
         }
@@ -227,14 +231,14 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     /// `char`.
     ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use rotunda::{Arena, string_buffer::StringBuffer};
     ///
     /// let arena = Arena::new();
     ///
     /// let mut string = StringBuffer::new_in(&arena, "Hello");
-    /// 
+    ///
     /// string.push_char('!');
     /// assert_eq!(&string, "Hello!");
     /// ```
@@ -265,7 +269,7 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     /// let arena = Arena::new();
     ///
     /// let mut string = StringBuffer::new_in(&arena, "Hello 明日");
-    /// 
+    ///
     /// let last = string.pop();
     /// assert_eq!(last.unwrap(), '日');
     /// assert_eq!(string.as_str(), "Hello 明");
@@ -506,6 +510,10 @@ impl<'a, A: Allocator> Serialize for StringBuffer<'a, A> {
         <str as Serialize>::serialize(self.as_ref(), serializer)
     }
 }
+
+impl<'a, A: Allocator + RefUnwindSafe> UnwindSafe for StringBuffer<'a, A> {}
+
+impl<'a, A: Allocator + RefUnwindSafe> RefUnwindSafe for StringBuffer<'a, A> {}
 
 #[repr(transparent)]
 pub struct GrowableStringBuffer<'a, A: Allocator = Global> {

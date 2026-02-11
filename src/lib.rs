@@ -50,6 +50,7 @@ use core::{
     iter::FusedIterator,
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
+    panic::{UnwindSafe, RefUnwindSafe},
     ptr::{self, NonNull},
     str,
 };
@@ -1091,6 +1092,10 @@ impl<A: Allocator> fmt::Debug for Arena<A> {
 }
 
 unsafe impl<A: Allocator + Sync> Send for Arena<A> {}
+
+impl<A: Allocator + UnwindSafe> UnwindSafe for Arena<A> {}
+
+impl<A: Allocator + RefUnwindSafe> RefUnwindSafe for Arena<A> {}
 
 #[cfg(feature = "allocator-api2")]
 unsafe impl<A: Allocator> allocator_api2::alloc::Allocator for &'_ Arena<A> {

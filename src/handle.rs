@@ -1322,9 +1322,12 @@ impl<'a, T, const N: usize, A: Allocator> TryFrom<Handle<'a, [T], A>> for Handle
     }
 }
 
-impl<'a, T: RefUnwindSafe + ?Sized, A: Allocator + UnwindSafe> UnwindSafe for Handle<'a, T, A> {}
+impl<'a, T: ?Sized + UnwindSafe, A: Allocator + RefUnwindSafe> UnwindSafe for Handle<'a, T, A> {}
 
-impl<'a, T: RefUnwindSafe + ?Sized, A: Allocator + UnwindSafe> RefUnwindSafe for Handle<'a, T, A> {}
+impl<'a, T: ?Sized + RefUnwindSafe, A: Allocator + RefUnwindSafe> RefUnwindSafe
+    for Handle<'a, T, A>
+{
+}
 
 #[cfg(feature = "nightly")]
 impl<'a, T: Unsize<U> + ?Sized, U: ?Sized, A: Allocator> CoerceUnsized<Handle<'a, U, A>>

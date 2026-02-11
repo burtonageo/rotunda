@@ -12,6 +12,7 @@ use core::{
     iter::{DoubleEndedIterator, FusedIterator, Iterator},
     marker::PhantomData,
     mem::{self, offset_of},
+    panic::{RefUnwindSafe, UnwindSafe},
     ptr::{self, NonNull},
 };
 #[cfg(feature = "serde")]
@@ -1282,6 +1283,10 @@ impl<'a, T: Serialize, A: Allocator> Serialize for LinkedList<'a, T, A> {
         serializer.collect_seq(self.iter())
     }
 }
+
+impl<'a, T: UnwindSafe, A: Allocator + RefUnwindSafe> UnwindSafe for LinkedList<'a, T, A> {}
+
+impl<'a, T: RefUnwindSafe, A: Allocator + RefUnwindSafe> RefUnwindSafe for LinkedList<'a, T, A> {}
 
 /// Immutable iterator over a `LinkedList`.
 ///

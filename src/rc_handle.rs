@@ -19,6 +19,7 @@ use core::{
     mem::{self, ManuallyDrop, MaybeUninit, offset_of},
     num::NonZero,
     ops::{Deref, Index},
+    panic::{RefUnwindSafe, UnwindSafe},
     ptr::{self, NonNull},
     slice::{self, SliceIndex},
     str::Utf8Error,
@@ -1302,6 +1303,13 @@ impl<'a, T: ?Sized + Serialize, A: Allocator> Serialize for RcHandle<'a, T, A> {
     }
 }
 
+impl<'a, T: ?Sized + UnwindSafe, A: Allocator + RefUnwindSafe> UnwindSafe for RcHandle<'a, T, A> {}
+
+impl<'a, T: ?Sized + RefUnwindSafe, A: Allocator + RefUnwindSafe> RefUnwindSafe
+    for RcHandle<'a, T, A>
+{
+}
+
 impl<'a, T: ?Sized, A: Allocator> Drop for RcHandle<'a, T, A> {
     #[track_caller]
     #[inline]
@@ -1882,6 +1890,13 @@ impl<'a, T: ?Sized + fmt::Debug, A: Allocator> fmt::Debug for WeakHandle<'a, T, 
             fmtr.debug_tuple("WeakHandle").field(payload).finish()
         }
     }
+}
+
+impl<'a, T: ?Sized + UnwindSafe, A: Allocator + RefUnwindSafe> UnwindSafe for WeakHandle<'a, T, A> {}
+
+impl<'a, T: ?Sized + RefUnwindSafe, A: Allocator + RefUnwindSafe> RefUnwindSafe
+    for WeakHandle<'a, T, A>
+{
 }
 
 impl<'a, T: ?Sized, A: Allocator> fmt::Pointer for WeakHandle<'a, T, A> {

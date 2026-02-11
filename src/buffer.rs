@@ -27,6 +27,7 @@ use core::{
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut, Index, IndexMut},
+    panic::{RefUnwindSafe, UnwindSafe},
     ptr::{self, NonNull},
     slice::{self, SliceIndex},
 };
@@ -1965,6 +1966,10 @@ impl<'a, T: Serialize, A: Allocator> Serialize for Buffer<'a, T, A> {
         serializer.collect_seq(self.iter())
     }
 }
+
+impl<'a, T: UnwindSafe, A: Allocator + RefUnwindSafe> UnwindSafe for Buffer<'a, T, A> {}
+
+impl<'a, T: RefUnwindSafe, A: Allocator + RefUnwindSafe> RefUnwindSafe for Buffer<'a, T, A> {}
 
 impl<'a, T, A: Allocator> Drop for Buffer<'a, T, A> {
     #[inline]
