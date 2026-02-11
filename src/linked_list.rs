@@ -1276,7 +1276,7 @@ impl<'a, 't, T: Copy, A: Allocator> Extend<&'t [T]> for LinkedList<'a, T, A> {
 }
 
 #[cfg(feature = "serde")]
-impl<'a, T: Serialize> Serialize for LinkedList<'a, T> {
+impl<'a, T: Serialize, A: Allocator> Serialize for LinkedList<'a, T, A> {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_seq(self.iter())

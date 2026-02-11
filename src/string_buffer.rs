@@ -500,7 +500,7 @@ impl<'a> From<StringBuffer<'a>> for Handle<'a, [u8]> {
 }
 
 #[cfg(feature = "serde")]
-impl<'a> Serialize for StringBuffer<'a> {
+impl<'a, A: Allocator> Serialize for StringBuffer<'a, A> {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         <str as Serialize>::serialize(self.as_ref(), serializer)
