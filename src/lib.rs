@@ -8,6 +8,7 @@
         derive_coerce_pointee,
         coerce_unsized,
         allocator_api,
+        ascii_char,
         unsize,
     )
 )]

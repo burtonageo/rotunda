@@ -10,13 +10,15 @@ use crate::{
     handle::Handle,
 };
 use alloc::alloc::{Allocator, Global};
+#[cfg(feature = "nightly")]
+use core::{ascii, mem};
 use core::{
     borrow::{Borrow, BorrowMut},
     cmp,
     error::Error as ErrorTrait,
     fmt,
     hash::{Hash, Hasher},
-    mem::MaybeUninit,
+    mem::{MaybeUninit},
     ops::{Deref, DerefMut},
     panic::{RefUnwindSafe, UnwindSafe},
     ptr,
@@ -306,6 +308,27 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
         let (slice_ptr, arena) = Handle::into_raw(handle);
         let bytes = ptr::slice_from_raw_parts_mut(slice_ptr as *mut u8, len);
         unsafe { Handle::from_raw_in(bytes as *mut str, arena) }
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> StringBuffer<'a, A> {
+    #[must_use]
+    #[inline]
+    pub const fn into_ascii(self) -> Result<Buffer<'a, ascii::Char, A>, StringBuffer<'a, A>> {
+        if self.as_str().is_ascii() {
+            unsafe { Ok(Self::into_ascii_unchecked(self)) }
+        } else {
+            Err(self)
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const unsafe fn into_ascii_unchecked(self) -> Buffer<'a, ascii::Char, A> {
+        let inner = unsafe { ptr::read(&self.inner) };
+        mem::forget(self);
+        unsafe { mem::transmute(inner) }
     }
 }
 

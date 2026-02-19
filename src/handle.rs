@@ -36,6 +36,8 @@ use core::{
 };
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
+#[cfg(feature = "nightly")]
+use core::ascii;
 #[cfg(feature = "std")]
 use std::io::{self, BufRead, IoSlice, IoSliceMut, Read, Write};
 
@@ -1122,6 +1124,25 @@ impl<'a, A: Allocator> Handle<'a, str, A> {
     }
 }
 
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> Handle<'a, str, A> {
+    #[must_use]
+    #[inline]
+    pub const fn into_ascii(self) -> Result<Handle<'a, [ascii::Char], A>, Handle<'a, str, A>> {
+        if self.as_ref_const().is_ascii() {
+            unsafe { Ok(Self::into_ascii_unchecked(self)) }
+        } else {
+            Err(self)
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const unsafe fn into_ascii_unchecked(self) -> Handle<'a, [ascii::Char], A> {
+        unsafe { mem::transmute(self) }
+    }
+}
+
 impl<'a, T: ?Sized + fmt::Debug, A: Allocator> fmt::Debug for Handle<'a, T, A> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1268,9 +1289,9 @@ impl<'a, A: Allocator> TryFrom<Handle<'a, [u8], A>> for Handle<'a, str, A> {
     }
 }
 
-impl<'a> From<Handle<'a, str>> for Handle<'a, [u8]> {
+impl<'a, A: Allocator> From<Handle<'a, str, A>> for Handle<'a, [u8], A> {
     #[inline]
-    fn from(value: Handle<'a, str>) -> Self {
+    fn from(value: Handle<'a, str, A>) -> Self {
         Handle::into_bytes(value)
     }
 }

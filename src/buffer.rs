@@ -16,6 +16,8 @@
 
 use crate::{Arena, InvariantLifetime, blocks::lock::BlockLock, handle::Handle};
 use alloc::alloc::{Allocator, Global, Layout};
+#[cfg(feature = "nightly")]
+use core::ascii;
 use core::{
     any::Any,
     borrow::{Borrow, BorrowMut},
@@ -1629,6 +1631,25 @@ impl<'a, T: Copy, A: Allocator> Buffer<'a, T, A> {
             );
             self.set_len(self.len + count);
         }
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> Buffer<'a, u8, A> {
+    #[must_use]
+    #[inline]
+    pub const unsafe fn into_ascii(self) -> Result<Buffer<'a, ascii::Char, A>, Self> {
+        if self.as_slice().is_ascii() {
+            unsafe { Ok(Self::into_ascii_unchecked(self)) }
+        } else {
+            Err(self)
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const unsafe fn into_ascii_unchecked(self) -> Buffer<'a, ascii::Char, A> {
+        unsafe { mem::transmute(self) }
     }
 }
 
