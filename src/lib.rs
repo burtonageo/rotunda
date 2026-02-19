@@ -126,11 +126,11 @@ impl<A: Allocator> Arena<A> {
     /// Create a new `Arena`, using the provided `allocator` to allocate
     /// backing storage from.
     ///
-    /// The default block size is `isize::MAX + 1`. This provides a good
-    /// trade-off between blocks which are large enough to store most types
-    /// and not require too much reallocation, but not too large that
-    /// the allocator may run out of memory when allocating the backing
-    /// memory for the `Arena`.
+    /// The default block size is `u16::MAX + 1` on 32-bit or higher systems
+    /// (and `u8::MAX + 1` on 16-bit systems).  This provides a good trade
+    /// off between blocks which are large enough to store most types and
+    /// not require too much reallocation, but not too large that the allocator
+    /// may run out of memory when allocating the backing memory for the `Arena`.
     ///
     /// See [`Arena::with_block_size_in()`] for more details.
     ///
@@ -166,6 +166,7 @@ impl<A: Allocator> Arena<A> {
                 2usize.strict_pow(8)
             }
         };
+
         Self::with_block_size_in(default_block_size, allocator)
     }
 
