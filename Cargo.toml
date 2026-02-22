@@ -23,7 +23,7 @@ optional = true
 default-features = false
 
 [features]
-default = ["allocator-api2", "rand"]
+default = ["allocator-api2"]
 nightly = []
 allocator-api2 = ["dep:allocator-api2", "rand?/alloc"]
 std = ["rand?/std"]
