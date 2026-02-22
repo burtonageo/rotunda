@@ -33,6 +33,8 @@ use core::{
     ptr::{self, NonNull},
     slice::{self, SliceIndex},
 };
+#[cfg(feature = "rand")]
+use rand::seq::IndexedRandom;
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
 #[cfg(feature = "std")]
@@ -1985,6 +1987,14 @@ impl<'a, T: Serialize, A: Allocator> Serialize for Buffer<'a, T, A> {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_seq(self.iter())
+    }
+}
+
+#[cfg(feature = "rand")]
+impl<'a, T, A: Allocator> IndexedRandom for Buffer<'a, T, A> {
+    #[inline]
+    fn len(&self) -> usize {
+        <Buffer<'a, T, A>>::len(self)
     }
 }
 

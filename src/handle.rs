@@ -11,6 +11,8 @@ use crate::{
     string_buffer::{FromUtf8Error, StringBuffer},
 };
 use alloc::alloc::{Allocator, Global, Layout};
+#[cfg(feature = "nightly")]
+use core::ascii;
 use core::{
     any::Any,
     borrow::{Borrow, BorrowMut},
@@ -34,10 +36,10 @@ use core::{
     ops::CoerceUnsized,
     ptr::{Pointee, Thin},
 };
+#[cfg(feature = "rand")]
+use rand::seq::IndexedRandom;
 #[cfg(feature = "serde")]
 use serde_core::{Serialize, Serializer};
-#[cfg(feature = "nightly")]
-use core::ascii;
 #[cfg(feature = "std")]
 use std::io::{self, BufRead, IoSlice, IoSliceMut, Read, Write};
 
@@ -1500,5 +1502,13 @@ impl<'a, T: ?Sized + Serialize, A: Allocator> Serialize for Handle<'a, T, A> {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.as_ref().serialize(serializer)
+    }
+}
+
+#[cfg(feature = "rand")]
+impl<'a, T, A: Allocator> IndexedRandom for Handle<'a, [T], A> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.as_slice().len()
     }
 }
