@@ -271,13 +271,10 @@ impl<A: Allocator> Arena<A> {
     ///
     /// ```
     /// # #![cfg_attr(feature = "nightly", feature(allocator_api))]
-    ///
     /// # #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
     /// # use allocator_api2::alloc::AllocError;
-    ///
     /// # #[cfg(feature = "nightly")]
     /// # use std::alloc::AllocError;
-    ///
     /// use rotunda::Arena;
     ///
     /// let arena = Arena::new();
@@ -287,7 +284,7 @@ impl<A: Allocator> Arena<A> {
     /// arena.try_reserve_blocks(3)?;
     /// # Ok(())
     /// # }
-    /// # inner(&arena);
+    /// # inner(&arena);    
     /// # assert_eq!(arena.free_blocks().count(), 3);
     /// ```
     #[inline]
