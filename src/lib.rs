@@ -672,7 +672,7 @@ impl<A: Allocator> Arena<A> {
     ///     })
     /// };
     ///
-    /// // Warning ⚠️: `handle` has simultaneously been leakded and points to uninitialised memory.
+    /// // Warning ⚠️: `handle` has been leaked and points to uninitialised memory.
     /// // It is undefined behaviour to dereference it in any way (including via non-trivial drop).
     /// # core::mem::forget(handle);
     ///
