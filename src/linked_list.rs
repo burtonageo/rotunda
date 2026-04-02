@@ -814,7 +814,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     pub fn get_mut(&'_ mut self, index: usize) -> Option<&'_ mut T> {
         self.get_node(index)
-            .map(|mut node| unsafe { &mut node.as_mut().data })
+            .map(|node| unsafe { Node::data_ptr(node).as_mut() })
     }
 
     /// Retains only the elements specified by `pred`.
