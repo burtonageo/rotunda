@@ -241,11 +241,6 @@ impl<'a, T: Default, A: Allocator> RcHandle<'a, T, A> {
 }
 
 impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
-    #[inline]
-    pub const fn arena(this: &Self) -> &'a Arena<A> {
-        Self::inner(this).arena
-    }
-
     /// Returns a raw pointer to the contents of this `RcHandle`.
     ///
     /// # Examples
@@ -277,7 +272,7 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
     /// Consumes the `RcHandle`, returning the underlying wrapped pointer.
     ///
     /// To avoid a memory leak, the pointer should be converted back using
-    /// [`RcHandle::from_raw()`].
+    /// [`RcHandle::from_raw_with_alloc()`].
     ///
     /// # Examples
     ///
@@ -425,8 +420,6 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
     #[inline]
     pub fn try_into_handle(this: Self) -> Result<Handle<'a, T, A>, Self> {
         if Self::is_unique(&this) {
-            let arena = RcHandle::arena(&this);
-
             // Mark the `RcHandle` as inaccessible to invalidate all `WeakHandle`s,
             // and to ensure that no values can be written into the data slot.
             Self::inner(&this).mark_inaccessible();
@@ -438,7 +431,7 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
                 as *mut T;
 
             let _this = ManuallyDrop::new(this);
-            unsafe { Ok(Handle::from_raw_in(raw, arena)) }
+            unsafe { Ok(Handle::from_raw_with_alloc(raw)) }
         } else {
             Err(this)
         }
@@ -611,14 +604,14 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
     }
 
     #[inline]
-    pub unsafe fn from_raw(raw: *const T) -> Self {
+    pub unsafe fn from_raw_with_alloc(raw: *const T) -> Self {
         let raw = unsafe { raw.byte_sub(offset_of!(RcHandleInner<'_, (), A>, data)) as *mut _ };
-        unsafe { Self::from_raw_inner(raw) }
+        unsafe { Self::from_raw_with_alloc_inner(raw) }
     }
 
     #[must_use]
     #[inline]
-    const unsafe fn from_raw_inner(raw: *const RcHandleInner<'a, T, A>) -> Self {
+    const unsafe fn from_raw_with_alloc_inner(raw: *const RcHandleInner<'a, T, A>) -> Self {
         let ptr = unsafe { NonNull::new_unchecked(raw.cast_mut()) };
         let handle = Self {
             ptr,
@@ -654,6 +647,13 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
     #[inline]
     const fn as_ref_const(&self) -> &T {
         &Self::inner(self).data
+    }
+}
+
+impl<'a, T: ?Sized> RcHandle<'a, T, Global> {
+    #[inline]
+    pub unsafe fn from_raw(raw: *const T) -> Self {
+        unsafe{ Self::from_raw_with_alloc(raw)}
     }
 }
 
@@ -728,7 +728,7 @@ impl<'a, A: Allocator> RcHandle<'a, dyn Any, A> {
     pub unsafe fn downcast_unchecked<T: Any>(self) -> RcHandle<'a, T, A> {
         unsafe {
             let ptr = Self::into_raw(self);
-            RcHandle::from_raw(ptr as *const T)
+            RcHandle::from_raw_with_alloc(ptr as *const T)
         }
     }
 }
@@ -745,8 +745,8 @@ impl<'a, T, A: Allocator> RcHandle<'a, MaybeUninit<T>, A> {
             .cast::<RcHandleInner<'a, MaybeUninit<T>, A>>();
 
         unsafe {
-            RcHandleInner::init_header_raw(ptr, arena);
-            RcHandle::from_raw_inner(ptr.as_ptr().cast_const())
+            RcHandleInner::init_header_raw(ptr);
+            RcHandle::from_raw_with_alloc_inner(ptr.as_ptr().cast_const())
         }
     }
 
@@ -761,8 +761,8 @@ impl<'a, T, A: Allocator> RcHandle<'a, MaybeUninit<T>, A> {
             .cast::<RcHandleInner<'_, MaybeUninit<T>, A>>();
 
         unsafe {
-            RcHandleInner::init_header_raw(ptr, arena);
-            RcHandle::from_raw_inner(ptr.as_ptr().cast_const())
+            RcHandleInner::init_header_raw(ptr);
+            RcHandle::from_raw_with_alloc_inner(ptr.as_ptr().cast_const())
         }
     }
 
@@ -866,10 +866,10 @@ impl<'a, T, A: Allocator> RcHandle<'a, [MaybeUninit<T>], A> {
                 .alloc_raw(inner_layout)
                 .cast::<RcHandleInner<'_, MaybeUninit<T>, A>>();
 
-            RcHandleInner::init_header_raw(ptr, arena);
+            RcHandleInner::init_header_raw(ptr);
 
             let ptr = RcHandleInner::cast_to_slice(ptr.as_ptr(), slice_len);
-            RcHandle::from_raw_inner(ptr)
+            RcHandle::from_raw_with_alloc_inner(ptr)
         }
     }
 
@@ -1106,7 +1106,7 @@ impl<'a, T: ?Sized + Pointee, A: Allocator> RcHandle<'a, T, A> {
         metadata: <T as Pointee>::Metadata,
     ) -> Self {
         let ptr = ptr::from_raw_parts(data, metadata);
-        unsafe { Self::from_raw(ptr) }
+        unsafe { Self::from_raw_with_alloc(ptr) }
     }
 
     #[must_use]
@@ -1269,7 +1269,7 @@ impl<'a, T, const N: usize, A: Allocator> TryFrom<RcHandle<'a, [T], A>>
         if value.len() == N {
             unsafe {
                 let ptr = RcHandle::into_raw(value);
-                Ok(RcHandle::from_raw(ptr.cast::<[T; N]>()))
+                Ok(RcHandle::from_raw_with_alloc(ptr.cast::<[T; N]>()))
             }
         } else {
             Err(value)
@@ -1460,7 +1460,7 @@ impl<'a, T, A: Allocator> WeakHandle<'a, T, A> {
     ///
     /// let mut weak = WeakHandle::new();
     ///
-    /// assert!(weak.try_upgrade_or_resurrect_with(|| Buffer::empty_in(&arena)).is_none());
+    /// assert!(weak.try_upgrade_or_resurrect_with(|| Buffer::empty()).is_none());
     ///
     /// {
     ///     let buffer = Buffer::new_in(&arena, [1, 2, 3, 4]);
@@ -1471,7 +1471,7 @@ impl<'a, T, A: Allocator> WeakHandle<'a, T, A> {
     /// let rc = weak.try_upgrade_or_resurrect_with(|| Buffer::new_in(&arena, [5, 6, 7, 8])).unwrap();
     /// assert_eq!(*rc, &[5, 6, 7, 8]);
     ///
-    /// let rc_2 = weak.try_upgrade_or_resurrect_with(|| Buffer::empty_in(&arena)).unwrap();
+    /// let rc_2 = weak.try_upgrade_or_resurrect_with(|| Buffer::empty()).unwrap();
     /// assert_eq!(*rc_2, &[5, 6, 7, 8]);
     ///
     /// let mut weak_2 = WeakHandle::new();
@@ -1639,15 +1639,6 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
         }
     }
 
-    #[must_use]
-    #[inline]
-    pub fn arena(&self) -> Option<&'a Arena<A>> {
-        match self.inner() {
-            Some(inner) if inner.is_live() => Some(inner.arena),
-            _ => None,
-        }
-    }
-
     /// Access a pointer to the shared value.
     ///
     /// # Safety
@@ -1767,15 +1758,14 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
 
     #[must_use]
     #[inline]
-    pub fn into_raw_in(self) -> (*const T, Option<&'a Arena<A>>) {
-        let (data_ptr, arena) = (Self::as_ptr(&self), Self::arena(&self));
+    pub fn into_raw(self) -> *const T {
+        let data_ptr = Self::as_ptr(&self);
         let _this = ManuallyDrop::new(self);
-        (data_ptr, arena)
+        data_ptr
     }
 
     #[inline]
-    pub unsafe fn from_raw_in(raw: *const T, arena: &'a Arena<A>) -> Self {
-        let _ = arena;
+    pub unsafe fn from_raw(raw: *const T) -> Self {
         unsafe { Self::from_raw_with_alloc(raw) }
     }
 
@@ -1793,38 +1783,6 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
     }
 }
 
-impl<'a, T: ?Sized> WeakHandle<'a, T, Global> {
-    /// Consumes the `WeakHandle`, returning the underlying wrapped pointer.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use rotunda::{Arena, rc_handle::{RcHandle, WeakHandle}};
-    ///
-    /// let arena = Arena::new();
-    ///
-    /// let rc = RcHandle::new_in(&arena, 127i8);
-    ///
-    /// let weak = RcHandle::downgrade(&rc);
-    ///
-    /// let weak_raw = WeakHandle::into_raw(weak);
-    /// unsafe { assert_eq!(*weak_raw, 127); }
-    ///
-    /// # let _ = unsafe { WeakHandle::<'_, _>::from_raw(weak_raw) };
-    /// ```
-    #[must_use]
-    #[inline]
-    pub fn into_raw(self) -> *const T {
-        let (ptr, _) = Self::into_raw_in(self);
-        ptr
-    }
-
-    #[inline]
-    pub unsafe fn from_raw(raw: *const T) -> Self {
-        unsafe { Self::from_raw_with_alloc(raw) }
-    }
-}
-
 #[cfg(feature = "nightly")]
 impl<'a, T: ?Sized + Pointee, A: Allocator> WeakHandle<'a, T, A> {
     #[must_use]
@@ -1832,18 +1790,17 @@ impl<'a, T: ?Sized + Pointee, A: Allocator> WeakHandle<'a, T, A> {
     pub unsafe fn from_raw_parts_in(
         ptr: *const impl Thin,
         metadata: <T as Pointee>::Metadata,
-        arena: &'a Arena<A>,
     ) -> Self {
         let ptr = ptr::from_raw_parts(ptr, metadata);
-        unsafe { Self::from_raw_in(ptr, arena) }
+        unsafe { Self::from_raw(ptr) }
     }
 
     #[must_use]
     #[inline]
-    pub fn to_raw_parts_in(self) -> (*const (), <T as Pointee>::Metadata, Option<&'a Arena<A>>) {
-        let (raw, arena) = Self::into_raw_in(self);
+    pub fn to_raw_parts_in(self) -> (*const (), <T as Pointee>::Metadata) {
+        let raw = Self::into_raw(self);
         let (data, meta) = <*const T>::to_raw_parts(raw);
-        (data, meta, arena)
+        (data, meta)
     }
 }
 #[cfg(feature = "nightly")]
@@ -1855,7 +1812,7 @@ impl<'a, T: ?Sized + Pointee> WeakHandle<'a, T, Global> {
         metadata: <T as Pointee>::Metadata,
     ) -> Self {
         let ptr = ptr::from_raw_parts(ptr, metadata);
-        unsafe { WeakHandle::from_raw(ptr) }
+        unsafe { WeakHandle::from_raw_with_alloc(ptr) }
     }
 }
 
@@ -1936,9 +1893,8 @@ impl<'h, 'a, T: ?Sized, A: Allocator> From<&'h WeakHandle<'a, T, A>> for WeakHan
 
 #[repr(C)]
 struct RcHandleInner<'a, T: ?Sized, A: Allocator> {
-    _boo: PhantomData<PhantomPinned>,
+    _boo: PhantomData<(&'a Arena<A>, PhantomPinned)>,
     count: Cell<usize>,
-    arena: &'a Arena<A>,
     data: T,
 }
 
@@ -1946,7 +1902,7 @@ impl<'a, T: ?Sized, A: Allocator> RcHandleInner<'a, T, A> {
     const COUNT_INACCESSIBLE: usize = usize::MAX;
 
     #[inline]
-    const unsafe fn init_header_raw(this: NonNull<Self>, arena: &'a Arena<A>) {
+    const unsafe fn init_header_raw(this: NonNull<Self>) {
         let count_ptr = unsafe {
             this.byte_add(offset_of!(RcHandleInner<'_, T, A>, count))
                 .cast::<Cell<usize>>()
@@ -1954,15 +1910,6 @@ impl<'a, T: ?Sized, A: Allocator> RcHandleInner<'a, T, A> {
 
         unsafe {
             count_ptr.write(Cell::new(1));
-        }
-
-        let arena_ptr = unsafe {
-            this.byte_add(offset_of!(RcHandleInner<'_, T, A>, arena))
-                .cast::<&'a Arena<A>>()
-        };
-
-        unsafe {
-            arena_ptr.write(arena);
         }
     }
 

@@ -481,7 +481,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     #[inline]
     pub fn remove(&'_ mut self, index: usize) -> Option<Handle<'a, T, A>> {
         self.remove_node_by_index(index)
-            .map(|node| unsafe { Node::into_handle(node, self.arena) })
+            .map(|node| unsafe { Node::into_handle(node) })
     }
 
     /// Swap the elements at `first_index` and `second_index` in the `LinkedList`.
@@ -849,7 +849,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
 
             if should_drop {
                 unsafe {
-                    let _ = Node::into_handle(self.remove_node(node, i), self.arena);
+                    let _: Handle<'_, T, A> = Node::into_handle(self.remove_node(node, i));
                 }
             } else {
                 i += 1;
@@ -1693,8 +1693,7 @@ impl<T> Node<T> {
     #[inline]
     unsafe fn into_handle<'a, A: Allocator>(
         node: NonNull<Node<T>>,
-        arena: &'a Arena<A>,
     ) -> Handle<'a, T, A> {
-        unsafe { Handle::from_raw_in(Node::data_ptr(node).as_ptr(), arena) }
+        unsafe { Handle::from_raw_with_alloc(Node::data_ptr(node).as_ptr()) }
     }
 }

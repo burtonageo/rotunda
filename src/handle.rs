@@ -53,8 +53,7 @@ use std::io::{self, BufRead, IoSlice, IoSliceMut, Read, Write};
 /// [module documentation]: ./index.html
 pub struct Handle<'a, T: ?Sized, A: Allocator = Global> {
     ptr: NonNull<T>,
-    arena: &'a Arena<A>,
-    _boo: PhantomData<T>,
+    _boo: PhantomData<(&'a Arena<A>, T)>,
 }
 
 // A handle can be sent to other threads if the type within is
@@ -157,10 +156,10 @@ impl<'a, T, A: Allocator> Handle<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn into_slice(this: Self) -> Handle<'a, [T], A> {
-        let (ptr, arena) = Handle::into_raw(this);
+        let ptr = Handle::into_raw(this);
         unsafe {
             let slice = ptr::slice_from_raw_parts_mut(ptr, 1);
-            Handle::from_raw_in(slice, arena)
+            Handle::<'_, [T], A>::from_raw_with_alloc(slice)
         }
     }
 
@@ -180,8 +179,8 @@ impl<'a, T, A: Allocator> Handle<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn into_array(this: Self) -> Handle<'a, [T; 1], A> {
-        let (ptr, arena) = Handle::into_raw(this);
-        unsafe { Handle::from_raw_in(ptr.cast::<[T; 1]>(), arena) }
+        let ptr = Handle::into_raw(this);
+        unsafe { Handle::from_raw_with_alloc(ptr.cast::<[T; 1]>()) }
     }
 }
 
@@ -202,8 +201,8 @@ impl<'a, T, A: Allocator> Handle<'a, [T; 1], A> {
     #[must_use]
     #[inline]
     pub const fn from_array(this: Self) -> Handle<'a, T, A> {
-        let (ptr, arena) = Handle::into_raw(this);
-        unsafe { Handle::from_raw_in(ptr.cast::<T>(), arena) }
+        let ptr = Handle::into_raw(this);
+        unsafe { Handle::from_raw_with_alloc(ptr.cast::<T>()) }
     }
 }
 
@@ -245,7 +244,7 @@ impl<'a, T, A: Allocator> Handle<'a, MaybeUninit<T>, A> {
     pub fn new_uninit_in(arena: &'a Arena<A>) -> Self {
         let layout = Layout::new::<T>().pad_to_align();
         let ptr = arena.alloc_raw(layout).cast::<MaybeUninit<T>>();
-        unsafe { Handle::from_raw_in(ptr.as_ptr(), arena) }
+        unsafe { Handle::from_raw_with_alloc(ptr.as_ptr()) }
     }
 
     /// Create a new `Handle` in `arena`, containing a zeroed `MaybeUninit<T>`.
@@ -266,7 +265,7 @@ impl<'a, T, A: Allocator> Handle<'a, MaybeUninit<T>, A> {
     pub fn new_uninit_zeroed_in(arena: &'a Arena<A>) -> Self {
         let layout = Layout::new::<T>().pad_to_align();
         let ptr = arena.alloc_raw_zeroed(layout).cast::<MaybeUninit<T>>();
-        unsafe { Handle::from_raw_in(ptr.as_ptr(), arena) }
+        unsafe { Handle::from_raw_with_alloc(ptr.as_ptr()) }
     }
 }
 
@@ -301,7 +300,7 @@ impl<'a, T, A: Allocator> Handle<'a, [MaybeUninit<T>], A> {
             NonNull::slice_from_raw_parts(ptr, slice_len)
         };
 
-        unsafe { Handle::from_raw_in(ptr.as_ptr(), arena) }
+        unsafe { Handle::from_raw_with_alloc(ptr.as_ptr()) }
     }
 
     #[inline]
@@ -317,7 +316,7 @@ impl<'a, T, A: Allocator> Handle<'a, [MaybeUninit<T>], A> {
             NonNull::slice_from_raw_parts(ptr, slice_len)
         };
 
-        unsafe { Ok(Handle::from_raw_in(ptr.as_ptr(), arena)) }
+        unsafe { Ok(Handle::from_raw_with_alloc(ptr.as_ptr())) }
     }
 }
 
@@ -355,11 +354,6 @@ impl<'a, T, const N: usize, A: Allocator> Handle<'a, [MaybeUninit<T>; N], A> {
 }
 
 impl<'a, T: ?Sized, A: Allocator> Handle<'a, T, A> {
-    #[inline]
-    pub const fn arena(&'_ self) -> &'a Arena<A> {
-        self.arena
-    }
-
     /// Converts the `Handle` into a raw pointer, also returning the `Arena` from
     /// which it was allocated.
     ///
@@ -383,7 +377,7 @@ impl<'a, T: ?Sized, A: Allocator> Handle<'a, T, A> {
     /// let arena = Arena::new();
     /// let handle = Handle::new_in(&arena, 42);
     ///
-    /// let (ptr, arena) = Handle::into_raw(handle);
+    /// let ptr = Handle::into_raw(handle);
     /// # unsafe { core::ptr::drop_in_place(ptr); }
     /// ```
     ///
@@ -391,10 +385,10 @@ impl<'a, T: ?Sized, A: Allocator> Handle<'a, T, A> {
     /// [`core::ptr::drop_in_place`]: ./https://doc.rust-lang.org/stable/core/ptr/fn.drop_in_place.html
     #[must_use]
     #[inline]
-    pub const fn into_raw(mut this: Self) -> (*mut T, &'a Arena<A>) {
-        let (raw, arena) = (Handle::as_mut_ptr(&mut this), this.arena);
+    pub const fn into_raw(mut this: Self) -> *mut T {
+        let raw = Handle::as_mut_ptr(&mut this);
         let _this = ManuallyDrop::new(this);
-        (raw, arena)
+        raw
     }
 
     /// Access the contained value through a const pointer.
@@ -469,29 +463,36 @@ impl<'a, T: ?Sized, A: Allocator> Handle<'a, T, A> {
     /// memory.
     ///
     /// ```
+    /// #![cfg_attr(feature = "nightly", feature(allocator_api))]
+    ///
+    /// #[cfg(feature = "nightly")]
+    /// extern crate alloc;
+    ///
+    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
+    /// extern crate allocator_api2 as alloc;
+    ///
     /// use rotunda::{Arena, handle::Handle};
     ///
     /// let arena = Arena::new();
     /// let handle = Handle::new_in(&arena, 42u8);
     ///
-    /// let (raw, arena) = Handle::into_raw(handle);
+    /// let raw = Handle::into_raw(handle);
     ///
     /// unsafe {
     ///     *&mut (*raw) = 255;
     /// }
     ///
-    /// let handle = unsafe { Handle::from_raw_in(raw, arena) };
-    /// assert_eq!(handle, 255);
+    /// let handle = unsafe { Handle::<'_, u8, alloc::alloc::Global>::from_raw_with_alloc(raw) };
+    /// // assert_eq!(handle, 255);
     /// ```
     ///
     /// [`Handle::into_raw`]: ./struct.Handle.html#method.into_raw
     #[inline]
-    pub const unsafe fn from_raw_in(raw: *mut T, arena: &'a Arena<A>) -> Self {
+    pub const unsafe fn from_raw_with_alloc(raw: *mut T) -> Self {
         let ptr = unsafe { NonNull::new_unchecked(raw) };
 
         Self {
             ptr,
-            arena,
             _boo: PhantomData,
         }
     }
@@ -574,10 +575,9 @@ impl<'a, T: Unpin, A: Allocator> Handle<'a, T, A> {
     /// ```
     #[inline]
     pub const fn extract_inner(this: Self) -> (T, Handle<'a, MaybeUninit<T>, A>) {
-        let arena = this.arena;
         let inner = unsafe { this.ptr.read() };
         let handle =
-            unsafe { Handle::from_raw_in(this.ptr.cast::<MaybeUninit<T>>().as_ptr(), arena) };
+            unsafe { Handle::from_raw_with_alloc(this.ptr.cast::<MaybeUninit<T>>().as_ptr()) };
 
         let _this = ManuallyDrop::new(this);
         (inner, handle)
@@ -623,8 +623,8 @@ impl<'a, A: Allocator> Handle<'a, dyn Any, A> {
     #[inline]
     pub unsafe fn downcast_unchecked<T: Any>(self) -> Handle<'a, T, A> {
         unsafe {
-            let (ptr, arena) = Self::into_raw(self);
-            Handle::from_raw_in(ptr as *mut T, arena)
+            let ptr = Self::into_raw(self);
+            Handle::from_raw_with_alloc(ptr as *mut T)
         }
     }
 }
@@ -643,8 +643,8 @@ impl<'a, A: Allocator> Handle<'a, dyn Any + Send, A> {
     #[inline]
     pub unsafe fn downcast_unchecked<T: Any>(self) -> Handle<'a, T, A> {
         unsafe {
-            let (ptr, arena) = Self::into_raw(self);
-            Handle::from_raw_in(ptr as *mut T, arena)
+            let ptr = Self::into_raw(self);
+            Handle::from_raw_with_alloc(ptr as *mut T)
         }
     }
 }
@@ -665,8 +665,8 @@ impl<'a, A: Allocator> Handle<'a, dyn Any + Send + Sync, A> {
     #[inline]
     pub unsafe fn downcast_unchecked<T: Any>(self) -> Handle<'a, T, A> {
         unsafe {
-            let (ptr, arena) = Self::into_raw(self);
-            Handle::from_raw_in(ptr as *mut T, arena)
+            let ptr = Self::into_raw(self);
+            Handle::from_raw_with_alloc(ptr as *mut T)
         }
     }
 }
@@ -678,40 +678,31 @@ impl<'a, T: ?Sized + Pointee, A: Allocator> Handle<'a, T, A> {
     pub const unsafe fn from_raw_parts_in(
         ptr: *mut impl Thin,
         metadata: <T as Pointee>::Metadata,
-        arena: &'a Arena<A>,
     ) -> Self {
         let ptr = ptr::from_raw_parts_mut(ptr, metadata);
-        unsafe { Handle::from_raw_in(ptr, arena) }
+        unsafe { Handle::from_raw_with_alloc(ptr) }
     }
 
     #[must_use]
     #[inline]
-    pub const fn to_raw_parts(self) -> (*const (), <T as Pointee>::Metadata, &'a Arena<A>) {
-        let (raw, arena) = Self::into_raw(self);
-        let (data, metadata) = <*const T>::to_raw_parts(raw);
-        (data, metadata, arena)
+    pub const fn to_raw_parts(self) -> (*mut (), <T as Pointee>::Metadata) {
+        let raw = Self::into_raw(self);
+        let (data, metadata) = <*mut T>::to_raw_parts(raw);
+        (data, metadata)
     }
 }
 
 impl<'a, T, A: Allocator> Handle<'a, [T], A> {
     #[inline]
-    pub const fn empty_in(arena: &'a Arena<A>) -> Self {
-        let ptr = match arena.curr_block_head() {
-            Some(ptr) => ptr.as_ptr().cast(),
-            None => ptr::dangling_mut(),
-        };
-        unsafe { Self::slice_from_raw_parts_in(ptr, 0, arena) }
+    pub const fn empty() -> Self {
+        unsafe { Self::slice_from_raw_parts(ptr::dangling_mut(), 0) }
     }
 
     #[must_use]
     #[inline]
-    pub const unsafe fn slice_from_raw_parts_in(
-        data: *mut T,
-        len: usize,
-        arena: &'a Arena<A>,
-    ) -> Self {
+    pub const unsafe fn slice_from_raw_parts(data: *mut T, len: usize) -> Self {
         let slice = ptr::slice_from_raw_parts_mut(data, len);
-        unsafe { Self::from_raw_in(slice, arena) }
+        unsafe { Self::from_raw_with_alloc(slice) }
     }
 
     /// Create a `Handle` slice of length `slice_len`, where each element is initialized by `f`.
@@ -786,8 +777,7 @@ impl<'a, T, A: Allocator> Handle<'a, [T], A> {
     #[inline]
     pub fn split_off(this: &mut Self, at: usize) -> Handle<'a, [T], A> {
         let (lhs, rhs) = {
-            let empty =
-                unsafe { Handle::slice_from_raw_parts_in(ptr::dangling_mut(), 0, this.arena) };
+            let empty = unsafe { Handle::slice_from_raw_parts(ptr::dangling_mut(), 0) };
             let this = mem::replace(this, empty);
             Handle::split_at(this, at)
         };
@@ -894,7 +884,7 @@ impl<'a, T, A: Allocator> Handle<'a, [T], A> {
             assert_unchecked(mid <= len);
         }
 
-        let (ptr, arena) = Self::into_raw(this);
+        let ptr = Self::into_raw(this);
         let ptr = ptr as *mut T;
 
         let lhs = ptr::slice_from_raw_parts_mut(ptr, mid);
@@ -902,8 +892,8 @@ impl<'a, T, A: Allocator> Handle<'a, [T], A> {
 
         unsafe {
             (
-                Handle::from_raw_in(lhs, arena),
-                Handle::from_raw_in(rhs, arena),
+                Handle::from_raw_with_alloc(lhs),
+                Handle::from_raw_with_alloc(rhs),
             )
         }
     }
@@ -943,13 +933,11 @@ impl<'a, T, A: Allocator> Handle<'a, [T], A> {
     #[must_use]
     #[inline]
     pub const fn transpose_into_uninit(this: Self) -> Handle<'a, [MaybeUninit<T>], A> {
-        let arena = this.arena;
         let ptr = unsafe { NonNull::new_unchecked(this.ptr.as_ptr() as *mut [MaybeUninit<T>]) };
         let _this = ManuallyDrop::new(this);
 
         Handle {
             ptr,
-            arena,
             _boo: PhantomData,
         }
     }
@@ -971,8 +959,8 @@ impl<'a, T, A: Allocator> Handle<'a, [T], A> {
     #[must_use]
     #[inline]
     pub(crate) unsafe fn into_array_unchecked<const N: usize>(this: Self) -> Handle<'a, [T; N], A> {
-        let (ptr, arena) = Self::into_raw(this);
-        unsafe { Handle::from_raw_in(ptr as *mut [T; N], arena) }
+        let ptr = Self::into_raw(this);
+        unsafe { Handle::from_raw_with_alloc(ptr as *mut [T; N]) }
     }
 }
 
@@ -1026,11 +1014,9 @@ impl<'a, T, A: Allocator> Handle<'a, MaybeUninit<T>, A> {
     #[inline]
     pub const unsafe fn assume_init(this: Self) -> Handle<'a, T, A> {
         let ptr = this.ptr.cast();
-        let arena = this.arena;
         let _this = ManuallyDrop::new(this);
         Handle {
             ptr,
-            arena,
             _boo: PhantomData,
         }
     }
@@ -1064,11 +1050,11 @@ impl<'a, T, A: Allocator> Handle<'a, MaybeUninit<T>, A> {
 impl<'a, T, A: Allocator> Handle<'a, [MaybeUninit<T>], A> {
     #[inline]
     pub const unsafe fn assume_init_slice(this: Self) -> Handle<'a, [T], A> {
-        let (ptr, arena) = Handle::into_raw(this);
+        let ptr = Handle::into_raw(this);
         let len = ptr.len();
         let ptr = ptr::slice_from_raw_parts_mut(ptr as *mut T, len);
 
-        unsafe { Handle::from_raw_in(ptr, arena) }
+        unsafe { Handle::from_raw_with_alloc(ptr) }
     }
 }
 
@@ -1093,14 +1079,14 @@ impl<'a, A: Allocator> Handle<'a, str, A> {
         fn inner<'a, A: Allocator>(arena: &'a Arena<A>, string: &str) -> Handle<'a, str, A> {
             let len = string.len();
             let hndl = Handle::<'_, [MaybeUninit<u8>], A>::new_slice_uninit_in(arena, len);
-            let (data, arena) = Handle::into_raw(hndl);
+            let data = Handle::into_raw(hndl);
             let data = data as *mut MaybeUninit<u8> as *mut _;
 
             unsafe {
                 ptr::copy_nonoverlapping(string.as_ptr(), data, string.len());
 
                 let ptr = ptr::slice_from_raw_parts_mut(data, len);
-                Handle::from_raw_in(ptr as *mut str, arena)
+                Handle::from_raw_with_alloc(ptr as *mut str)
             }
         }
 
@@ -1123,6 +1109,14 @@ impl<'a, A: Allocator> Handle<'a, str, A> {
     #[inline]
     pub const fn into_bytes(this: Self) -> Handle<'a, [u8], A> {
         unsafe { mem::transmute(this) }
+    }
+}
+
+impl<'a, T: ?Sized> Handle<'a, T, Global> {
+    #[must_use]
+    #[inline]
+    pub const unsafe fn from_raw(raw: *mut T) -> Self {
+        unsafe { Self::from_raw_with_alloc(raw) }
     }
 }
 
@@ -1301,23 +1295,9 @@ impl<'a, A: Allocator> From<Handle<'a, str, A>> for Handle<'a, [u8], A> {
 impl<'a, T: ?Sized, A: Allocator> Drop for Handle<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
-        // Size of value must be calculated before it is dropped.
-        let size = {
-            let layout = Layout::for_value(self.as_ref_const());
-            layout.size() + self.arena.blocks.offset_to_align_for(&layout)
-        };
-
         let p = self.ptr.as_ptr();
         unsafe {
             ptr::drop_in_place(p);
-
-            if self
-                .arena
-                .blocks
-                .is_last_allocation(self.ptr.cast::<()>().byte_add(size).as_ptr())
-            {
-                self.arena.blocks.unbump(size);
-            }
         }
     }
 }
@@ -1336,8 +1316,8 @@ impl<'a, T, const N: usize, A: Allocator> TryFrom<Handle<'a, [T], A>> for Handle
     fn try_from(value: Handle<'a, [T], A>) -> Result<Self, Self::Error> {
         if value.len() == N {
             unsafe {
-                let (ptr, arena) = Handle::into_raw(value);
-                Ok(Handle::from_raw_in(ptr.cast::<[T; N]>(), arena))
+                let ptr = Handle::into_raw(value);
+                Ok(Handle::from_raw_with_alloc(ptr.cast::<[T; N]>()))
             }
         } else {
             Err(value)
@@ -1509,6 +1489,6 @@ impl<'a, T: ?Sized + Serialize, A: Allocator> Serialize for Handle<'a, T, A> {
 impl<'a, T, A: Allocator> IndexedRandom for Handle<'a, [T], A> {
     #[inline]
     fn len(&self) -> usize {
-        self.as_slice().len()
+        self.as_ref().len()
     }
 }

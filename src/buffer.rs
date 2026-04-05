@@ -216,7 +216,6 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
             backing_storage,
             len: 0,
             cap: 0,
-            arena,
             _boo: PhantomData,
         };
 
@@ -287,14 +286,14 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let buffer = Buffer::<u8>::empty_in(&arena);
+    /// let buffer = Buffer::<u8>::empty();
     ///
     /// assert_eq!(buffer.capacity(), 0);
     /// assert_eq!(&buffer, &[]);
     /// ```
     #[inline]
-    pub const fn empty_in(arena: &'a Arena<A>) -> Self {
-        unsafe { Self::from_raw_parts(Handle::empty_in(arena), 0) }
+    pub const fn empty() -> Self {
+        unsafe { Self::from_raw_parts(Handle::empty(), 0) }
     }
 
     /// Compose a `Buffer` from its constituent parts.
@@ -509,11 +508,6 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[inline]
     pub const fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-
-    #[inline]
-    pub const fn arena(&self) -> &'a Arena<A> {
-        self.handle.arena()
     }
 
     /// Returns a by-reference iterator over all elements of this `Buffer`.
@@ -757,12 +751,10 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     /// ```
     #[inline]
     pub fn try_push(&mut self, value: T) -> Result<(), TryPushError<T>> {
-        if self.is_full()
-            && let Err(e) = self.try_reserve(1)
-        {
+        if self.is_full() {
             return Err(TryPushError {
                 value,
-                try_reserve_err: e,
+                try_reserve_err: None,
             });
         }
         // @SAFETY: the capacity is checked above
@@ -967,12 +959,11 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn into_slice_handle(mut self) -> Handle<'a, [T], A> {
-        let arena = self.arena();
         let ptr = Handle::as_mut_ptr(&mut self.handle);
         let ptr = ptr::slice_from_raw_parts_mut(ptr as *const T as *mut T, self.len);
         let _this = ManuallyDrop::new(self);
 
-        unsafe { Handle::from_raw_in(ptr, arena) }
+        unsafe { Handle::from_raw_with_alloc(ptr) }
     }
 
     /// Create a `Buffer` from the given `Handle`.
@@ -997,12 +988,11 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[must_use]
     #[inline]
     pub const fn from_slice_handle(mut handle: Handle<'a, [T], A>) -> Self {
-        let arena = handle.arena();
         let ptr = Handle::as_mut_ptr(&mut handle);
         let len = ptr.len();
         let new_handle = unsafe {
             let ptr = ptr::slice_from_raw_parts_mut(ptr as *mut MaybeUninit<T>, len);
-            Handle::from_raw_in(ptr, arena)
+            Handle::from_raw_with_alloc(ptr)
         };
 
         let _hndl = ManuallyDrop::new(handle);
@@ -1013,10 +1003,9 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     #[allow(clippy::type_complexity)]
     #[inline]
     pub fn split_at_spare_capacity(self) -> (Handle<'a, [T], A>, Handle<'a, [MaybeUninit<T>], A>) {
-        let arena = self.arena();
         let (handle, len) = Self::into_raw_parts(self);
         if len == 0 {
-            return (Handle::empty_in(arena), handle);
+            return (Handle::empty(), handle);
         }
 
         unsafe {
@@ -1101,11 +1090,11 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
         let merged_len = lhs_len + rhs_len;
 
         let (lhs_handle, rhs_start) = Buffer::into_raw_parts(lhs);
-        let (lhs_ptr, arena) = Handle::into_raw(lhs_handle);
+        let lhs_ptr = Handle::into_raw(lhs_handle);
         mem::forget(rhs);
 
         let lhs_ptr = lhs_ptr.cast::<MaybeUninit<T>>();
-        let merged_handle = unsafe { Handle::slice_from_raw_parts_in(lhs_ptr, merged_cap, arena) };
+        let merged_handle = unsafe { Handle::slice_from_raw_parts(lhs_ptr, merged_cap) };
 
         let mut merged_buffer = unsafe { Buffer::from_raw_parts(merged_handle, 0) };
         unsafe {
@@ -1221,47 +1210,6 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
         }
     }
 
-    #[inline]
-    pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
-        if additional == 0 {
-            return Ok(());
-        }
-
-        let arena = self.arena();
-
-        let end = unsafe { self.as_ptr().add(self.capacity()) };
-        if !arena.blocks.is_last_allocation(end.cast()) {
-            return Err(TryReserveError {
-                requested: additional,
-                available: self.capacity() - self.len(),
-            });
-        }
-
-        let cap = self.capacity();
-
-        let (new_cap, max_cap) = (
-            cap + additional,
-            arena.curr_block_capacity().unwrap_or_default(),
-        );
-
-        if new_cap > max_cap {
-            Err(TryReserveError {
-                requested: additional,
-                available: new_cap - max_cap,
-            })
-        } else {
-            unsafe {
-                let old_cap = self.capacity();
-                self.set_capacity(new_cap);
-                self.arena()
-                    .blocks
-                    .bump((new_cap - old_cap) * mem::size_of::<T>());
-            }
-
-            Ok(())
-        }
-    }
-
     /// Sets the length of the `Buffer` to `new_len` without modifying
     /// the contents of the `Buffer`.
     ///
@@ -1349,23 +1297,8 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
 
     #[inline]
     pub fn shrink_to_fit(&mut self) {
-        let arena = self.arena();
-
-        let is_last_alloc = unsafe {
-            arena
-                .blocks
-                .is_last_allocation(self.as_ptr().add(self.capacity()).cast())
-        };
-
         unsafe {
-            let old_cap = self.capacity();
             self.set_capacity(self.len());
-
-            if is_last_alloc {
-                arena
-                    .blocks
-                    .unbump((old_cap - self.len()) * mem::size_of::<T>());
-            }
         }
     }
 
@@ -1535,19 +1468,8 @@ impl<'a, T: Clone, A: Allocator> Buffer<'a, T, A> {
     ///
     /// buffer.extend_from_slice(&data_2);
     /// assert_eq!(buffer.get(4).map(|rc| &**rc), Some("with"));
-    /// assert_eq!(buffer.get(5).map(|rc| &**rc), Some("complements"));
+    /// assert_eq!(buffer.get(5).map(|rc| &**rc), None);
     /// assert_eq!(buffer.get(6), None);
-    ///
-    /// buffer.try_reserve(1).unwrap();
-    ///
-    /// let data_3 = [
-    ///     RcHandle::new_str_in(&arena, "from"),
-    ///     RcHandle::new_str_in(&arena, "steve"),
-    /// ];
-    ///
-    /// buffer.extend_from_slice(&data_3);
-    /// assert_eq!(buffer.get(6).map(|rc| &**rc), Some("from"));
-    /// assert_eq!(buffer.get(7), None);
     /// ```
     #[track_caller]
     #[inline]
@@ -1557,10 +1479,7 @@ impl<'a, T: Clone, A: Allocator> Buffer<'a, T, A> {
         let count = if spare_cap > slice_len {
             slice_len
         } else {
-            match self.try_reserve(slice_len - spare_cap) {
-                Ok(_) => slice_len,
-                Err(e) => e.available(),
-            }
+            spare_cap
         };
 
         for item in slice.iter().take(count).cloned() {
@@ -2022,7 +1941,6 @@ pub struct GrowableBuffer<'a, T, A: Allocator> {
     backing_storage: NonNull<[MaybeUninit<T>]>,
     len: usize,
     cap: usize,
-    arena: &'a Arena<A>,
     _boo: InvariantLifetime<'a, Arena<A>>,
 }
 
@@ -2183,10 +2101,10 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
         if self.is_full() {
             return Err(TryPushError {
                 value,
-                try_reserve_err: TryReserveError {
+                try_reserve_err: Some(TryReserveError {
                     requested: 1,
                     available: 0,
-                },
+                }),
             });
         }
 
@@ -2197,7 +2115,7 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
             Err(e) => {
                 return Err(TryPushError {
                     value,
-                    try_reserve_err: e,
+                    try_reserve_err: Some(e),
                 });
             }
         }
@@ -2390,9 +2308,9 @@ impl<'a, T, A: Allocator> GrowableBuffer<'a, T, A> {
 
     #[inline]
     fn into_buffer(self) -> Buffer<'a, T, A> {
-        let Self { len, arena, .. } = self;
+        let Self { len, .. } = self;
         let data = self.backing_storage.as_ptr().cast::<MaybeUninit<T>>();
-        let handle = unsafe { Handle::slice_from_raw_parts_in(data, self.cap, arena) };
+        let handle = unsafe { Handle::slice_from_raw_parts(data, self.cap) };
 
         mem::forget(self);
 
@@ -2716,7 +2634,7 @@ impl error::Error for TryReserveError {}
 #[derive(Debug)]
 pub struct TryPushError<T> {
     value: T,
-    try_reserve_err: TryReserveError,
+    try_reserve_err: Option<TryReserveError>,
 }
 
 impl<T> TryPushError<T> {
@@ -2734,22 +2652,25 @@ impl<T> TryPushError<T> {
 
     #[must_use]
     #[inline]
-    pub fn try_reserve_error(&self) -> &TryReserveError {
-        &self.try_reserve_err
+    pub fn try_reserve_error(&self) -> Option<&TryReserveError> {
+        self.try_reserve_err.as_ref()
     }
 }
 
 impl<T> fmt::Display for TryPushError<T> {
     #[inline]
     fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmtr, "could not append item: {}", self.try_reserve_err)
+        match self.try_reserve_error() {
+            Some(err) => write!(fmtr, "could not append item: {}", err),
+            None => write!(fmtr, "could not append item: buffer is full"),
+        }
     }
 }
 
 impl<T: fmt::Debug> Error for TryPushError<T> {
     #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(self.try_reserve_error())
+        self.try_reserve_error().map(|e| e as &(dyn Error + 'static))
     }
 }
 
@@ -3024,7 +2945,6 @@ impl<'a, T: Unpin, A: Allocator> FusedIterator for IntoIter<'a, T, A> {}
 /// [`Buffer::iter_handles`]: ./struct.Buffer.html#method.iter_handles
 pub struct IntoIterHandles<'a, T, A: Allocator = Global> {
     data: Handle<'a, [MaybeUninit<T>], A>,
-    arena: &'a Arena<A>,
     front_idx: usize,
     back_idx: usize,
 }
@@ -3114,10 +3034,10 @@ impl<'a, T, A: Allocator> IntoIterHandles<'a, T, A> {
         unsafe {
             let data = ptr::read(&self.data);
             mem::forget(self);
-            let (ptr, arena) = Handle::into_raw(data);
+            let ptr = Handle::into_raw(data);
             let ptr =
                 ptr::slice_from_raw_parts_mut(ptr.cast::<MaybeUninit<T>>().add(start), new_len);
-            let handle = Handle::from_raw_in(ptr, arena);
+            let handle = Handle::from_raw_with_alloc(ptr);
             Buffer::from_raw_parts(handle, new_len)
         }
     }
@@ -3150,13 +3070,11 @@ impl<'a, T, A: Allocator> IntoIterHandles<'a, T, A> {
     #[must_use]
     #[inline]
     const fn new(buffer: Buffer<'a, T, A>) -> Self {
-        let arena = buffer.arena();
         let len = buffer.as_slice().len();
         let data = Handle::transpose_into_uninit(buffer.into_slice_handle());
 
         Self {
             data,
-            arena,
             front_idx: 0,
             back_idx: len,
         }
@@ -3198,7 +3116,7 @@ impl<'a, T, A: Allocator> Iterator for IntoIterHandles<'a, T, A> {
             let ptr = Handle::as_mut_ptr(&mut self.data)
                 .cast::<T>()
                 .add(self.front_idx);
-            Handle::from_raw_in(ptr, self.arena)
+            Handle::from_raw_with_alloc(ptr)
         };
 
         self.front_idx += 1;
@@ -3222,7 +3140,7 @@ impl<'a, T, A: Allocator> DoubleEndedIterator for IntoIterHandles<'a, T, A> {
         let item = unsafe {
             let idx = self.back_idx.saturating_sub(1);
             let ptr = Handle::as_mut_ptr(&mut self.data).cast::<T>().add(idx);
-            Handle::from_raw_in(ptr, self.arena)
+            Handle::from_raw_with_alloc(ptr)
         };
 
         self.back_idx -= 1;
@@ -3310,18 +3228,17 @@ impl<'a, T, A: Allocator> Drop for IntoIterHandles<'a, T, A> {
         }
 
         unsafe {
-            let arena = self.data.arena();
             let mut data =
-                Handle::from_raw_in(ptr::slice_from_raw_parts_mut(ptr::dangling_mut(), 0), arena);
+                Handle::empty();
 
             mem::swap(&mut self.data, &mut data);
 
-            let (mut data_ptr, arena) = Handle::into_raw(data);
+            let mut data_ptr = Handle::into_raw(data);
 
             data_ptr =
                 ptr::slice_from_raw_parts_mut(data_ptr.cast::<MaybeUninit<T>>().add(front), len);
 
-            let mut data = Handle::from_raw_in(data_ptr, arena);
+            let mut data = Handle::from_raw_with_alloc(data_ptr);
 
             mem::swap(&mut self.data, &mut data);
             debug_assert_eq!(data.as_mut_ptr(), ptr::dangling_mut());

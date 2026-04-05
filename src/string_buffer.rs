@@ -18,7 +18,7 @@ use core::{
     error::Error as ErrorTrait,
     fmt,
     hash::{Hash, Hasher},
-    mem::{MaybeUninit},
+    mem::MaybeUninit,
     ops::{Deref, DerefMut},
     panic::{RefUnwindSafe, UnwindSafe},
     ptr,
@@ -43,17 +43,23 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     /// # Examples
     ///
     /// ```
-    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    /// #![cfg_attr(feature = "nightly", feature(allocator_api))]
     ///
-    /// let arena = Arena::new();
+    /// #[cfg(feature = "nightly")]
+    /// extern crate alloc;
     ///
-    /// let string_buffer = StringBuffer::empty_in(&arena);
+    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
+    /// extern crate allocator_api2 as alloc;
+    ///
+    /// use rotunda::{string_buffer::StringBuffer};
+    ///
+    /// let string_buffer = StringBuffer::<'_, alloc::alloc::Global>::empty();
     /// ```
     #[must_use]
     #[inline]
-    pub const fn empty_in(arena: &'a Arena<A>) -> Self {
+    pub const fn empty() -> Self {
         Self {
-            inner: Buffer::empty_in(arena),
+            inner: Buffer::empty(),
         }
     }
 
@@ -199,11 +205,6 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     }
 
     #[inline]
-    pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
-        self.inner.try_reserve(additional)
-    }
-
-    #[inline]
     pub fn truncate(&mut self, new_len: usize) {
         if new_len < self.len() {
             assert!(self.as_str().is_char_boundary(new_len));
@@ -239,7 +240,8 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     ///
     /// let arena = Arena::new();
     ///
-    /// let mut string = StringBuffer::new_in(&arena, "Hello");
+    /// let mut string = StringBuffer::with_capacity_in(&arena, "Hello".len() + 1);
+    /// string.push_str("Hello");
     ///
     /// string.push_char('!');
     /// assert_eq!(&string, "Hello!");
@@ -305,9 +307,9 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     pub fn into_str_handle(self) -> Handle<'a, str, A> {
         let len = self.len();
         let handle = self.inner.into_slice_handle();
-        let (slice_ptr, arena) = Handle::into_raw(handle);
+        let slice_ptr = Handle::into_raw(handle);
         let bytes = ptr::slice_from_raw_parts_mut(slice_ptr as *mut u8, len);
-        unsafe { Handle::from_raw_in(bytes as *mut str, arena) }
+        unsafe { Handle::from_raw_with_alloc(bytes as *mut str) }
     }
 }
 
