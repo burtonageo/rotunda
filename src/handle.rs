@@ -32,8 +32,7 @@ use core::{
 };
 #[cfg(feature = "nightly")]
 use core::{
-    marker::Unsize,
-    ops::CoerceUnsized,
+    marker::CoercePointee,
     ptr::{Pointee, Thin},
 };
 #[cfg(feature = "rand")]
@@ -51,7 +50,9 @@ use std::io::{self, BufRead, IoSlice, IoSliceMut, Read, Write};
 /// [`Arena`]: ../struct.Arena.html
 /// [`Box<T>`]: https://doc.rust-lang.org/stable/std/boxed/struct.Box.html
 /// [module documentation]: ./index.html
-pub struct Handle<'a, T: ?Sized, A: Allocator = Global> {
+#[repr(transparent)]
+#[cfg_attr(feature = "nightly", derive(CoercePointee))]
+pub struct Handle<'a, #[cfg_attr(feature = "nightly", pointee)] T: ?Sized, A: Allocator = Global> {
     ptr: NonNull<T>,
     _boo: PhantomData<(&'a Arena<A>, T)>,
 }
@@ -1328,12 +1329,6 @@ impl<'a, T, const N: usize, A: Allocator> TryFrom<Handle<'a, [T], A>> for Handle
 impl<'a, T: ?Sized + UnwindSafe, A: Allocator + RefUnwindSafe> UnwindSafe for Handle<'a, T, A> {}
 
 impl<'a, T: ?Sized + RefUnwindSafe, A: Allocator + RefUnwindSafe> RefUnwindSafe
-    for Handle<'a, T, A>
-{
-}
-
-#[cfg(feature = "nightly")]
-impl<'a, T: Unsize<U> + ?Sized, U: ?Sized, A: Allocator> CoerceUnsized<Handle<'a, U, A>>
     for Handle<'a, T, A>
 {
 }

@@ -3,14 +3,7 @@
 #![no_std]
 #![cfg_attr(
     feature = "nightly",
-    feature(
-        ptr_metadata,
-        derive_coerce_pointee,
-        coerce_unsized,
-        allocator_api,
-        ascii_char,
-        unsize,
-    )
+    feature(ptr_metadata, derive_coerce_pointee, allocator_api, ascii_char,)
 )]
 #![cfg_attr(
     all(feature = "nightly", feature = "std"),
@@ -51,7 +44,7 @@ use core::{
     iter::FusedIterator,
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
-    panic::{UnwindSafe, RefUnwindSafe},
+    panic::{RefUnwindSafe, UnwindSafe},
     ptr::{self, NonNull},
     str,
 };
