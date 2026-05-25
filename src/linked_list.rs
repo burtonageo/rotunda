@@ -871,6 +871,9 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// list.reassign_to([5, 6, 7]);
     /// assert_eq!(&list, &[5, 6, 7]);
+    ///
+    /// list.reassign_to([1, 2, 3, 4, 5, 6, 7]);
+    /// assert_eq!(&list, &[1, 2, 3, 4, 5, 6, 7]);
     /// ```
     #[track_caller]
     #[inline]
@@ -883,13 +886,17 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
             let (Some(from), Some(to)) = (node_iter.next(), iter.next()) else {
                 // The `peek()` calls above ensure that there are always more items available
                 // in each iterator.
-                unreachable!()
+                if cfg!(debug_assertions) {
+                    unreachable!()
+                } else {
+                    unsafe { core::hint::unreachable_unchecked() }
+                }
             };
 
             unsafe {
-                let ptr = Node::data_ptr(from).as_ptr();
-                ptr::drop_in_place(ptr);
-                ptr::write(ptr, to);
+                let ptr = Node::data_ptr(from);
+                NonNull::drop_in_place(ptr);
+                NonNull::write(ptr, to);
             }
 
             i += 1;
@@ -1691,9 +1698,7 @@ impl<T> Node<T> {
 
     #[must_use]
     #[inline]
-    unsafe fn into_handle<'a, A: Allocator>(
-        node: NonNull<Node<T>>,
-    ) -> Handle<'a, T, A> {
+    unsafe fn into_handle<'a, A: Allocator>(node: NonNull<Node<T>>) -> Handle<'a, T, A> {
         unsafe { Handle::from_raw_with_alloc(Node::data_ptr(node).as_ptr()) }
     }
 }
