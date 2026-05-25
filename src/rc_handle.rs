@@ -1040,7 +1040,7 @@ impl<'a, A: Allocator> RcHandle<'a, str, A> {
 
 impl<'a, A: Allocator> RcHandle<'a, [u8], A> {
     /// Converts the `RcHandle<'_, [u8]>` into a `RcHandle<'_, str>`, performing validation
-    /// on the contents. A `Clone::clone` of the original data is returned on success.
+    /// on the contents. A `Clone::clone` of the `RcHandle` is returned on success.
     ///
     /// # Errors
     ///
