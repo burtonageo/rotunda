@@ -1867,13 +1867,13 @@ impl<'a, A: Allocator> Read for Buffer<'a, u8, A> {
 
     #[cfg(feature = "nightly")]
     #[inline]
-    fn read_buf(&mut self, buf: io::BorrowedCursor<'_>) -> io::Result<()> {
+    fn read_buf(&mut self, buf: io::BorrowedCursor<'_, u8>) -> io::Result<()> {
         self.as_slice().read_buf(buf)
     }
 
     #[cfg(feature = "nightly")]
     #[inline]
-    fn read_buf_exact(&mut self, cursor: io::BorrowedCursor<'_>) -> io::Result<()> {
+    fn read_buf_exact(&mut self, cursor: io::BorrowedCursor<'_, u8>) -> io::Result<()> {
         self.as_slice().read_buf_exact(cursor)
     }
 }
