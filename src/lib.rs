@@ -1107,15 +1107,7 @@ unsafe impl<A: Allocator> allocator_api2::alloc::Allocator for &'_ Arena<A> {
 
     #[inline]
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: allocator_api2::alloc::Layout) {
-        unsafe {
-            if self
-                .blocks
-                .is_last_allocation(ptr.as_ptr().byte_add(layout.size()).cast())
-            {
-                let size = layout.size() + self.blocks.offset_to_align_for(&layout);
-                self.blocks.unbump(size);
-            }
-        }
+        let _ = (ptr, layout);
     }
 }
 
@@ -1137,15 +1129,7 @@ unsafe impl<A: Allocator> alloc::alloc::Allocator for &'_ Arena<A> {
 
     #[inline]
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: alloc::alloc::Layout) {
-        unsafe {
-            if self
-                .blocks
-                .is_last_allocation(ptr.as_ptr().byte_add(layout.size()).cast())
-            {
-                let size = layout.size() + self.blocks.offset_to_align_for(&layout);
-                self.blocks.unbump(size);
-            }
-        }
+        let _ = (ptr, layout);
     }
 }
 

@@ -1136,21 +1136,11 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
 impl<'a, T, A: Allocator> Drop for LinkedList<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
-        let size_of_node = mem::size_of::<Node<T>>();
-
-        for node in NodeIter::new(self).rev() {
+        for node in NodeIter::new(self) {
             let data = Node::data_ptr(node).as_ptr();
 
             unsafe {
                 ptr::drop_in_place(data);
-
-                if self
-                    .arena
-                    .blocks
-                    .is_last_allocation(node.byte_add(size_of_node).cast().as_ptr())
-                {
-                    self.arena.blocks.unbump(size_of_node);
-                }
             }
         }
     }

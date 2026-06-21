@@ -11,10 +11,7 @@ use crate::{
 use alloc::alloc::{Allocator, Global, Layout};
 #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
 use allocator_api2::alloc::System;
-use core::{
-    mem::{ManuallyDrop, MaybeUninit},
-    sync::atomic::AtomicUsize,
-};
+use core::{mem::ManuallyDrop, num::NonZeroUsize, sync::atomic::AtomicUsize};
 #[cfg(feature = "nightly")]
 use std::alloc::System;
 use std::{
@@ -54,7 +51,10 @@ fn test_arena_alloc() {
         drop(handle);
 
         let after_head = arena.curr_block_head().unwrap().addr();
-        assert_eq!(before_head.saturating_add(mem::size_of::<i32>()), after_head);
+        assert_eq!(
+            before_head.saturating_add(mem::size_of::<i32>()),
+            after_head
+        );
     }
 
     let mut value = Handle::new_in(&arena, 21);
@@ -319,7 +319,7 @@ fn test_scoped() {
     drop((_value, value, _data));
 
     arena.reset();
-    let head_before = arena.curr_block_head().unwrap().cast::<u8>();
+    let head_before = arena.curr_block_head().unwrap().cast::<u8>().addr();
 
     arena.with_scope(|| {
         let rc = RcHandle::new_in(&arena, 51u128);
@@ -330,9 +330,9 @@ fn test_scoped() {
         let _ = (rc, rc_2);
     });
 
-    let head_after = arena.curr_block_head().unwrap().cast::<u8>();
+    let head_after = arena.curr_block_head().unwrap().cast::<u8>().addr();
 
-    assert!(NonNull::eq(&head_before, &head_after));
+    assert!(NonZeroUsize::eq(&head_before, &head_after));
 }
 
 #[test]
@@ -953,37 +953,6 @@ fn test_list_reassign_to() {
 
     list.reassign_to(1..13);
     assert_eq!(&list, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-}
-
-#[test]
-fn test_list_drop_reclaim() {
-    let arena = Arena::new();
-
-    arena.force_push_new_block();
-    let head_1 = arena
-        .curr_block_head()
-        .map(|b| b.as_ptr().cast::<MaybeUninit<u8>>())
-        .unwrap_or(ptr::null_mut());
-
-    let mut list = LinkedList::new(&arena);
-    list.extend([1usize, 2, 3, 4, 5, 6]);
-
-    let head_2 = arena
-        .curr_block_head()
-        .map(|b| b.as_ptr().cast::<MaybeUninit<u8>>())
-        .unwrap_or(ptr::null_mut());
-
-    drop(list);
-
-    let head_3 = arena
-        .curr_block_head()
-        .map(|b| b.as_ptr().cast::<MaybeUninit<u8>>())
-        .unwrap_or(ptr::null_mut());
-
-    assert!(!ptr::eq(head_1, head_2));
-    assert!(!ptr::eq(head_2, head_3));
-
-    assert!(ptr::eq(head_1, head_3));
 }
 
 #[test]

@@ -310,15 +310,6 @@ impl Blocks {
         self.curr_block_pos().set(lock_data.prev_in_use);
     }
 
-    #[inline(never)]
-    pub(super) fn is_last_allocation(&self, ptr: *const ()) -> bool {
-        let Some(block) = self.curr_block.get() else {
-            return false;
-        };
-        let end = unsafe { Block::data_start(block).byte_add(self.curr_block_pos.get()) };
-        ptr::addr_eq(end.as_ptr(), ptr.cast::<c_void>())
-    }
-
     #[track_caller]
     #[inline]
     fn ensure_unlocked(&self) {
