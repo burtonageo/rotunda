@@ -1648,7 +1648,7 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
     /// a value whose `ref_count()` is `0`, this method will return a dangling pointer.
     ///
     /// To check that the pointer is still valid, it is recommended to upgrade the
-    /// `WeakHandle` to an `RcHandle`, and call [`RcHandle::get_ptr()`].
+    /// `WeakHandle` to an `RcHandle`, and call [`RcHandle::as_ptr()`].
     ///
     /// # Examples
     ///
@@ -1664,7 +1664,7 @@ impl<'a, T: ?Sized, A: Allocator> WeakHandle<'a, T, A> {
     /// let ptr: *const i32 = WeakHandle::as_ptr(&weak);
     /// ```
     /// 
-    /// [`RcHandle::get_ptr()`]: ./struct.RcHandle.html#method.get_ptr
+    /// [`RcHandle::as_ptr()`]: ./struct.RcHandle.html#method.as_ptr
     #[must_use]
     #[inline]
     pub fn as_ptr(&self) -> *const T {
