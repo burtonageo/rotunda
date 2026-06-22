@@ -62,7 +62,7 @@ macro_rules! buf {
 /// A `Buffer` is used to represent a contiguous array of `T`s allocated in an `Arena` block.
 ///
 /// The buffer can be dynamically resized, but can only grow up to its [`capacity()`]. Beyond
-/// that,  new `Buffer` will have to be allocated with a larger given capacity.
+/// that, a new `Buffer` will have to be allocated with a larger given capacity.
 ///
 /// See the [module documentation] for more informtion.
 ///
