@@ -82,6 +82,19 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
         }
     }
 
+    /// Create a new `StringBuffer` from the given `Handle<'_, str>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, handle::Handle, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let string = Handle::new_str_in(&arena, "Lorem ipsum dolor sit amet.");
+    ///
+    /// let string_buffer = StringBuffer::from_str_handle(string);
+    /// ```
     #[inline]
     pub const fn from_str_handle(handle: Handle<'a, str, A>) -> Self {
         Self {
@@ -116,6 +129,12 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
         unsafe { Self::from_utf8_unchecked(buffer) }
     }
 
+    /// Attempt to convert the given byte buffer into a `StringBuffer`.
+    ///
+    /// # Errors
+    ///
+    /// If the given `bytes` is not valid as utf8, then a `FromUtf8Error` will be returned.
+    /// The original byte buffer can be recovered from this error.
     #[inline]
     pub const fn from_utf8(bytes: Buffer<'a, u8, A>) -> Result<Self, FromUtf8Error<'a, A>> {
         match str::from_utf8(bytes.as_slice()) {
@@ -162,29 +181,119 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
         }
     }
 
+    /// Removes all characters from the string, preserving its capacity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut string_buffer = StringBuffer::with_capacity_in(&arena, 256);
+    ///
+    /// string_buffer.push_str("Abracadabra");
+    ///
+    /// assert!(!string_buffer.is_empty());
+    ///
+    /// string_buffer.clear();
+    ///
+    /// assert!(string_buffer.is_empty());
+    /// ```
     #[inline]
     pub fn clear(&mut self) {
         self.inner.clear();
     }
 
+    /// Returns `true` if the string buffer is full of character data.
+    ///
+    /// If this method returns `true`, then no more string data can be pushed into this
+    /// `StringBuffer`.
+    /// 
+    /// ```
+    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut string_buffer = StringBuffer::with_capacity_in(&arena, 5);
+    ///
+    /// string_buffer.push_str("abc");
+    ///
+    /// assert!(!string_buffer.is_full());
+    ///
+    /// string_buffer.push_str("de");
+    ///
+    /// assert!(string_buffer.is_full());
+    /// ```
     #[must_use]
     #[inline]
     pub const fn is_full(&self) -> bool {
         self.inner.is_full()
     }
 
+    /// Returns the total capacity which this string can hold.
     #[must_use]
     #[inline]
     pub const fn capacity(&self) -> usize {
         self.inner.capacity()
     }
 
+    /// Returns a slice to the spare capacity data in this `String`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut string_buffer = StringBuffer::with_capacity_in(&arena, 32);
+    ///
+    /// let message = "foo";
+    /// string_buffer.push_str(message);
+    ///
+    /// let buffer_cap = string_buffer.capacity();
+    /// 
+    /// let mut capacity = string_buffer.spare_capacity_mut();
+    /// assert_eq!(capacity.len(), buffer_cap - message.len());
+    ///
+    /// capacity[0].write(b'd');
+    /// capacity[1].write(b'!');
+    ///
+    /// unsafe {
+    ///     string_buffer.set_len(5);
+    /// }
+    ///
+    /// assert_eq!(&string_buffer, "food!");
+    /// ```
     #[must_use]
     #[inline]
     pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<u8>] {
         self.inner.spare_capacity_mut()
     }
 
+    /// Sets the length of the `StringBuffer` to the given `len` without modifying the contents.
+    ///
+    /// # Safety
+    ///
+    /// If the given `new_len` is larger than the string's current length, and data exposed has not
+    /// been initialized with valid utf8, then this method can expose uninitialized data and invalid
+    /// utf8 to the program.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    /// 
+    /// let mut string_buffer = StringBuffer::new_in(&arena, "Adventure");
+    /// unsafe {
+    ///     string_buffer.set_len(6);
+    /// }
+    ///
+    /// assert_eq!(&string_buffer, "Advent");
+    /// ```
     #[inline]
     pub const unsafe fn set_len(&mut self, new_len: usize) {
         unsafe {
@@ -199,11 +308,51 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
         }
     }
 
+    /// Truncates the capacity of the `StringBuffer` to match its current `len`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    /// 
+    /// let mut string_buffer = StringBuffer::with_capacity_in(&arena, 55);
+    ///
+    /// string_buffer.push_str("Code") ;
+    ///
+    /// string_buffer.shrink_to_fit();
+    ///
+    /// assert_eq!(string_buffer.capacity(), 4);
+    /// ```
     #[inline]
     pub fn shrink_to_fit(&mut self) {
         self.inner.shrink_to_fit();
     }
 
+    /// Truncates the string to the given `new_len` bytes, removing all characters
+    /// after `new_len`.
+    ///
+    /// If `new_len` is larger than the current length, this method does nothing.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if `new_len` does not fall on a utf8 character boundary.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    /// 
+    /// let mut string_buffer = StringBuffer::new_in(&arena, "Trinkets");
+    ///
+    /// string_buffer.truncate(5);
+    /// 
+    /// assert_eq!(&string_buffer, "Trink");
+    /// assert_eq!(string_buffer.capacity(), 8);
+    /// ```
     #[inline]
     pub fn truncate(&mut self, new_len: usize) {
         if new_len < self.len() {
@@ -248,13 +397,13 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     /// ```
     #[inline]
     pub fn push_char(&mut self, ch: char) {
-        let mut ch_bytes = [0u8; 4];
+        let mut ch_bytes = [0u8; char::MAX_LEN_UTF8];
         self.push_str(ch.encode_utf8(&mut ch_bytes));
     }
 
     #[inline]
     pub fn try_push_char(&mut self, ch: char) -> Result<(), char> {
-        let mut ch_bytes = [0u8; 4];
+        let mut ch_bytes = [0u8; char::MAX_LEN_UTF8];
         match self.try_push_str(ch.encode_utf8(&mut ch_bytes)) {
             Ok(()) => Ok(()),
             Err(_) => Err(ch),
@@ -290,12 +439,38 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
         Some(ch)
     }
 
+    /// Access the contents of the `StringBuffer` as an immutable `str` reference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let string_buffer = StringBuffer::new_in(&arena, "Message");
+    ///
+    /// let string_ref = string_buffer.as_str();
+    /// ```
     #[must_use]
     #[inline]
     pub const fn as_str(&self) -> &str {
         unsafe { str::from_utf8_unchecked(self.inner.as_slice()) }
     }
 
+    /// Access the contents of the `StringBuffer` as a mutable `str` reference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rotunda::{Arena, string_buffer::StringBuffer};
+    ///
+    /// let arena = Arena::new();
+    ///
+    /// let mut string_buffer = StringBuffer::new_in(&arena, "stringy");
+    /// string_buffer.as_mut_str().make_ascii_uppercase();
+    /// assert_eq!(&string_buffer, "STRINGY");
+    /// ```
     #[must_use]
     #[inline]
     pub const fn as_mut_str(&mut self) -> &mut str {
