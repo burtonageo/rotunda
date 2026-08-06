@@ -1296,9 +1296,8 @@ impl<'a, A: Allocator> From<Handle<'a, str, A>> for Handle<'a, [u8], A> {
 impl<'a, T: ?Sized, A: Allocator> Drop for Handle<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
-        let p = self.ptr.as_ptr();
         unsafe {
-            ptr::drop_in_place(p);
+            NonNull::drop_in_place(self.ptr);
         }
     }
 }

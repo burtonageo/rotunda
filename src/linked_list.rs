@@ -1137,10 +1137,9 @@ impl<'a, T, A: Allocator> Drop for LinkedList<'a, T, A> {
     #[inline]
     fn drop(&mut self) {
         for node in NodeIter::new(self) {
-            let data = Node::data_ptr(node).as_ptr();
-
+            let ptr = Node::data_ptr(node);
             unsafe {
-                ptr::drop_in_place(data);
+                NonNull::drop_in_place(ptr);
             }
         }
     }
