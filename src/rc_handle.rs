@@ -277,17 +277,14 @@ impl<'a, T: ?Sized, A: Allocator> RcHandle<'a, T, A> {
     /// # Examples
     ///
     /// ```
-    /// # #![cfg_attr(feature = "nightly", feature(allocator_api))]
     /// use rotunda::{Arena, rc_handle::RcHandle};
     ///
     /// let arena = Arena::new();
     ///
     /// let rc = RcHandle::new_in(&arena, 85);
     /// let raw = RcHandle::into_raw(rc);
+    ///
     /// unsafe { assert_eq!(*raw, 85); }
-    /// # #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
-    /// # use allocator_api2::alloc::Global;
-    /// # #[cfg(feature = "nightly")]
     /// # use std::alloc::Global;
     /// # let _ = unsafe { RcHandle::<'_, _, Global>::from_raw(raw) };
     /// ```

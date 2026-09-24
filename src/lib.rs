@@ -23,14 +23,7 @@
 //!
 //! [`Arena`]: ./struct.Arena.html
 
-#[cfg(not(any(feature = "allocator-api2", feature = "nightly")))]
-compile_error!("An allocator must be provided, either through `nightly` or `allocator-api2`");
-
-#[cfg(feature = "nightly")]
 extern crate alloc;
-
-#[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
-extern crate allocator_api2 as alloc;
 
 #[cfg(any(test, feature = "std"))]
 extern crate std;
@@ -135,12 +128,6 @@ impl<A: Allocator> Arena<A> {
     /// # Example
     ///
     /// ```
-    /// #![cfg_attr(feature = "nightly", feature(allocator_api))]
-    ///
-    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
-    /// use allocator_api2::alloc::Global;
-    ///
-    /// #[cfg(feature = "nightly")]
     /// use std::alloc::Global;
     ///
     /// use rotunda::Arena;
@@ -174,12 +161,6 @@ impl<A: Allocator> Arena<A> {
     /// # Example
     ///
     /// ```
-    /// #![cfg_attr(feature = "nightly", feature(allocator_api))]
-    ///
-    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
-    /// use allocator_api2::alloc::Global;
-    ///
-    /// #[cfg(feature = "nightly")]
     /// use std::alloc::Global;
     ///
     /// use rotunda::Arena;
@@ -263,10 +244,6 @@ impl<A: Allocator> Arena<A> {
     /// # Example
     ///
     /// ```
-    /// # #![cfg_attr(feature = "nightly", feature(allocator_api))]
-    /// # #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
-    /// # use allocator_api2::alloc::AllocError;
-    /// # #[cfg(feature = "nightly")]
     /// # use std::alloc::AllocError;
     /// use rotunda::Arena;
     ///
@@ -401,10 +378,6 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
-    /// use allocator_api2::alloc::Layout;
-    ///
-    /// #[cfg(feature = "nightly")]
     /// use std::alloc::Layout;
     ///
     /// use rotunda::Arena;
@@ -436,10 +409,6 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
-    /// use allocator_api2::alloc::Layout;
-    ///
-    /// #[cfg(feature = "nightly")]
     /// use std::alloc::Layout;
     ///
     /// use rotunda::Arena;
@@ -793,10 +762,6 @@ impl<A: Allocator> Arena<A> {
     /// # Examples
     ///
     /// ```
-    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
-    /// use allocator_api2::alloc::Layout;
-    ///
-    /// #[cfg(feature = "nightly")]
     /// use std::alloc::Layout;
     ///
     /// # use rotunda::Error;
@@ -1089,46 +1054,23 @@ impl<A: Allocator + UnwindSafe> UnwindSafe for Arena<A> {}
 
 impl<A: Allocator + RefUnwindSafe> RefUnwindSafe for Arena<A> {}
 
-#[cfg(feature = "allocator-api2")]
-unsafe impl<A: Allocator> allocator_api2::alloc::Allocator for &'_ Arena<A> {
+unsafe impl<A: Allocator> Allocator for Arena<A> {
     #[inline]
     fn allocate(
         &self,
-        layout: allocator_api2::alloc::Layout,
-    ) -> Result<NonNull<[u8]>, allocator_api2::alloc::AllocError> {
+        layout: Layout,
+    ) -> Result<NonNull<[u8]>, AllocError> {
         match self.try_alloc_raw(layout) {
             Ok(ptr) => Ok(NonNull::slice_from_raw_parts(
                 ptr.cast::<u8>(),
                 layout.size(),
             )),
-            Err(_) => Err(allocator_api2::alloc::AllocError),
+            Err(_) => Err(AllocError),
         }
     }
 
     #[inline]
-    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: allocator_api2::alloc::Layout) {
-        let _ = (ptr, layout);
-    }
-}
-
-#[cfg(feature = "nightly")]
-unsafe impl<A: Allocator> alloc::alloc::Allocator for &'_ Arena<A> {
-    #[inline]
-    fn allocate(
-        &self,
-        layout: alloc::alloc::Layout,
-    ) -> Result<NonNull<[u8]>, alloc::alloc::AllocError> {
-        match self.try_alloc_raw(layout) {
-            Ok(ptr) => Ok(NonNull::slice_from_raw_parts(
-                ptr.cast::<u8>(),
-                layout.size(),
-            )),
-            Err(_) => Err(alloc::alloc::AllocError),
-        }
-    }
-
-    #[inline]
-    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: alloc::alloc::Layout) {
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         let _ = (ptr, layout);
     }
 }

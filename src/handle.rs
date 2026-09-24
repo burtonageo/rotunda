@@ -464,13 +464,7 @@ impl<'a, T: ?Sized, A: Allocator> Handle<'a, T, A> {
     /// memory.
     ///
     /// ```
-    /// #![cfg_attr(feature = "nightly", feature(allocator_api))]
-    ///
-    /// #[cfg(feature = "nightly")]
     /// extern crate alloc;
-    ///
-    /// #[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
-    /// extern crate allocator_api2 as alloc;
     ///
     /// use rotunda::{Arena, handle::Handle};
     ///

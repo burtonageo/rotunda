@@ -9,10 +9,7 @@ use crate::{
     string_buffer::StringBuffer,
 };
 use alloc::alloc::{Allocator, Global, Layout};
-#[cfg(all(feature = "allocator-api2", not(feature = "nightly")))]
-use allocator_api2::alloc::System;
 use core::{mem::ManuallyDrop, num::NonZeroUsize, sync::atomic::AtomicUsize};
-#[cfg(feature = "nightly")]
 use std::alloc::System;
 use std::{
     iter::Extend,
