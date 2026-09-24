@@ -264,9 +264,13 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// let arena = Arena::new();
     /// let mut linked_list = LinkedList::new(&arena);
     ///
+    /// linked_list.push_back(Handle::new_str_in(&arena, "My"));
     /// linked_list.push_back(Handle::new_str_in(&arena, "Message"));
+    /// linked_list.push_back(Handle::new_str_in(&arena, "Broadcast"));
     ///
-    /// assert_eq!(linked_list.front().map(|handle| handle.as_ref()), Some("Message"));
+    /// assert_eq!(linked_list.get(0).map(AsRef::as_ref), Some("My"));
+    /// assert_eq!(linked_list.get(1).map(AsRef::as_ref), Some("Message"));
+    /// assert_eq!(linked_list.get(2).map(AsRef::as_ref), Some("Broadcast"));
     /// ```
     #[inline]
     pub fn push_back(&mut self, value: T) {
@@ -283,6 +287,8 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     ///
     /// let arena = Arena::new();
     /// let mut linked_list = LinkedList::new(&arena);
+    ///
+    /// linked_list.push_back(7410);
     ///
     /// let value = linked_list.push_back_mut(42);
     /// assert_eq!(*value, 42);
@@ -311,8 +317,8 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
     /// linked_list.push_back(2);
     /// linked_list.push_back(3);
     ///
-    /// assert_eq!(*linked_list.pop_back().unwrap(), 3);
-    /// assert_eq!(*linked_list.pop_back().unwrap(), 2);
+    /// assert_eq!(linked_list.pop_back().as_deref(), Some(&3));
+    /// assert_eq!(linked_list.pop_back().as_deref(), Some(&2));
     /// assert_eq!(linked_list.pop_back(), None);
     /// ```
     #[inline]
