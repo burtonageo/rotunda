@@ -3,7 +3,7 @@
 #![no_std]
 #![cfg_attr(
     feature = "nightly",
-    feature(ptr_metadata, derive_coerce_pointee, allocator_api, ascii_char,)
+    feature(ptr_metadata, derive_coerce_pointee, ascii_char)
 )]
 #![cfg_attr(
     all(feature = "nightly", feature = "std"),
