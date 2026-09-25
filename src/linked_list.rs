@@ -412,8 +412,10 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
 
         let mut node_ptr = Node::alloc(self.arena, value);
 
-        self.insert_node(index, node_ptr);
-        unsafe { &mut node_ptr.as_mut().data }
+        unsafe {
+            self.insert_node(index, node_ptr);
+            &mut node_ptr.as_mut().data
+        }
     }
 
     /// Attempt to insert the given `value` into the `LinkedList` at position `index`.
@@ -454,10 +456,10 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
         }
 
         match Node::try_alloc(self.arena, value) {
-            Ok(mut node_ptr) => {
+            Ok(mut node_ptr) => unsafe {
                 self.insert_node(index, node_ptr);
-                unsafe { Ok(&mut node_ptr.as_mut().data) }
-            }
+                Ok(&mut node_ptr.as_mut().data)
+            },
             Err((value, e)) => Err(TryInsertError {
                 data: value,
                 kind: TryInsertErrorKind::ArenaError(e),
@@ -997,7 +999,7 @@ impl<'a, T: 'a, A: Allocator> LinkedList<'a, T, A> {
 
     #[track_caller]
     #[inline]
-    fn insert_node(&mut self, index: usize, mut node_ptr: NonNull<Node<T>>) {
+    unsafe fn insert_node(&mut self, index: usize, mut node_ptr: NonNull<Node<T>>) {
         match index {
             0 => {
                 if !self.is_empty() {
