@@ -10,6 +10,8 @@ use crate::{
     rc_handle::RcHandle,
     string_buffer::{FromUtf8Error, StringBuffer},
 };
+#[cfg(feature = "nightly")]
+use crate::string_buffer::FromAsciiError;
 use alloc::alloc::{Allocator, Global, Layout};
 #[cfg(feature = "nightly")]
 use core::ascii;
@@ -1096,11 +1098,13 @@ impl<'a, A: Allocator> Handle<'a, str, A> {
         }
     }
 
+    #[must_use]
     #[inline]
     pub const unsafe fn from_utf8_unchecked(bytes: Handle<'a, [u8], A>) -> Self {
         unsafe { mem::transmute(bytes) }
     }
 
+    #[must_use]
     #[inline]
     pub const fn into_bytes(this: Self) -> Handle<'a, [u8], A> {
         unsafe { mem::transmute(this) }
@@ -1131,6 +1135,45 @@ impl<'a, A: Allocator> Handle<'a, str, A> {
     #[inline]
     pub const unsafe fn into_ascii_unchecked(self) -> Handle<'a, [ascii::Char], A> {
         unsafe { mem::transmute(self) }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn from_ascii(ascii: Handle<'a, [ascii::Char], A>) -> Self {
+        unsafe { mem::transmute(ascii) }
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> Handle<'a, [ascii::Char], A> {
+    #[must_use]
+    #[inline]
+    pub fn from_ascii_bytes(bytes: Handle<'a, [u8], A>) -> Result<Self, FromAsciiError<'a, A>> {
+        crate::string_buffer::handle_to_ascii(bytes)
+    }
+
+    #[must_use]
+    #[inline]
+    pub const unsafe fn from_ascii_bytes_unchecked(bytes: Handle<'a, [u8], A>) -> Self {
+        unsafe { mem::transmute(bytes) }
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> TryFrom<Handle<'a, str, A>> for Handle<'a, [ascii::Char], A> {
+    type Error = Handle<'a, str, A>;
+
+    #[inline]
+    fn try_from(value: Handle<'a, str, A>) -> Result<Self, Self::Error> {
+        Handle::into_ascii(value)
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> From<Handle<'a, [ascii::Char], A>> for Handle<'a, str, A> {
+    #[inline]
+    fn from(value: Handle<'a, [ascii::Char], A>) -> Self {
+        Handle::from_ascii(value)
     }
 }
 

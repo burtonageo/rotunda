@@ -203,7 +203,7 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     ///
     /// If this method returns `true`, then no more string data can be pushed into this
     /// `StringBuffer`.
-    /// 
+    ///
     /// ```
     /// use rotunda::{Arena, string_buffer::StringBuffer};
     ///
@@ -247,7 +247,7 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     /// string_buffer.push_str(message);
     ///
     /// let buffer_cap = string_buffer.capacity();
-    /// 
+    ///
     /// let mut capacity = string_buffer.spare_capacity_mut();
     /// assert_eq!(capacity.len(), buffer_cap - message.len());
     ///
@@ -280,7 +280,7 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     /// use rotunda::{Arena, string_buffer::StringBuffer};
     ///
     /// let arena = Arena::new();
-    /// 
+    ///
     /// let mut string_buffer = StringBuffer::new_in(&arena, "Adventure");
     /// unsafe {
     ///     string_buffer.set_len(6);
@@ -310,7 +310,7 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     /// use rotunda::{Arena, string_buffer::StringBuffer};
     ///
     /// let arena = Arena::new();
-    /// 
+    ///
     /// let mut string_buffer = StringBuffer::with_capacity_in(&arena, 55);
     ///
     /// string_buffer.push_str("Code") ;
@@ -339,11 +339,11 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
     /// use rotunda::{Arena, string_buffer::StringBuffer};
     ///
     /// let arena = Arena::new();
-    /// 
+    ///
     /// let mut string_buffer = StringBuffer::new_in(&arena, "Trinkets");
     ///
     /// string_buffer.truncate(5);
-    /// 
+    ///
     /// assert_eq!(&string_buffer, "Trink");
     /// assert_eq!(string_buffer.capacity(), 8);
     /// ```
@@ -484,6 +484,12 @@ impl<'a, A: Allocator> StringBuffer<'a, A> {
 
 #[cfg(feature = "nightly")]
 impl<'a, A: Allocator> StringBuffer<'a, A> {
+    #[must_use]
+    #[inline]
+    pub const fn from_ascii(ascii: Buffer<'a, ascii::Char, A>) -> Self {
+        unsafe { mem::transmute(ascii) }
+    }
+
     #[must_use]
     #[inline]
     pub const fn into_ascii(self) -> Result<Buffer<'a, ascii::Char, A>, StringBuffer<'a, A>> {
@@ -632,68 +638,84 @@ impl<'a, A: Allocator> Hash for StringBuffer<'a, A> {
     }
 }
 
-impl<'a> PartialOrd for StringBuffer<'a> {
+impl<'a, A: Allocator> PartialOrd for StringBuffer<'a, A> {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a> PartialOrd<str> for StringBuffer<'a> {
+impl<'a, A: Allocator> PartialOrd<str> for StringBuffer<'a, A> {
     #[inline]
     fn partial_cmp(&self, other: &str) -> Option<cmp::Ordering> {
         Some(self.as_str().cmp(other))
     }
 }
 
-impl<'a> PartialOrd<Handle<'_, str>> for StringBuffer<'a> {
+impl<'a, A: Allocator> PartialOrd<Handle<'_, str, A>> for StringBuffer<'a, A> {
     #[inline]
-    fn partial_cmp(&self, other: &Handle<'_, str>) -> Option<cmp::Ordering> {
+    fn partial_cmp(&self, other: &Handle<'_, str, A>) -> Option<cmp::Ordering> {
         Some(self.as_str().cmp(other.as_ref()))
     }
 }
 
-impl<'a> Ord for StringBuffer<'a> {
+impl<'a, A: Allocator> Ord for StringBuffer<'a, A> {
     #[inline]
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         self.as_str().cmp(other.as_str())
     }
 }
 
-impl<'a> TryFrom<Buffer<'a, u8>> for StringBuffer<'a> {
-    type Error = FromUtf8Error<'a>;
+impl<'a, A: Allocator> TryFrom<Buffer<'a, u8, A>> for StringBuffer<'a, A> {
+    type Error = FromUtf8Error<'a, A>;
     #[inline]
-    fn try_from(value: Buffer<'a, u8>) -> Result<Self, Self::Error> {
+    fn try_from(value: Buffer<'a, u8, A>) -> Result<Self, Self::Error> {
         StringBuffer::from_utf8(value)
     }
 }
 
-impl<'a> TryFrom<Handle<'a, [u8]>> for StringBuffer<'a> {
-    type Error = FromUtf8Error<'a>;
+impl<'a, A: Allocator> TryFrom<Handle<'a, [u8], A>> for StringBuffer<'a, A> {
+    type Error = FromUtf8Error<'a, A>;
     #[inline]
-    fn try_from(value: Handle<'a, [u8]>) -> Result<Self, Self::Error> {
+    fn try_from(value: Handle<'a, [u8], A>) -> Result<Self, Self::Error> {
         TryFrom::try_from(Buffer::from_slice_handle(value))
     }
 }
 
-impl<'a> From<Handle<'a, str>> for StringBuffer<'a> {
+impl<'a, A: Allocator> From<Handle<'a, str, A>> for StringBuffer<'a, A> {
     #[inline]
-    fn from(value: Handle<'a, str>) -> Self {
+    fn from(value: Handle<'a, str, A>) -> Self {
         StringBuffer::from_str_handle(value)
     }
 }
 
-impl<'a> From<StringBuffer<'a>> for Buffer<'a, u8> {
+impl<'a, A: Allocator> From<StringBuffer<'a, A>> for Buffer<'a, u8, A> {
     #[inline]
-    fn from(value: StringBuffer<'a>) -> Self {
+    fn from(value: StringBuffer<'a, A>) -> Self {
         value.into_bytes()
     }
 }
 
-impl<'a> From<StringBuffer<'a>> for Handle<'a, [u8]> {
+impl<'a, A: Allocator> From<StringBuffer<'a, A>> for Handle<'a, [u8], A> {
     #[inline]
-    fn from(value: StringBuffer<'a>) -> Self {
+    fn from(value: StringBuffer<'a, A>) -> Self {
         value.into_bytes().into_slice_handle()
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> From<Buffer<'a, ascii::Char, A>> for StringBuffer<'a, A> {
+    #[inline]
+    fn from(value: Buffer<'a, ascii::Char, A>) -> Self {
+        StringBuffer::from_ascii(value)
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> From<Handle<'a, [ascii::Char], A>> for StringBuffer<'a, A> {
+    #[inline]
+    fn from(value: Handle<'a, [ascii::Char], A>) -> Self {
+        From::from(Buffer::from_slice_handle(value))
     }
 }
 
@@ -969,3 +991,111 @@ impl<'a, A: Allocator> ErrorTrait for FromUtf8Error<'a, A> {
         Some(&self.error)
     }
 }
+
+#[cfg(feature = "nightly")]
+pub(crate) fn buffer_to_ascii<'a, A: Allocator>(
+    bytes: Buffer<'a, u8, A>,
+) -> Result<Buffer<'a, ascii::Char, A>, FromAsciiError<'a, A>> {
+    match check_ascii_bytes(&bytes) {
+        Ok(_) => unsafe { Ok(mem::transmute(bytes)) },
+        Err((valid_up_to, error_len)) => Err(FromAsciiError {
+            bytes,
+            valid_up_to,
+            error_len,
+        }),
+    }
+}
+
+#[cfg(feature = "nightly")]
+pub(crate) fn handle_to_ascii<'a, A: Allocator>(
+    bytes: Handle<'a, [u8], A>,
+) -> Result<Handle<'a, [ascii::Char], A>, FromAsciiError<'a, A>> {
+    match check_ascii_bytes(&bytes) {
+        Ok(_) => unsafe { Ok(mem::transmute(bytes)) },
+        Err((valid_up_to, error_len)) => Err(FromAsciiError {
+            bytes: bytes.into(),
+            valid_up_to,
+            error_len,
+        }),
+    }
+}
+
+#[cfg(feature = "nightly")]
+fn check_ascii_bytes<B: ?Sized + AsRef<[u8]>>(bytes: &B) -> Result<(), (usize, Option<usize>)> {
+    let bytes = bytes.as_ref();
+    match <[u8]>::as_ascii(bytes) {
+        Some(_) => Ok(()),
+        None => {
+            let valid_up_to = bytes
+                .iter()
+                .enumerate()
+                .find_map(|(i, byte)| if !byte.is_ascii() { Some(i) } else { None })
+                .unwrap_or(bytes.len());
+
+            let error_len = bytes
+                .iter()
+                .skip(valid_up_to)
+                .enumerate()
+                .find_map(|(i, byte)| if byte.is_ascii() { Some(i) } else { None });
+
+            Err((valid_up_to, error_len))
+        }
+    }
+}
+
+#[cfg(feature = "nightly")]
+pub struct FromAsciiError<'a, A: Allocator> {
+    bytes: Buffer<'a, u8, A>,
+    valid_up_to: usize,
+    error_len: Option<usize>,
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> FromAsciiError<'a, A> {
+    #[must_use]
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn into_bytes(self) -> Buffer<'a, u8, A> {
+        self.bytes
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> fmt::Debug for FromAsciiError<'a, A> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmtr.debug_struct("FromAsciiError")
+            .field("bytes", &self.bytes)
+            .field("valid_up_to", &self.valid_up_to)
+            .field("error_len", &self.error_len)
+            .finish()
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> fmt::Display for FromAsciiError<'a, A> {
+    #[inline]
+    fn fmt(&self, fmtr: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(error_len) = self.error_len {
+            write!(
+                fmtr,
+                "invalid ascii sequence of {} bytes from index {}",
+                error_len, self.valid_up_to
+            )
+        } else {
+            write!(
+                fmtr,
+                "incomplete ascii byte sequence from index {}",
+                self.valid_up_to
+            )
+        }
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> ErrorTrait for FromAsciiError<'a, A> {}

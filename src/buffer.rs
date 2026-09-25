@@ -14,6 +14,8 @@
 //!
 //! [`Vec<T>`]: https://doc.rust-lang.org/stable/std/vec/struct.Vec.html
 
+#[cfg(feature = "nightly")]
+use crate::string_buffer::FromAsciiError;
 use crate::{Arena, InvariantLifetime, blocks::lock::BlockLock, handle::Handle};
 use alloc::alloc::{Allocator, Global, Layout};
 #[cfg(feature = "nightly")]
@@ -978,10 +980,12 @@ impl<'a, T, A: Allocator> Buffer<'a, T, A> {
     /// let arena = Arena::new();
     ///
     /// let handle = Handle::new_slice_from_iter_in(&arena, [1, 2, 3, 4, 5]);
+    /// let handle_len = handle.len();
     ///
     /// let buffer = Buffer::from_slice_handle(handle);
     ///
     /// assert_eq!(&buffer, &[1, 2, 3, 4, 5]);
+    /// assert_eq!(buffer.capacity(), handle_len);
     /// ```
     ///
     /// [`len()`]: ./struct.Handle.html#method.len
@@ -1559,18 +1563,35 @@ impl<'a, T: Copy, A: Allocator> Buffer<'a, T, A> {
 impl<'a, A: Allocator> Buffer<'a, u8, A> {
     #[must_use]
     #[inline]
-    pub const unsafe fn into_ascii(self) -> Result<Buffer<'a, ascii::Char, A>, Self> {
-        if self.as_slice().is_ascii() {
-            unsafe { Ok(Self::into_ascii_unchecked(self)) }
-        } else {
-            Err(self)
-        }
+    pub fn into_ascii(self) -> Result<Buffer<'a, ascii::Char, A>, FromAsciiError<'a, A>> {
+        crate::string_buffer::buffer_to_ascii(self)
     }
 
     #[must_use]
     #[inline]
     pub const unsafe fn into_ascii_unchecked(self) -> Buffer<'a, ascii::Char, A> {
         unsafe { mem::transmute(self) }
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> Buffer<'a, ascii::Char, A> {
+    #[must_use]
+    #[inline]
+    pub const fn into_ascii_bytes(self) -> Buffer<'a, u8, A> {
+        unsafe { mem::transmute(self) }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn from_ascii(ascii: Buffer<'a, u8, A>) -> Result<Self, FromAsciiError<'a, A>> {
+        crate::string_buffer::buffer_to_ascii(ascii)
+    }
+
+    #[must_use]
+    #[inline]
+    pub const unsafe fn from_ascii_unchecked(ascii: Buffer<'a, u8, A>) -> Self {
+        unsafe { mem::transmute(ascii) }
     }
 }
 
@@ -1781,6 +1802,23 @@ impl<'a, T, A: Allocator> From<IntoIter<'a, T, A>> for Buffer<'a, T, A> {
     #[inline]
     fn from(value: IntoIter<'a, T, A>) -> Self {
         value.into_buffer()
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> From<Buffer<'a, ascii::Char, A>> for Buffer<'a, u8, A> {
+    #[inline]
+    fn from(value: Buffer<'a, ascii::Char, A>) -> Self {
+        value.into_ascii_bytes()
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'a, A: Allocator> TryFrom<Buffer<'a, u8, A>> for Buffer<'a, ascii::Char, A> {
+    type Error = FromAsciiError<'a, A>;
+    #[inline]
+    fn try_from(value: Buffer<'a, u8, A>) -> Result<Self, Self::Error> {
+        value.into_ascii()
     }
 }
 
@@ -2670,7 +2708,8 @@ impl<T> fmt::Display for TryPushError<T> {
 impl<T: fmt::Debug> Error for TryPushError<T> {
     #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.try_reserve_error().map(|e| e as &(dyn Error + 'static))
+        self.try_reserve_error()
+            .map(|e| e as &(dyn Error + 'static))
     }
 }
 
@@ -3228,8 +3267,7 @@ impl<'a, T, A: Allocator> Drop for IntoIterHandles<'a, T, A> {
         }
 
         unsafe {
-            let mut data =
-                Handle::empty();
+            let mut data = Handle::empty();
 
             mem::swap(&mut self.data, &mut data);
 
